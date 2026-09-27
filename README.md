@@ -25,28 +25,27 @@ Google sign-in needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Resume extra
 
 ## Lightsail
 
-The site is published from Git on the server. The app is on branch `cursor/jobpilot-landing-63b6` until that pull request is merged.
+The site is published from `main` on the server.
 
 1. In the Lightsail console, open the instance, then Networking, and allow HTTP (TCP 80). SSH (TCP 22) should already be allowed.
 2. Connect as `ubuntu`.
 3. Clone and start the site:
 
 ```bash
-git clone --branch cursor/jobpilot-landing-63b6 --single-branch https://github.com/getnuevetech/airesume.git
+git clone https://github.com/getnuevetech/airesume.git
 cd airesume
 bash deploy/bootstrap.sh
 ```
 
 4. Open `http://<public-ip>/` in a browser. Use `http`, not `https`.
-5. Sign in at `http://<public-ip>/signin` with the admin email and password printed at the end of bootstrap, also stored in `server/data/admin-bootstrap.txt`. Homepage, users, admins, and password reset links are under `/admin`.
+5. Sign in at `http://<public-ip>/signin` with the admin email and password printed at the end of bootstrap, also stored in `server/data/admin-bootstrap.txt`. Homepage, users, admins, and password reset links are under `/admin`. After sign-in, the account side menu is at `/account`.
 
-`main` does not contain the app. If a clone of `main` is already on the server, switch branches and rebuild:
+If the checkout is already on the server, update it and rebuild:
 
 ```bash
 cd ~/airesume
-git fetch origin
-git checkout cursor/jobpilot-landing-63b6
-git pull origin cursor/jobpilot-landing-63b6
+git checkout main
+git pull origin main
 bash deploy/bootstrap.sh
 ```
 
@@ -55,6 +54,6 @@ If the script says JobPilot is being served but the browser never connects, allo
 Later updates, from `~/airesume` on the server:
 
 ```bash
-git pull
+git pull origin main
 bash deploy/bootstrap.sh
 ```
