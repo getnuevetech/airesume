@@ -1121,15 +1121,25 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       return;
     }
     const apiKey = req.body.apiKey && !String(req.body.apiKey).startsWith("••••") ? String(req.body.apiKey) : provider.api_key;
+    const enabled = req.body.enabled === false ? 0 : 1;
     db.prepare("UPDATE ai_providers SET name = ?, kind = ?, model = ?, api_key = ?, enabled = ? WHERE id = ?").run(
       name,
       kind,
       model,
       kind === "deterministic" ? "" : apiKey,
-      req.body.enabled === false ? 0 : 1,
+      enabled,
       provider.id,
     );
-    res.json({ provider: publicProvider(db.prepare("SELECT * FROM ai_providers WHERE id = ?").get(provider.id)) });
+    let reassigned = 0;
+    let fallbackName = "";
+    if (!enabled) {
+      const fallback = db.prepare("SELECT * FROM ai_providers WHERE id != ? AND enabled = 1 ORDER BY kind = 'deterministic' DESC, created_at LIMIT 1").get(provider.id);
+      if (fallback) {
+        reassigned = db.prepare("UPDATE ai_assignments SET provider_id = ? WHERE provider_id = ?").run(fallback.id, provider.id).changes;
+        fallbackName = fallback.name;
+      }
+    }
+    res.json({ provider: publicProvider(db.prepare("SELECT * FROM ai_providers WHERE id = ?").get(provider.id)), reassigned, fallbackName });
   });
 
   app.delete("/api/admin/ai/providers/:id", (req, res) => {
@@ -1144,7 +1154,7 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       res.status(400).json({ error: "Keep at least one AI pipeline. Disable it if you only want to turn it off." });
       return;
     }
-    const fallback = db.prepare("SELECT * FROM ai_providers WHERE id != ? ORDER BY kind = 'deterministic' DESC, created_at LIMIT 1").get(provider.id);
+    const fallback = db.prepare("SELECT * FROM ai_providers WHERE id != ? ORDER BY enabled DESC, kind = 'deterministic' DESC, created_at LIMIT 1").get(provider.id);
     const moved = db.prepare("UPDATE ai_assignments SET provider_id = ? WHERE provider_id = ?").run(fallback.id, provider.id);
     db.prepare("DELETE FROM ai_providers WHERE id = ?").run(provider.id);
     res.json({ ok: true, reassigned: moved.changes, fallbackName: fallback.name });
@@ -1153,9 +1163,9 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
   app.put("/api/admin/ai/assignments", (req, res) => {
     if (!requireAdmin(req, res)) return;
     const functionKey = AI_FUNCTIONS.some((item) => item.key === req.body.functionKey) ? req.body.functionKey : "";
-    const provider = db.prepare("SELECT id FROM ai_providers WHERE id = ?").get(String(req.body.providerId || ""));
+    const provider = db.prepare("SELECT id FROM ai_providers WHERE id = ? AND enabled = 1").get(String(req.body.providerId || ""));
     if (!functionKey || !provider) {
-      res.status(400).json({ error: "Choose a known function and provider." });
+      res.status(400).json({ error: "Choose an enabled pipeline for that function." });
       return;
     }
     db.prepare(

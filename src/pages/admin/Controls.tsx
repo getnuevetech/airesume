@@ -68,7 +68,7 @@ export function AiAdmin() {
   return (
     <div>
       <h1>AI pipelines</h1>
-      <p className="lede">Each function is coded in the product. Edit a pipeline’s name, provider, model, and key, or remove it. Functions on a removed pipeline move to the one that remains.</p>
+      <p className="lede">Each function is coded in the product. Edit a pipeline’s name, provider, model, and key, or remove it. A disabled pipeline is hidden from every function and cannot run. Functions on a removed or disabled pipeline move to one that is still on.</p>
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="role">{message}</p> : null}
       <form className="admin-card admin-grid" onSubmit={add}>
@@ -99,7 +99,9 @@ export function AiAdmin() {
         <ProviderCard key={provider.id} provider={provider} onChanged={load} onError={setError} onMessage={setMessage} />
       ))}
       {data.functions.map((item) => {
+        const choices = data.providers.filter((provider) => provider.enabled);
         const assignment = data.assignments.find((row) => row.function_key === item.key);
+        const selected = choices.find((provider) => provider.id === assignment?.provider_id);
         return (
           <section className="admin-card" key={item.key}>
             <h2>{item.label}</h2>
@@ -107,7 +109,7 @@ export function AiAdmin() {
             <label className="field">
               <span>Assigned AI</span>
               <select
-                value={assignment?.provider_id || ""}
+                value={selected?.id || ""}
                 onChange={(event) =>
                   void api("/api/admin/ai/assignments", {
                     method: "PUT",
@@ -115,7 +117,8 @@ export function AiAdmin() {
                   }).then(load)
                 }
               >
-                {data.providers.map((provider) => (
+                {selected ? null : <option value="">Choose an enabled pipeline</option>}
+                {choices.map((provider) => (
                   <option key={provider.id} value={provider.id}>{provider.name}</option>
                 ))}
               </select>
@@ -158,12 +161,13 @@ function ProviderCard({
       onSubmit={(event) => {
         event.preventDefault();
         onError("");
-        void api(`/api/admin/ai/providers/${provider.id}`, {
+        void api<{ reassigned?: number; fallbackName?: string }>(`/api/admin/ai/providers/${provider.id}`, {
           method: "PATCH",
           body: JSON.stringify({ name, kind, model, apiKey, enabled }),
         })
-          .then(() => {
-            onMessage(`${name} saved.`);
+          .then((result) => {
+            const moved = result.reassigned ? ` ${result.reassigned} function${result.reassigned === 1 ? "" : "s"} now use ${result.fallbackName}.` : "";
+            onMessage(`${name} saved.${moved}`);
             return onChanged();
           })
           .catch((err: Error) => onError(err.message));
