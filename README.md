@@ -18,14 +18,23 @@ Resume files stay in this browser. Applications are a preview and are not sent t
 
 ## Lightsail
 
-The production build is a static site. On a new Ubuntu Lightsail instance, open port 80 in the networking firewall, copy this repo over, and run:
+The site is published from Git on the server. The app is on branch `cursor/jobpilot-landing-63b6` until that pull request is merged.
+
+1. In the Lightsail console, open the instance, then Networking, and allow HTTP (TCP 80). SSH (TCP 22) should already be allowed.
+2. Connect as `ubuntu`.
+3. Clone and start the site:
 
 ```bash
-bash deploy/lightsail-setup.sh
+git clone --branch cursor/jobpilot-landing-63b6 --single-branch https://github.com/getnuevetech/airesume.git
+cd airesume
+bash deploy/bootstrap.sh
 ```
 
-From a machine that can SSH to that instance:
+4. Open `http://<public-ip>/` in a browser.
+
+Later updates, from `~/airesume` on the server:
 
 ```bash
-LIGHTSAIL_HOST=<static-ip> LIGHTSAIL_KEY=~/LightsailDefaultKey.pem ./deploy/deploy.sh
+git pull
+bash deploy/bootstrap.sh
 ```
