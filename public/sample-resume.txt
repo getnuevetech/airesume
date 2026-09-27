@@ -1,0 +1,21 @@
+Alex Morgan
+Product Manager
+
+Summary
+Product manager with 6 years of experience shipping consumer and B2B products. Leads roadmap planning, user research, and cross-functional launches. Comfortable with SQL, Figma, and data analysis.
+
+Experience
+Senior Product Manager, Northwind
+- Launched a matching feature that increased activation by 18%
+- Partnered with design and engineering on weekly releases
+- Defined success metrics and ran A/B testing
+
+Product Manager, Brightpath
+- Built onboarding experiments that improved completion
+- Wrote briefs, interviewed customers, and presented to leadership
+
+Skills
+Product management, SQL, Figma, User research, Roadmapping, Data analysis, Stakeholder communication, A/B testing, Leadership
+
+Education
+B.A. Economics
