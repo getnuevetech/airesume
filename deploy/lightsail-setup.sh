@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Run once on a fresh Ubuntu Lightsail instance, as the default user (ubuntu).
-# In the Lightsail networking tab, allow TCP 80 before opening the site.
+# Prefer deploy/bootstrap.sh from a git clone. This script only prepares Nginx
+# to proxy the Node app and does not publish the site by itself.
 set -euo pipefail
 
 if [[ "$(id -u)" -eq 0 ]]; then
@@ -10,8 +10,6 @@ fi
 
 sudo apt-get update
 sudo apt-get install -y nginx
-sudo mkdir -p /var/www/jobpilot
-sudo chown -R "$(id -un):$(id -gn)" /var/www/jobpilot
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 sudo cp "$SCRIPT_DIR/nginx.jobpilot.conf" /etc/nginx/sites-available/jobpilot
@@ -21,5 +19,5 @@ sudo nginx -t
 sudo systemctl enable nginx
 sudo systemctl reload nginx
 
-echo "Nginx is serving /var/www/jobpilot on port 80."
-echo "From your computer: LIGHTSAIL_HOST=<static-ip> ./deploy/deploy.sh"
+echo "Nginx proxies port 80 to the JobPilot API on port 3000."
+echo "From a clone of this repo, run: bash deploy/bootstrap.sh"

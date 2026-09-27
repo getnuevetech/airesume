@@ -1,7 +1,11 @@
 export type User = {
+  id?: string;
   name: string;
   email: string;
+  phone?: string;
   provider: "email" | "google";
+  role?: "user" | "admin";
+  status?: string;
 };
 
 export type ResumeFile = {

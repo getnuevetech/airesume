@@ -1,18 +1,14 @@
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useApp } from "../context/AppContext";
+import { useSiteContent } from "../content/siteContent";
 import { initials } from "../data";
 import { Brand, CloseIcon, MenuIcon } from "./Icons";
 
-const links = [
-  { to: "/how-it-works", label: "How it Works" },
-  { to: "/features", label: "Features" },
-  { to: "/stories", label: "Success Stories" },
-  { to: "/pricing", label: "Pricing" },
-];
-
 export function Header() {
   const { user, signOut } = useApp();
+  const { content } = useSiteContent();
+  const links = content.nav;
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
@@ -39,7 +35,7 @@ export function Header() {
   return (
     <header className={scrolled ? "site-header scrolled" : "site-header"}>
       <div className="container header-inner">
-        <Brand />
+        <Brand name={content.brand} />
         <nav className="nav" aria-label="Primary">
           {links.map((link) => (
             <NavLink
@@ -60,17 +56,22 @@ export function Header() {
               <button className="nav-link sign-in" type="button" onClick={signOut}>
                 Sign out
               </button>
+              {user.role === "admin" ? (
+                <NavLink to="/admin" className="nav-link">
+                  Admin
+                </NavLink>
+              ) : null}
               <NavLink to="/dashboard" className="btn btn-primary btn-sm">
-                Dashboard
+                {content.dashboardLabel}
               </NavLink>
             </>
           ) : (
             <>
               <NavLink to="/signin" className="nav-link sign-in">
-                Sign in
+                {content.signInLabel}
               </NavLink>
               <NavLink to="/get-started" className="btn btn-primary btn-sm">
-                Get Started
+                {content.getStartedLabel}
               </NavLink>
             </>
           )}
@@ -92,12 +93,19 @@ export function Header() {
           </NavLink>
         ))}
         {user ? (
-          <NavLink to="/dashboard" className="nav-link">
-            Dashboard
-          </NavLink>
+          <>
+            {user.role === "admin" ? (
+              <NavLink to="/admin" className="nav-link">
+                Admin
+              </NavLink>
+            ) : null}
+            <NavLink to="/dashboard" className="nav-link">
+              {content.dashboardLabel}
+            </NavLink>
+          </>
         ) : (
           <NavLink to="/signin" className="nav-link">
-            Sign in
+            {content.signInLabel}
           </NavLink>
         )}
       </div>

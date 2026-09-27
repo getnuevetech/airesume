@@ -4,15 +4,24 @@ import { useApp } from "../context/AppContext";
 import { GoogleG } from "../components/Icons";
 
 export function SignInPage() {
-  const { user, resume, login, openGoogle } = useApp();
+  const { user, login, openGoogle } = useApp();
   const navigate = useNavigate();
   useEffect(() => {
-    if (user) navigate(resume ? "/dashboard" : "/get-started", { replace: true });
-  }, [user, resume, navigate]);
+    if (!user) return;
+    navigate(user.role === "admin" ? "/admin" : "/dashboard", { replace: true });
+  }, [user, navigate]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "google") {
+      setError("Google sign-in is not configured on this server yet. Upload a resume or use your email.");
+    }
+    if (params.get("error") === "disabled") setError("This account is disabled.");
+  }, []);
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -20,8 +29,7 @@ export function SignInPage() {
       setError("Enter the email and password for your account.");
       return;
     }
-    const message = login(email, password);
-    setError(message ?? "");
+    void login(email, password).then((message) => setError(message ?? ""));
   }
 
   return (
@@ -69,7 +77,9 @@ export function SignInPage() {
           Continue with Google
         </button>
         <p className="fine-print">
-          New to JobPilot? <Link to="/get-started">Get started</Link>
+          <Link to="/forgot-password">Forgot password?</Link>
+          <br />
+          New to JobPilot? <Link to="/get-started">Upload a resume</Link>
         </p>
       </form>
     </div>

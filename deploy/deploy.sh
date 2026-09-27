@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build JobPilot and copy it to a Lightsail instance that already ran lightsail-setup.sh.
+# Update a Lightsail instance that already ran deploy/bootstrap.sh.
 # Usage: LIGHTSAIL_HOST=1.2.3.4 ./deploy/deploy.sh
 # Optional: LIGHTSAIL_USER (default ubuntu), LIGHTSAIL_KEY (path to the .pem)
 set -euo pipefail
@@ -16,9 +16,6 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-npm ci
-npm run build
-
 SSH=(ssh -o StrictHostKeyChecking=accept-new)
 RSYNC=(rsync -az --delete)
 if [[ -n "$KEY" ]]; then
@@ -26,7 +23,13 @@ if [[ -n "$KEY" ]]; then
   RSYNC+=(-e "ssh -i $KEY -o StrictHostKeyChecking=accept-new")
 fi
 
-"${RSYNC[@]}" "$ROOT/dist/" "${USER_NAME}@${HOST}:/var/www/jobpilot/"
-"${SSH[@]}" "${USER_NAME}@${HOST}" "sudo nginx -t && sudo systemctl reload nginx"
+"${RSYNC[@]}" \
+  --exclude node_modules \
+  --exclude dist \
+  --exclude server/data \
+  --exclude .git \
+  "$ROOT/" "${USER_NAME}@${HOST}:~/airesume/"
+
+"${SSH[@]}" "${USER_NAME}@${HOST}" "cd ~/airesume && npm ci && npm run build && sudo systemctl restart jobpilot && sudo nginx -t && sudo systemctl reload nginx"
 
 echo "Published to http://${HOST}/"

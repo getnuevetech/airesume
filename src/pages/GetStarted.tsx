@@ -1,166 +1,205 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { api } from "../api";
 import { UploadPanel } from "../components/UploadPanel";
 import { useApp } from "../context/AppContext";
-import { formatBytes, profileFromResume } from "../data";
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+type Draft = {
+  draftId: string;
+  profile: {
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+    city: string;
+    summary: string;
+    skills: string[];
+    employment: { title: string; employer: string; bullets: string[] }[];
+    education: string[];
+  };
+  facts: { fact_id: string; statement: string; confidence: number }[];
+  questions: string[];
+  warnings: string[];
+  provider: string;
+  model: string;
+};
 
 export function GetStartedPage() {
-  const { user, resume, register } = useApp();
-  const profile = resume ? profileFromResume(resume.text, resume.name) : null;
-  const [name, setName] = useState(profile && profile.name !== "Your profile" ? profile.name : "");
-  const [email, setEmail] = useState(user?.email ?? "");
+  const { user, refresh, notify } = useApp();
+  const navigate = useNavigate();
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [summary, setSummary] = useState("");
   const [password, setPassword] = useState("");
+  const [salary, setSalary] = useState("");
+  const [workArrangement, setWorkArrangement] = useState("");
+  const [locations, setLocations] = useState("");
+  const [workAuthorization, setWorkAuthorization] = useState("");
+  const [consent, setConsent] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!resume) return;
-    const next = profileFromResume(resume.text, resume.name);
-    if (next.name !== "Your profile") setName(next.name);
-  }, [resume]);
+    const apply = () => {
+      const raw = sessionStorage.getItem("jp-draft");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Draft;
+      setDraft(parsed);
+      setName(parsed.profile.name || "");
+      setEmail(parsed.profile.email || "");
+      setPhone(parsed.profile.phone || "");
+      setAddress(parsed.profile.address || "");
+      setCity(parsed.profile.city || "");
+      setSummary(parsed.profile.summary || "");
+    };
+    apply();
+    window.addEventListener("jp-draft", apply);
+    return () => window.removeEventListener("jp-draft", apply);
+  }, []);
 
-  function onSubmit(event: FormEvent) {
+  async function onSubmit(event: FormEvent) {
     event.preventDefault();
-    if (name.trim().length < 2) {
-      setError("Enter the name you want on your profile.");
-      return;
+    if (!draft) return;
+    setError("");
+    try {
+      await api("/api/onboarding/activate", {
+        method: "POST",
+        body: JSON.stringify({
+          draftId: draft.draftId,
+          name,
+          email,
+          phone,
+          address,
+          city,
+          summary,
+          password,
+          salary,
+          workArrangement,
+          locations,
+          workAuthorization,
+          consent,
+        }),
+      });
+      sessionStorage.removeItem("jp-draft");
+      await refresh();
+      notify("Account created from your resume.");
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create the account.");
     }
-    if (!emailPattern.test(email.trim())) {
-      setError("Enter a valid email address.");
-      return;
-    }
-    if (password.length < 8) {
-      setError("Use at least 8 characters for your password.");
-      return;
-    }
-    const message = register(name, email, password);
-    setError(message ?? "");
+  }
+
+  if (!draft) {
+    return (
+      <div className="container start-grid">
+        <div className="page-hero">
+          <p className="eyebrow">Get started</p>
+          <h1>Upload your resume to create your account.</h1>
+          <p className="lede">
+            The career extractor reads your name, email, phone, location, experience, and skills, then asks you to confirm them before the account is activated.
+          </p>
+        </div>
+        <UploadPanel showSample />
+      </div>
+    );
   }
 
   return (
     <div className="container start-grid">
       <div className="page-hero">
-        <p className="eyebrow">Get started</p>
-        <h1>Upload your resume to create your account and get started.</h1>
+        <p className="eyebrow">Confirm your profile</p>
+        <h1>We drafted your account from the resume.</h1>
         <p className="lede">
-          Your resume helps us instantly build your profile and find the right jobs for you.
+          Extracted with {draft.provider} ({draft.model}). Nothing here is invented. Correct anything that is outdated, then activate the account.
         </p>
-        <ul className="ticks">
-          <li>Profile created in seconds</li>
-          <li>Matches based on your skills</li>
-          <li>Applications previewed in this browser</li>
+        {draft.warnings.map((warning) => (
+          <p className="form-error" key={warning}>
+            {warning}
+          </p>
+        ))}
+        <div className="chips">
+          {draft.profile.skills.map((skill) => (
+            <span className="chip" key={skill}>
+              {skill}
+            </span>
+          ))}
+        </div>
+        <ul className="fact-list">
+          {draft.facts.slice(0, 8).map((fact) => (
+            <li key={fact.fact_id}>{fact.statement}</li>
+          ))}
         </ul>
+        {user ? (
+          <p>
+            You are already signed in as {user.email}. <Link to="/dashboard">Go to your dashboard</Link> or sign out to create another account.
+          </p>
+        ) : null}
       </div>
-      <div>
-        {!resume ? (
-          <UploadPanel showSample />
-        ) : user ? (
-          <div className="auth-card">
-            <p className="eyebrow">Resume ready</p>
-            <h2>{resume.name}</h2>
-            <p className="role">{formatBytes(resume.size)}</p>
-            {profile ? <p>{profile.summary}</p> : null}
-            <div className="chips">
-              {profile?.skills.map((skill) => (
-                <span className="chip" key={skill}>
-                  {skill}
-                </span>
-              ))}
-            </div>
-            <Link className="btn btn-primary btn-block" to="/dashboard">
-              Go to your matches
-            </Link>
-            <ReplaceResume />
-          </div>
-        ) : (
-          <form className="auth-card" onSubmit={onSubmit}>
-            <p className="eyebrow">Create your account</p>
-            <h2>We read {resume.name}</h2>
-            <p className="role">{formatBytes(resume.size)} · saved in this browser</p>
-            {profile ? <p>{profile.summary}</p> : null}
-            <div className="chips">
-              {profile?.skills.map((skill) => (
-                <span className="chip" key={skill}>
-                  {skill}
-                </span>
-              ))}
-            </div>
-            {error ? (
-              <p className="form-error" role="alert">
-                {error}
-              </p>
-            ) : null}
-            <label className="field">
-              <span>Full name</span>
-              <input value={name} onChange={(event) => setName(event.target.value)} required />
-            </label>
-            <label className="field">
-              <span>Email</span>
-              <input
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
-            <label className="field">
-              <span>Password</span>
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                minLength={8}
-                required
-              />
-            </label>
-            <button className="btn btn-primary btn-block" type="submit">
-              Create account
-            </button>
-            <p className="fine-print">
-              Already have an account? <Link to="/signin">Sign in</Link>
-            </p>
-            <ReplaceResume />
-          </form>
-        )}
-      </div>
+      <form className="auth-card" onSubmit={onSubmit}>
+        {error ? (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <label className="field">
+          <span>Full name</span>
+          <input value={name} onChange={(event) => setName(event.target.value)} required />
+        </label>
+        <label className="field">
+          <span>Email</span>
+          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+        </label>
+        <label className="field">
+          <span>Mobile</span>
+          <input value={phone} onChange={(event) => setPhone(event.target.value)} />
+        </label>
+        <label className="field">
+          <span>Address</span>
+          <input value={address} onChange={(event) => setAddress(event.target.value)} />
+        </label>
+        <label className="field">
+          <span>City</span>
+          <input value={city} onChange={(event) => setCity(event.target.value)} />
+        </label>
+        <label className="field">
+          <span>Summary</span>
+          <textarea rows={4} value={summary} onChange={(event) => setSummary(event.target.value)} />
+        </label>
+        <label className="field">
+          <span>Target salary</span>
+          <input value={salary} onChange={(event) => setSalary(event.target.value)} placeholder="Optional" />
+        </label>
+        <label className="field">
+          <span>Work arrangement</span>
+          <input value={workArrangement} onChange={(event) => setWorkArrangement(event.target.value)} placeholder="Remote, hybrid, or on-site" />
+        </label>
+        <label className="field">
+          <span>Locations</span>
+          <input value={locations} onChange={(event) => setLocations(event.target.value)} placeholder="Optional" />
+        </label>
+        <label className="field">
+          <span>Work authorization</span>
+          <input value={workAuthorization} onChange={(event) => setWorkAuthorization(event.target.value)} placeholder="You confirm this. We do not guess it." />
+        </label>
+        <label className="field">
+          <span>Password</span>
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required />
+        </label>
+        <label className="check-row">
+          <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required />
+          I confirm these details and agree to the terms, privacy policy, and AI processing of this resume.
+        </label>
+        {draft.questions.length ? <p className="role">{draft.questions.join(" ")}</p> : null}
+        <button className="btn btn-primary btn-block" type="submit" disabled={Boolean(user)}>
+          Create account
+        </button>
+        <p className="fine-print">
+          Already have an account? <Link to="/signin">Sign in</Link>
+        </p>
+      </form>
     </div>
-  );
-}
-
-function ReplaceResume() {
-  const { setResume, notify } = useApp();
-  return (
-    <label className="text-btn file-label">
-      Replace resume
-      <input
-        type="file"
-        accept=".pdf,.doc,.docx,.txt,application/pdf,text/plain"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (!file) return;
-          const lower = file.name.toLowerCase();
-          if (!/\.(pdf|docx|doc|txt)$/.test(lower)) {
-            notify("Use a PDF, DOCX, or TXT file.");
-            return;
-          }
-          if (file.size > 10 * 1024 * 1024) {
-            notify("That file is over 10MB.");
-            return;
-          }
-          void (async () => {
-            let text: string | null = null;
-            if (lower.endsWith(".txt") || file.type.startsWith("text/")) {
-              text = (await file.text()).slice(0, 20000);
-            }
-            setResume({ name: file.name, size: file.size, text, uploadedAt: Date.now() });
-            notify("Resume replaced.");
-          })();
-        }}
-      />
-    </label>
   );
 }

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { UploadPanel } from "../components/UploadPanel";
+import { useSiteContent } from "../content/siteContent";
 import {
   Bolt,
   Briefcase,
@@ -14,20 +15,49 @@ import {
   Stars,
   Users,
 } from "../components/Icons";
-import { previewJobs, statusLabel, stories } from "../data";
+import { statusLabel } from "../data";
+
+function StepArrow() {
+  return (
+    <span className="step-arrow" aria-hidden="true">
+      <svg width="54" height="16" viewBox="0 0 54 16">
+        <path d="M1 8h44" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M40 2.5 51 8 40 13.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  );
+}
+
+function StepIcon({ icon }: { icon: string }) {
+  if (icon === "search") return <Search />;
+  if (icon === "plane") return <Plane size={22} />;
+  return <FileText />;
+}
+
+function StatIcon({ icon }: { icon: string }) {
+  if (icon === "users") return <Users />;
+  if (icon === "star") return <Star size={22} />;
+  if (icon === "shield") return <Shield />;
+  return <Briefcase />;
+}
+
+function CtaIcon({ icon }: { icon: string }) {
+  if (icon === "file") return <FileText size={18} />;
+  if (icon === "plane") return <Plane size={18} />;
+  return <Search size={18} />;
+}
 
 export function HomePage() {
+  const { content } = useSiteContent();
+  const { hero, stats, how, better, stories, cta } = content;
+
   return (
     <>
       <section className="container hero">
         <div className="hero-visual">
-          <img
-            className="hero-photo"
-            src="/images/hero-woman.png"
-            alt="Smiling woman in a green sweater working on a laptop in a bright office"
-          />
+          <img className="hero-photo" src={hero.image} alt={hero.imageAlt} />
           <div className="float-cards">
-            {previewJobs.map((job) => (
+            {hero.jobs.map((job) => (
               <article className="job-card" key={job.id}>
                 <LogoMark logo={job.logo} />
                 <div className="job-meta">
@@ -38,7 +68,7 @@ export function HomePage() {
               </article>
             ))}
             <article className="ai-card">
-              <p>AI is finding and applying to jobs for you...</p>
+              <p>{hero.aiCard}</p>
               <div className="ai-track" aria-hidden="true">
                 <span className="ai-fill" />
               </div>
@@ -47,111 +77,62 @@ export function HomePage() {
         </div>
         <div className="hero-copy">
           <p className="eyebrow">
-            <Bolt /> Quick &amp; easy setup
+            <Bolt /> {hero.eyebrow}
           </p>
           <h1>
-            Upload your resume
-            <br />
-            to create your account
-            <br />
-            and get started.
+            {hero.titleLines.map((line, index) => (
+              <span key={line}>
+                {index > 0 ? <br /> : null}
+                {line}
+              </span>
+            ))}
           </h1>
-          <p className="lede">
-            Your resume helps us instantly build your profile and find the right jobs for you.
-          </p>
+          <p className="lede">{hero.lede}</p>
           <UploadPanel />
         </div>
       </section>
 
       <section className="container stats" aria-label="Results">
-        <div className="stat">
-          <span className="stat-icon">
-            <Briefcase />
-          </span>
-          <p>
-            <strong>3x</strong>
-            <span>More interviews</span>
-          </p>
-        </div>
-        <div className="stat">
-          <span className="stat-icon">
-            <Users />
-          </span>
-          <p>
-            <strong>63K+</strong>
-            <span>People found jobs</span>
-          </p>
-        </div>
-        <div className="stat">
-          <span className="stat-icon stat-star">
-            <Star size={22} />
-          </span>
-          <p>
-            <strong>4.8/5</strong>
-            <span>User rating</span>
-          </p>
-        </div>
-        <div className="stat">
-          <span className="stat-icon">
-            <Shield />
-          </span>
-          <p>
-            <strong>Private &amp; secure</strong>
-            <span>Your data stays safe</span>
-          </p>
-        </div>
+        {stats.map((stat) => (
+          <div className="stat" key={stat.label}>
+            <span className={stat.icon === "star" ? "stat-icon stat-star" : "stat-icon"}>
+              <StatIcon icon={stat.icon} />
+            </span>
+            <p>
+              <strong>{stat.value}</strong>
+              <span>{stat.label}</span>
+            </p>
+          </div>
+        ))}
       </section>
 
       <section className="container how">
-        <p className="eyebrow">How it works</p>
-        <h2>Find the right job. On autopilot.</h2>
+        <p className="eyebrow">{how.eyebrow}</p>
+        <h2>{how.title}</h2>
         <div className="steps">
-          <article className="step">
-            <span className="step-icon">
-              <FileText />
+          {how.steps.map((step, index) => (
+            <span className="step-with-arrow" key={step.title}>
+              {index > 0 ? <StepArrow /> : null}
+              <article className="step">
+                <span className="step-icon">
+                  <StepIcon icon={step.icon} />
+                </span>
+                <h3>{step.title}</h3>
+                <p>{step.text}</p>
+              </article>
             </span>
-            <h3>1. Upload resume</h3>
-            <p>Create your profile in seconds.</p>
-          </article>
-          <span className="step-arrow" aria-hidden="true">
-            <svg width="54" height="16" viewBox="0 0 54 16">
-              <path d="M1 8h44" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              <path d="M40 2.5 51 8 40 13.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          <article className="step">
-            <span className="step-icon">
-              <Search />
-            </span>
-            <h3>2. Get matched</h3>
-            <p>We find the best jobs for your skills.</p>
-          </article>
-          <span className="step-arrow" aria-hidden="true">
-            <svg width="54" height="16" viewBox="0 0 54 16">
-              <path d="M1 8h44" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              <path d="M40 2.5 51 8 40 13.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          <article className="step">
-            <span className="step-icon">
-              <Plane size={22} />
-            </span>
-            <h3>3. AI applies</h3>
-            <p>We tailor your application and apply for you.</p>
-          </article>
+          ))}
         </div>
       </section>
 
       <section className="container">
         <div className="better">
           <div>
-            <p className="eyebrow">Better applications</p>
-            <h2>A stronger resume opens more doors.</h2>
-            <p className="lede">
-              Get AI-powered feedback and a tailored resume that gets you noticed.
-            </p>
+            <p className="eyebrow">{better.eyebrow}</p>
+            <h2>{better.title}</h2>
+            <p className="lede">{better.lede}</p>
             <Link className="btn btn-primary btn-lg" to="/get-started">
-              Upscale My Resume →
+              {better.button}
             </Link>
           </div>
           <div className="resume-stage">
@@ -173,12 +154,7 @@ export function HomePage() {
                 <Sparkle size={14} />
                 <Sparkle size={10} />
               </span>
-              {[
-                "Improved with AI",
-                "Tailored for each job",
-                "Optimized keywords",
-                "Higher match rate",
-              ].map((item) => (
+              {better.checks.map((item) => (
                 <p className="check-row" key={item}>
                   <span className="check-dot">
                     <Check />
@@ -188,7 +164,7 @@ export function HomePage() {
               ))}
             </article>
             <p className="scribble scribble-resume">
-              Turn your resume into more opportunities.
+              {better.scribble}
               <svg viewBox="0 0 80 48" aria-hidden="true">
                 <path d="M68 6C46 8 34 24 18 38" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 <path d="M18 38l10-1-2-9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -201,16 +177,16 @@ export function HomePage() {
       <section className="container stories">
         <div className="stories-head">
           <div>
-            <p className="eyebrow">Real people</p>
-            <h2>Real results.</h2>
+            <p className="eyebrow">{stories.eyebrow}</p>
+            <h2>{stories.title}</h2>
           </div>
           <Link className="link-green" to="/stories">
-            See more stories →
+            {stories.linkLabel}
           </Link>
         </div>
         <div className="stories-grid">
-          {stories.map((story) => (
-            <article className="story" key={story.id}>
+          {stories.items.map((story) => (
+            <article className="story" key={story.name}>
               <img src={story.avatar} alt="" />
               <p className="quote">“{story.quote}”</p>
               <p className="who">{story.name}</p>
@@ -229,37 +205,25 @@ export function HomePage() {
             <span className="cta-plane">
               <Plane size={46} />
             </span>
-            <h2>Your next opportunity is closer than you think.</h2>
-            <p>Upload your resume, create your profile, and let AI do the rest.</p>
+            <h2>{cta.title}</h2>
+            <p>{cta.lede}</p>
             <Link className="btn btn-primary btn-lg" to="/get-started">
-              Get Started Free →
+              {cta.button}
             </Link>
           </div>
           <div className="cta-side">
             <article className="cta-card">
-              <p className="cta-row">
-                <span className="cta-ico">
-                  <Search size={18} />
-                </span>
-                Find matching jobs
-              </p>
-              <p className="cta-row">
-                <span className="cta-ico">
-                  <FileText size={18} />
-                </span>
-                Tailor your resume
-              </p>
-              <p className="cta-row">
-                <span className="cta-ico">
-                  <Plane size={18} />
-                </span>
-                Apply automatically
-              </p>
+              {cta.items.map((item) => (
+                <p className="cta-row" key={item.label}>
+                  <span className="cta-ico">
+                    <CtaIcon icon={item.icon} />
+                  </span>
+                  {item.label}
+                </p>
+              ))}
             </article>
             <p className="scribble scribble-cta">
-              Less searching.
-              <br />
-              More opportunities.
+              {cta.scribble}
               <svg viewBox="0 0 70 46" aria-hidden="true">
                 <path d="M58 8C40 12 28 22 14 36" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 <path d="M14 36l10-2-1-9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />

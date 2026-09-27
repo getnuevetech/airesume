@@ -11,11 +11,11 @@ export function Plane({ size = 22 }: IconProps) {
   );
 }
 
-export function Brand() {
+export function Brand({ name = "JobPilot" }: { name?: string }) {
   return (
-    <Link to="/" className="brand" aria-label="JobPilot home">
+    <Link to="/" className="brand" aria-label={`${name} home`}>
       <Plane />
-      <span>JobPilot</span>
+      <span>{name}</span>
     </Link>
   );
 }

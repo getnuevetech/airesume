@@ -1,0 +1,102 @@
+{
+  "brand": "JobPilot",
+  "signInLabel": "Sign in",
+  "getStartedLabel": "Get Started",
+  "dashboardLabel": "Dashboard",
+  "nav": [
+    { "label": "How it Works", "to": "/how-it-works" },
+    { "label": "Features", "to": "/features" },
+    { "label": "Success Stories", "to": "/stories" },
+    { "label": "Pricing", "to": "/pricing" }
+  ],
+  "hero": {
+    "image": "/images/hero-woman.png",
+    "imageAlt": "Smiling woman in a green sweater working on a laptop in a bright office",
+    "eyebrow": "Quick & easy setup",
+    "titleLines": ["Upload your resume", "to create your account", "and get started."],
+    "lede": "Your resume helps us instantly build your profile and find the right jobs for you.",
+    "dropTitle": "Drag & drop your resume here",
+    "dropHint": "PDF, DOCX or TXT (up to 10MB)",
+    "uploadLabel": "Upload Resume",
+    "orLabel": "or",
+    "googleLabel": "Continue with Google",
+    "finePrint": "It's free and takes less than a minute.",
+    "aiCard": "AI is finding and applying to jobs for you...",
+    "jobs": [
+      { "id": "pm", "title": "Product Manager", "company": "Spotify", "logo": "spotify", "status": "applied", "match": 96 },
+      { "id": "se", "title": "Software Engineer", "company": "HubSpot", "logo": "hubspot", "status": "applying", "match": 91 },
+      { "id": "da", "title": "Data Analyst", "company": "Notion", "logo": "notion", "status": "match", "match": 92 }
+    ]
+  },
+  "stats": [
+    { "icon": "briefcase", "value": "3x", "label": "More interviews" },
+    { "icon": "users", "value": "63K+", "label": "People found jobs" },
+    { "icon": "star", "value": "4.8/5", "label": "User rating" },
+    { "icon": "shield", "value": "Private & secure", "label": "Your data stays safe" }
+  ],
+  "how": {
+    "eyebrow": "How it works",
+    "title": "Find the right job. On autopilot.",
+    "steps": [
+      { "icon": "file", "title": "1. Upload resume", "text": "Create your profile in seconds." },
+      { "icon": "search", "title": "2. Get matched", "text": "We find the best jobs for your skills." },
+      { "icon": "plane", "title": "3. AI applies", "text": "We tailor your application and apply for you." }
+    ]
+  },
+  "better": {
+    "eyebrow": "Better applications",
+    "title": "A stronger resume opens more doors.",
+    "lede": "Get AI-powered feedback and a tailored resume that gets you noticed.",
+    "button": "Upscale My Resume →",
+    "checks": ["Improved with AI", "Tailored for each job", "Optimized keywords", "Higher match rate"],
+    "scribble": "Turn your resume into more opportunities."
+  },
+  "stories": {
+    "eyebrow": "Real people",
+    "title": "Real results.",
+    "linkLabel": "See more stories →",
+    "items": [
+      {
+        "name": "Priya S.",
+        "role": "Product Designer",
+        "quote": "JobPilot made my job search so much easier. I got 4 interviews in 3 weeks!",
+        "avatar": "/images/avatar-priya.png"
+      },
+      {
+        "name": "Marcus T.",
+        "role": "Software Engineer",
+        "quote": "The tailored resumes and auto-applying saved me hours. I landed a great role!",
+        "avatar": "/images/avatar-marcus.png"
+      },
+      {
+        "name": "Elena R.",
+        "role": "Marketing Specialist",
+        "quote": "Simple to use and actually works. I finally have a job I love.",
+        "avatar": "/images/avatar-elena.png"
+      }
+    ]
+  },
+  "cta": {
+    "title": "Your next opportunity is closer than you think.",
+    "lede": "Upload your resume, create your profile, and let AI do the rest.",
+    "button": "Get Started Free →",
+    "scribble": "Less searching. More opportunities.",
+    "items": [
+      { "icon": "search", "label": "Find matching jobs" },
+      { "icon": "file", "label": "Tailor your resume" },
+      { "icon": "plane", "label": "Apply automatically" }
+    ]
+  },
+  "footer": {
+    "copyright": "© 2026 JobPilot. All rights reserved.",
+    "links": [
+      { "label": "How it Works", "to": "/how-it-works" },
+      { "label": "Features", "to": "/features" },
+      { "label": "Pricing", "to": "/pricing" },
+      { "label": "Blog", "to": "/blog" },
+      { "label": "Privacy", "to": "/privacy" },
+      { "label": "Terms", "to": "/terms" },
+      { "label": "Contact", "to": "/contact" }
+    ]
+  }
+}

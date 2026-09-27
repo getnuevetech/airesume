@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
+import { useSiteContent } from "../content/siteContent";
 import { FileText, GoogleG } from "./Icons";
 
 type UploadPanelProps = {
@@ -10,7 +11,9 @@ type UploadPanelProps = {
 export function UploadPanel({ showSample = false }: UploadPanelProps) {
   const inputId = useId();
   const navigate = useNavigate();
-  const { user, setResume, openGoogle, notify } = useApp();
+  const { openGoogle, notify } = useApp();
+  const { content } = useSiteContent();
+  const hero = content.hero;
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -18,7 +21,7 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
   async function take(file: File) {
     const name = file.name.toLowerCase();
     const allowed =
-      name.endsWith(".pdf") || name.endsWith(".docx") || name.endsWith(".doc") || name.endsWith(".txt");
+      name.endsWith(".pdf") || name.endsWith(".docx") || name.endsWith(".txt") || name.endsWith(".md");
     if (!allowed) {
       setError("Use a PDF, DOCX, or TXT file.");
       return;
@@ -34,16 +37,17 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
     setError("");
     setBusy(true);
     try {
-      let text: string | null = null;
-      if (name.endsWith(".txt") || file.type.startsWith("text/")) {
-        text = (await file.text()).slice(0, 20000);
-      }
-      await new Promise((resolve) => window.setTimeout(resolve, 700));
-      setResume({ name: file.name, size: file.size, text, uploadedAt: Date.now() });
-      notify("Resume added. Your profile is ready.");
-      navigate(user ? "/dashboard" : "/get-started");
-    } catch {
-      setError("We could not read that file. Try another one.");
+      const body = new FormData();
+      body.append("resume", file);
+      const response = await fetch("/api/onboarding/extract", { method: "POST", body, credentials: "include" });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "We could not read that file.");
+      sessionStorage.setItem("jp-draft", JSON.stringify(data));
+      window.dispatchEvent(new Event("jp-draft"));
+      notify("We read your resume. Confirm the details to finish your account.");
+      navigate("/get-started");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "We could not read that file.");
     } finally {
       setBusy(false);
     }
@@ -56,17 +60,11 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
       const response = await fetch("/sample-resume.txt");
       if (!response.ok) throw new Error("missing");
       const text = await response.text();
-      setResume({
-        name: "sample-resume.txt",
-        size: new Blob([text]).size,
-        text,
-        uploadedAt: Date.now(),
-      });
-      notify("Sample resume loaded.");
-      navigate(user ? "/dashboard" : "/get-started");
+      const file = new File([text], "sample-resume.txt", { type: "text/plain" });
+      setBusy(false);
+      await take(file);
     } catch {
       setError("The sample resume could not be loaded.");
-    } finally {
       setBusy(false);
     }
   }
@@ -100,8 +98,8 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
       <span className="drop-icon">
         <FileText size={28} />
       </span>
-      <p className="drop-title">{busy ? "Reading your resume..." : "Drag & drop your resume here"}</p>
-      <p className="drop-hint">PDF, DOCX or TXT (up to 10MB)</p>
+      <p className="drop-title">{busy ? "Reading your resume..." : hero.dropTitle}</p>
+      <p className="drop-hint">{hero.dropHint}</p>
       {error ? (
         <p className="form-error" role="alert">
           {error}
@@ -113,9 +111,9 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
         disabled={busy}
         onClick={() => document.getElementById(inputId)?.click()}
       >
-        {busy ? "Uploading..." : "Upload Resume"}
+        {busy ? "Reading..." : hero.uploadLabel}
       </button>
-      <p className="or-text">or</p>
+      <p className="or-text">{hero.orLabel}</p>
       <button
         className="btn btn-google btn-block"
         type="button"
@@ -123,9 +121,9 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
         onClick={openGoogle}
       >
         <GoogleG />
-        Continue with Google
+        {hero.googleLabel}
       </button>
-      <p className="fine-print">It&apos;s free and takes less than a minute.</p>
+      <p className="fine-print">{hero.finePrint}</p>
       {showSample ? (
         <button className="text-btn" type="button" onClick={() => void useSample()} disabled={busy}>
           Use a sample resume

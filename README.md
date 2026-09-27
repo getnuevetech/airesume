@@ -1,20 +1,25 @@
 # JobPilot
 
-Marketing site and resume autopilot demo. Upload a resume in the browser, create an account, and watch simulated applications move from match to applied.
+AI job application manager. The homepage is editable in admin, accounts are created by uploading a resume, and the extracted career facts are stored only after the user confirms them.
 
 ```bash
 npm install
+npm run api
 npm run dev
 ```
 
-Open the local URL Vite prints. Production build:
+The API listens on port 3000. Vite on port 5173 proxies `/api` and `/uploads`.
+
+Production, from a built `dist` folder:
 
 ```bash
 npm run build
-npm run preview
+npm start
 ```
 
-Resume files stay in this browser. Applications are a preview and are not sent to employers.
+The first admin account is created on the first API boot. Defaults are `admin@jobpilot.app` / `JobPilot-Admin-2026` unless `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set first. The values are written to `server/data/admin-bootstrap.txt`.
+
+Google sign-in needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Resume extraction uses a rules parser unless `OPENAI_API_KEY` is set. The product plan is in `docs/EXECUTION_PLAN.md`.
 
 ## Lightsail
 
@@ -31,6 +36,7 @@ bash deploy/bootstrap.sh
 ```
 
 4. Open `http://<public-ip>/` in a browser. Use `http`, not `https`.
+5. Sign in at `http://<public-ip>/signin` with the admin email and password printed at the end of bootstrap, also stored in `server/data/admin-bootstrap.txt`. Homepage, users, admins, and password reset links are under `/admin`.
 
 `main` does not contain the app. If a clone of `main` is already on the server, switch branches and rebuild:
 
