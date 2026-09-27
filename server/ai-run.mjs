@@ -1,13 +1,17 @@
 import { db } from "./db.mjs";
 
+const enabledProviderSql = "SELECT 1 AS assignment_enabled, ai_providers.* FROM ai_providers WHERE enabled = 1 ORDER BY kind = 'deterministic' DESC, created_at LIMIT 1";
+
 export function assignmentFor(functionKey) {
-  return db
+  const assigned = db
     .prepare(
       `SELECT ai_assignments.enabled AS assignment_enabled, ai_providers.*
        FROM ai_assignments JOIN ai_providers ON ai_providers.id = ai_assignments.provider_id
        WHERE ai_assignments.function_key = ?`,
     )
     .get(functionKey);
+  if (assigned?.enabled && assigned.assignment_enabled) return assigned;
+  return db.prepare(enabledProviderSql).get() || assigned;
 }
 
 export async function completeJson(functionKey, system, user) {
