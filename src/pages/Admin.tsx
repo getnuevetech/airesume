@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useApp } from "../context/AppContext";
 import { defaultHomepage, useSiteContent, type HomepageContent } from "../content/siteContent";
 import type { User } from "../data";
+import { AiAdmin, JobsAdmin, PaymentsAdmin, PlansAdmin } from "./admin/Controls";
 
 type Mail = { id: string; to_email: string; subject: string; body: string };
 type Audit = { id: string; function_name: string; provider: string; model: string; status: string; created_at: number };
@@ -12,7 +13,7 @@ export function AdminPage() {
   const { user, ready } = useApp();
   const { content } = useSiteContent();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"home" | "users" | "admins" | "mail">("home");
+  const [tab, setTab] = useState<"home" | "users" | "admins" | "mail" | "ai" | "plans" | "payments" | "jobs">("home");
 
   useEffect(() => {
     if (ready && user?.role !== "admin") navigate("/signin", { replace: true });
@@ -38,12 +39,28 @@ export function AdminPage() {
         <button type="button" className={tab === "mail" ? "on" : ""} onClick={() => setTab("mail")}>
           Password links
         </button>
+        <button type="button" className={tab === "ai" ? "on" : ""} onClick={() => setTab("ai")}>
+          AI pipelines
+        </button>
+        <button type="button" className={tab === "plans" ? "on" : ""} onClick={() => setTab("plans")}>
+          Plans
+        </button>
+        <button type="button" className={tab === "payments" ? "on" : ""} onClick={() => setTab("payments")}>
+          Payments
+        </button>
+        <button type="button" className={tab === "jobs" ? "on" : ""} onClick={() => setTab("jobs")}>
+          Jobs
+        </button>
       </aside>
       <main className="admin-main">
         {tab === "home" ? <HomepageEditor /> : null}
         {tab === "users" ? <PeopleEditor roleFilter="user" /> : null}
         {tab === "admins" ? <PeopleEditor roleFilter="admin" /> : null}
         {tab === "mail" ? <MailEditor /> : null}
+        {tab === "ai" ? <AiAdmin /> : null}
+        {tab === "plans" ? <PlansAdmin /> : null}
+        {tab === "payments" ? <PaymentsAdmin /> : null}
+        {tab === "jobs" ? <JobsAdmin /> : null}
       </main>
     </div>
   );
@@ -405,6 +422,7 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [link, setLink] = useState("");
+  const [plans, setPlans] = useState<{ id: string; name: string }[]>([]);
 
   async function load() {
     const data = await api<{ users: User[] }>("/api/admin/users");
@@ -413,6 +431,7 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" }) {
 
   useEffect(() => {
     void load().catch((err: Error) => setError(err.message));
+    void api<{ plans: { id: string; name: string }[] }>("/api/plans").then((data) => setPlans(data.plans)).catch(() => undefined);
   }, [roleFilter]);
 
   async function create(event: FormEvent) {
@@ -464,6 +483,21 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" }) {
               </p>
             </div>
             <div className="admin-actions">
+              <select
+                value={person.planId || "free"}
+                onChange={(event) =>
+                  void api(`/api/admin/users/${person.id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ planId: event.target.value }),
+                  }).then(load)
+                }
+              >
+                {plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 className="text-btn"

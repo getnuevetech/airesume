@@ -1,4 +1,5 @@
 import { prompts } from "./ai.mjs";
+import { completeJson } from "./ai-run.mjs";
 
 const SKILL_WORDS = [
   "Product management",
@@ -154,42 +155,25 @@ export function reviewExtraction(extracted, sourceText) {
 
 export async function extractCareerProfile(text) {
   const baseline = deterministicExtract(text);
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return reviewExtraction(baseline, text);
-  try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_EXTRACT_MODEL || "gpt-4o-mini",
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: prompts.CAREER_EXTRACTION_V1 },
-          { role: "user", content: text.slice(0, 14000) },
-        ],
-      }),
-    });
-    if (!response.ok) throw new Error(`OpenAI ${response.status}`);
-    const body = await response.json();
-    const parsed = JSON.parse(body.choices?.[0]?.message?.content || "{}");
-    const merged = {
-      ...baseline,
-      ...parsed,
-      provider: "openai",
-      model: process.env.OPENAI_EXTRACT_MODEL || "gpt-4o-mini",
-      prompt: "CAREER_EXTRACTION_V1",
-      facts: Array.isArray(parsed.facts) && parsed.facts.length ? parsed.facts : baseline.facts,
-      questions: baseline.questions,
-    };
-    return reviewExtraction(merged, text);
-  } catch {
-    baseline.warnings = ["The language model was unavailable, so a rules-based extraction was used."];
-    return reviewExtraction(baseline, text);
+  const ai = await completeJson("career_extraction", prompts.CAREER_EXTRACTION_V1, text.slice(0, 14000));
+  if (!ai.json) {
+    const reviewed = reviewExtraction(baseline, text);
+    reviewed.provider = ai.provider;
+    reviewed.model = ai.model;
+    if (ai.error) reviewed.warnings = [...(reviewed.warnings || []), "The assigned model was unavailable, so a rules-based extraction was used."];
+    return reviewed;
   }
+  const parsed = ai.json;
+  const merged = {
+    ...baseline,
+    ...parsed,
+    provider: ai.provider,
+    model: ai.model,
+    prompt: "CAREER_EXTRACTION_V1",
+    facts: Array.isArray(parsed.facts) && parsed.facts.length ? parsed.facts : baseline.facts,
+    questions: baseline.questions,
+  };
+  return reviewExtraction(merged, text);
 }
 
 export async function readResumeFile(filename, buffer) {
