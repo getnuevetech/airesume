@@ -30,7 +30,19 @@ cd airesume
 bash deploy/bootstrap.sh
 ```
 
-4. Open `http://<public-ip>/` in a browser.
+4. Open `http://<public-ip>/` in a browser. Use `http`, not `https`.
+
+`main` does not contain the app. If a clone of `main` is already on the server, switch branches and rebuild:
+
+```bash
+cd ~/airesume
+git fetch origin
+git checkout cursor/jobpilot-landing-63b6
+git pull origin cursor/jobpilot-landing-63b6
+bash deploy/bootstrap.sh
+```
+
+If the script says JobPilot is being served but the browser never connects, allow TCP port 80 in the Lightsail Networking firewall.
 
 Later updates, from `~/airesume` on the server:
 
