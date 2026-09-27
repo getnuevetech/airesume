@@ -405,6 +405,25 @@ button { cursor: pointer; }
   font-weight: 700;
   font-size: 14px;
 }
+.check-row.terms {
+  align-items: flex-start;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.check-row.terms input {
+  margin-top: 3px;
+  flex: none;
+}
+.check-row.terms a {
+  font-weight: 700;
+}
+.start-stack {
+  display: grid;
+  gap: 16px;
+}
+.direct-card {
+  width: 100%;
+}
 .check-dot {
   width: 20px;
   height: 20px;

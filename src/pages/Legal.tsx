@@ -8,16 +8,10 @@ export function LegalPage({ kind }: { kind: "privacy" | "terms" }) {
         <h1>Privacy</h1>
         <p className="role">Updated September 27, 2026</p>
         <p>
-          JobPilot in this demo reads your resume in the browser. The file is not uploaded to a server. A TXT resume’s text, your account name and email, and the plan you pick are stored in local storage on this device.
+          JobPilot stores the account you create and the resume you upload so you can review and use that profile.
         </p>
         <p>
-          Passwords for email accounts are kept in that same local storage so you can sign in again on this browser. Do not use a password you use anywhere else.
-        </p>
-        <p>
-          Continue with Google does not contact Google. It signs you in with a demo account that also stays on this device.
-        </p>
-        <p>
-          Contact notes are stored locally and are not emailed. Clearing site data for this browser removes the profile, resume text, and notes.
+          If you upload a resume, that file is read to fill your name, contact details, experience, and skills. You confirm those details before the account is activated.
         </p>
         <p>
           Questions: <Link to="/contact">contact the team</Link>.
@@ -30,18 +24,13 @@ export function LegalPage({ kind }: { kind: "privacy" | "terms" }) {
       <p className="eyebrow">Terms</p>
       <h1>Terms</h1>
       <p className="role">Updated September 27, 2026</p>
-      <p>
-        JobPilot here is a product demo. Matches, tailored resumes, and applications are simulated so you can see the flow. They are not submitted to Spotify, HubSpot, Notion, or any other employer.
-      </p>
-      <p>
-        Plans and prices are part of the interface. Choosing a plan does not start a charge. There is no payment processor in this demo.
-      </p>
-      <p>
-        You are responsible for the resume you upload. Do not upload someone else’s personal information. Because data stays in the browser, anyone with access to this device and browser profile can see it.
-      </p>
-      <p>
-        The interface is provided as-is, without a promise that a preview match will lead to an interview.
-      </p>
+        <p>
+          By creating a JobPilot account you agree to these terms. You can create an account by entering your details or by uploading a resume.
+        </p>
+        <p>
+          Uploading a resume lets JobPilot read that file to fill the account. You can correct the details before the account is activated. You confirm that the resume and the details you submit are yours to share.
+        </p>
+        <p>The full terms text can be updated on this page.</p>
     </article>
   );
 }

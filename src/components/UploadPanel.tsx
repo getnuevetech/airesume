@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { useSiteContent } from "../content/siteContent";
 import { FileText, GoogleG } from "./Icons";
+import { TermsAgreement } from "./TermsAgreement";
 
 type UploadPanelProps = {
   showSample?: boolean;
@@ -11,14 +12,19 @@ type UploadPanelProps = {
 export function UploadPanel({ showSample = false }: UploadPanelProps) {
   const inputId = useId();
   const navigate = useNavigate();
-  const { openGoogle, notify } = useApp();
+  const { notify } = useApp();
   const { content } = useSiteContent();
   const hero = content.hero;
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [consent, setConsent] = useState(false);
   const [error, setError] = useState("");
 
   async function take(file: File) {
+    if (!consent) {
+      setError("Agree to the terms before we read your resume.");
+      return;
+    }
     const name = file.name.toLowerCase();
     if (name.endsWith(".doc") && !name.endsWith(".docx")) {
       setError("Save the older Word .doc file as DOCX, then upload that.");
@@ -42,6 +48,7 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
     try {
       const body = new FormData();
       body.append("resume", file);
+      body.append("consent", "1");
       const response = await fetch("/api/onboarding/extract", { method: "POST", body, credentials: "include" });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error || "We could not read that file.");
@@ -108,6 +115,7 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
           {error}
         </p>
       ) : null}
+      <TermsAgreement checked={consent} onChange={setConsent} includeResume />
       <button
         className="btn btn-primary btn-block"
         type="button"
@@ -121,7 +129,13 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
         className="btn btn-google btn-block"
         type="button"
         disabled={busy}
-        onClick={openGoogle}
+        onClick={() => {
+          if (!consent) {
+            setError("Agree to the terms before creating an account.");
+            return;
+          }
+          window.location.href = "/api/auth/google?consent=1";
+        }}
       >
         <GoogleG />
         {hero.googleLabel}

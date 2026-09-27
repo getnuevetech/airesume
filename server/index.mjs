@@ -14,7 +14,7 @@ import {
   id,
   publicUser,
 } from "./db.mjs";
-import { extractCareerProfile, readResumeFile } from "./extract.mjs";
+import { cleanResumeText, extractCareerProfile, readResumeFile } from "./extract.mjs";
 import { registerPlatform, syncProfileVersion } from "./platform.mjs";
 import { deliverMail, publicMailSettings, saveMailSettings } from "./mail.mjs";
 
@@ -161,6 +161,40 @@ app.post("/api/auth/login", (req, res) => {
   res.json({ user: publicUser(user) });
 });
 
+app.post("/api/auth/register", (req, res) => {
+  if (!req.body.consent) {
+    res.status(400).json({ error: "Agree to the terms to create the account." });
+    return;
+  }
+  const name = String(req.body.name || "").trim();
+  const email = String(req.body.email || "").trim().toLowerCase();
+  const password = String(req.body.password || "");
+  if (name.length < 2) {
+    res.status(400).json({ error: "Enter the name for this account." });
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    res.status(400).json({ error: "Enter a valid email address." });
+    return;
+  }
+  if (password.length < 8) {
+    res.status(400).json({ error: "Use at least 8 characters for your password." });
+    return;
+  }
+  if (db.prepare("SELECT id FROM users WHERE email = ?").get(email)) {
+    res.status(409).json({ error: "An account with this email already exists. Sign in instead." });
+    return;
+  }
+  const userId = id("usr");
+  db.prepare(
+    `INSERT INTO users (id, name, email, password_hash, provider, role, status, consent_at, created_at)
+     VALUES (?, ?, ?, ?, 'email', 'user', 'active', ?, ?)`,
+  ).run(userId, name, email, hashPassword(password), Date.now(), Date.now());
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  setSession(res, userId);
+  res.json({ user: publicUser(user) });
+});
+
 app.post("/api/auth/logout", (req, res) => {
   const token = cookie(req, "jp_session");
   if (token) db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
@@ -225,7 +259,7 @@ app.get("/api/auth/google", (req, res) => {
   const state = randomBytes(16).toString("hex");
   db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(
     `google_state_${state}`,
-    String(Date.now() + 1000 * 60 * 10),
+    JSON.stringify({ exp: Date.now() + 1000 * 60 * 10, consent: req.query.consent === "1" }),
   );
   const params = new URLSearchParams({
     client_id: clientId,
@@ -242,7 +276,13 @@ app.get("/api/auth/google/callback", async (req, res) => {
   const state = String(req.query.state || "");
   const saved = db.prepare("SELECT value FROM settings WHERE key = ?").get(`google_state_${state}`);
   db.prepare("DELETE FROM settings WHERE key = ?").run(`google_state_${state}`);
-  if (!saved || Number(saved.value) < Date.now() || !req.query.code) {
+  let oauth = null;
+  try {
+    oauth = JSON.parse(saved?.value || "");
+  } catch {
+    oauth = { exp: Number(saved?.value), consent: false };
+  }
+  if (!saved || !oauth?.exp || Number(oauth.exp) < Date.now() || !req.query.code) {
     res.redirect("/signin?error=google");
     return;
   }
@@ -272,6 +312,10 @@ app.get("/api/auth/google/callback", async (req, res) => {
   }
   let user = db.prepare("SELECT * FROM users WHERE email = ?").get(String(profile.email).toLowerCase());
   if (!user) {
+    if (!oauth.consent) {
+      res.redirect("/get-started?error=terms");
+      return;
+    }
     const userId = id("usr");
     db.prepare(
       `INSERT INTO users (id, name, email, password_hash, provider, role, status, consent_at, created_at)
@@ -302,6 +346,10 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
     res.status(400).json({ error: "Use a PDF, DOCX, or TXT file." });
     return;
   }
+  if (req.body.consent !== "1" && req.body.consent !== true && req.body.consent !== "true") {
+    res.status(400).json({ error: "Agree to the terms before we read your resume." });
+    return;
+  }
   let text = "";
   try {
     text = await readResumeFile(filename, req.file.buffer);
@@ -312,7 +360,7 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
     });
     return;
   }
-  text = text.replace(/\u0000/g, "").slice(0, 20000);
+  text = cleanResumeText(text).slice(0, 20000);
   if (text.trim().length < 20) {
     res.status(400).json({
       error: lower.endsWith(".pdf")
@@ -351,9 +399,7 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
     },
     facts: extracted.facts,
     questions: extracted.questions,
-    warnings: extracted.warnings || [],
-    provider: extracted.provider,
-    model: extracted.model,
+    warnings: [],
   });
 });
 
@@ -364,7 +410,7 @@ app.post("/api/onboarding/activate", (req, res) => {
     return;
   }
   if (!req.body.consent) {
-    res.status(400).json({ error: "Confirm the terms and AI processing to create the account." });
+    res.status(400).json({ error: "Agree to the terms to create the account." });
     return;
   }
   const password = String(req.body.password || "");
@@ -517,6 +563,10 @@ app.post("/api/admin/users", (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase();
   const password = String(req.body.password || "");
   const role = req.body.role === "admin" ? "admin" : "user";
+  if (!req.body.consent) {
+    res.status(400).json({ error: "Confirm that this person has agreed to the terms." });
+    return;
+  }
   if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8) {
     res.status(400).json({ error: "Name, a valid email, and a password of 8 or more characters are required." });
     return;
@@ -527,9 +577,9 @@ app.post("/api/admin/users", (req, res) => {
   }
   const userId = id("usr");
   db.prepare(
-    `INSERT INTO users (id, name, email, password_hash, provider, role, status, created_at)
-     VALUES (?, ?, ?, ?, 'email', ?, 'active', ?)`,
-  ).run(userId, name, email, hashPassword(password), role, Date.now());
+    `INSERT INTO users (id, name, email, password_hash, provider, role, status, consent_at, created_at)
+     VALUES (?, ?, ?, ?, 'email', ?, 'active', ?, ?)`,
+  ).run(userId, name, email, hashPassword(password), role, Date.now(), Date.now());
   res.json({ user: publicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(userId)) });
 });
 

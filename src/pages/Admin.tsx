@@ -420,6 +420,7 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [consent, setConsent] = useState(false);
   const [error, setError] = useState("");
   const [link, setLink] = useState("");
   const [plans, setPlans] = useState<{ id: string; name: string }[]>([]);
@@ -440,11 +441,12 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" }) {
     try {
       await api("/api/admin/users", {
         method: "POST",
-        body: JSON.stringify({ name, email, password, role: roleFilter }),
+        body: JSON.stringify({ name, email, password, role: roleFilter, consent }),
       });
       setName("");
       setEmail("");
       setPassword("");
+      setConsent(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create the account.");
@@ -468,6 +470,10 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" }) {
         <label className="field">
           <span>Password</span>
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required />
+        </label>
+        <label className="check-row terms">
+          <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required />
+          <span>This person has agreed to the terms.</span>
         </label>
         <button className="btn btn-primary" type="submit">
           Add {roleFilter}

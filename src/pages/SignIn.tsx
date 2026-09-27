@@ -2,9 +2,10 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { GoogleG } from "../components/Icons";
+import { TermsAgreement } from "../components/TermsAgreement";
 
 export function SignInPage() {
-  const { user, login, openGoogle } = useApp();
+  const { user, login } = useApp();
   const navigate = useNavigate();
   useEffect(() => {
     if (!user) return;
@@ -13,6 +14,7 @@ export function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
+  const [consent, setConsent] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -72,14 +74,24 @@ export function SignInPage() {
           Sign in
         </button>
         <p className="or-text">or</p>
-        <button className="btn btn-google btn-block" type="button" onClick={openGoogle}>
+        <TermsAgreement checked={consent} onChange={setConsent} required={false} />
+        <button
+          className="btn btn-google btn-block"
+          type="button"
+          onClick={() => {
+            window.location.href = consent ? "/api/auth/google?consent=1" : "/api/auth/google";
+          }}
+        >
           <GoogleG />
           Continue with Google
         </button>
         <p className="fine-print">
+          Creating an account with Google requires the agreement above. Signing in to an existing account does not.
+        </p>
+        <p className="fine-print">
           <Link to="/forgot-password">Forgot password?</Link>
           <br />
-          New to JobPilot? <Link to="/get-started">Upload a resume</Link>
+          New to JobPilot? <Link to="/get-started">Create an account</Link>
         </p>
       </form>
     </div>
