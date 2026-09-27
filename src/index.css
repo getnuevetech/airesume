@@ -864,6 +864,66 @@ button { cursor: pointer; }
 .resume-sheet h3 { font-size: 16px; }
 .resume-sheet ul { margin: 6px 0 12px; padding-left: 18px; }
 
+.account-shell { min-height: 100vh; display: grid; grid-template-columns: 248px 1fr; background: #f4f7f8; }
+.account-nav { background: #0c1830; color: #fff; display: flex; flex-direction: column; padding: 18px 12px; position: sticky; top: 0; height: 100vh; }
+.account-brand { color: #fff; font-weight: 800; font-size: 20px; text-decoration: none; padding: 8px 12px 18px; }
+.account-nav nav { display: flex; flex-direction: column; gap: 4px; }
+.account-nav a { display: flex; align-items: center; gap: 10px; color: #d5deea; text-decoration: none; border-radius: 12px; padding: 10px 12px; font-weight: 700; }
+.account-nav a.on, .account-nav a:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.account-user { margin-top: auto; display: grid; grid-template-columns: 40px 1fr auto; gap: 8px; align-items: center; padding: 12px; }
+.account-user img, .account-user > span { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: var(--green); display: grid; place-items: center; font-weight: 800; }
+.account-user p { margin: 0; color: #9fb0c3; font-size: 12px; }
+.account-user button { background: transparent; color: #fff; border: 0; }
+.account-main { padding: 28px 32px 64px; }
+.account-page { max-width: 980px; }
+.account-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 18px; }
+.account-head h1 { font-size: 34px; }
+.account-card { background: #fff; border: 1px solid #e6edf3; border-radius: 18px; padding: 18px; margin: 12px 0; }
+.account-card h2 { font-size: 18px; margin-bottom: 8px; }
+.account-split { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 12px; }
+.account-tile { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; }
+.tile-mark { grid-row: span 2; width: 36px; height: 36px; border-radius: 10px; background: var(--green-soft); color: var(--green); display: grid; place-items: center; font-weight: 800; }
+.quiet-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid #f0f3f6; text-decoration: none; }
+.quiet-row span { display: block; color: var(--muted); font-size: 13px; }
+.match-badge { background: var(--ink); color: #fff; border-radius: 999px; padding: 6px 10px; font-weight: 800; }
+.identity-card { display: flex; gap: 16px; align-items: center; }
+.identity-card img { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; }
+.experience-block { padding: 8px 0 12px; border-top: 1px solid #f0f3f6; }
+.experience-block ul { margin: 6px 0 0; padding-left: 18px; }
+.detail-list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.detail-list dt { color: var(--muted); font-size: 13px; }
+.detail-list dd { margin: 0; font-weight: 700; }
+.account-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.job-card { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.job-side { display: grid; justify-items: end; gap: 8px; }
+.version-mini { padding: 10px 0; border-top: 1px solid #f0f3f6; }
+.template-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.template-card { text-align: left; background: #fff; border: 1px solid #e6edf3; border-radius: 16px; padding: 12px; display: grid; gap: 6px; }
+.template-card.on { border-color: var(--green); box-shadow: 0 0 0 2px #c8f3e1; }
+.template-card:disabled { opacity: 0.55; }
+.template-swatch { height: 54px; border-radius: 10px; display: block; }
+.swatch-classic { background: linear-gradient(90deg, #019f6e 8px, #fff 8px); border: 1px solid #e6edf3; }
+.swatch-sidebar { background: linear-gradient(90deg, #0c1830 34%, #fff 34%); border: 1px solid #e6edf3; }
+.swatch-signal { background: linear-gradient(#d8f5ea 40%, #fff 40%); border: 1px solid #e6edf3; }
+.swatch-executive { background: #fff; border-top: 8px solid #0c1830; border: 1px solid #e6edf3; }
+.swatch-compact { background: linear-gradient(90deg, #f4f7f8 48%, #fff 48%); border: 1px solid #e6edf3; }
+.swatch-bold { background: linear-gradient(#0c1830 46%, #fff 46%); }
+.template-preview { margin-top: 18px; }
+
+.resume-body { display: block; }
+.tpl-sidebar .resume-body, .tpl-compact .resume-body { display: grid; grid-template-columns: 220px 1fr; gap: 18px; }
+.tpl-classic { border-left: 8px solid var(--green); }
+.tpl-sidebar .resume-hero, .tpl-sidebar aside { background: #0c1830; color: #fff; margin: -36px 0 0 -36px; padding: 28px; border-radius: 24px 0 0 24px; }
+.tpl-sidebar .resume-headline, .tpl-sidebar .role, .tpl-sidebar .eyebrow { color: #b7f0d8; }
+.tpl-sidebar .chip { background: rgba(255,255,255,0.12); color: #fff; }
+.tpl-signal { background: linear-gradient(#e7f8f1 140px, #fff 140px); }
+.tpl-signal h1 { font-size: 52px; }
+.tpl-executive { text-align: center; }
+.tpl-executive .resume-hero { flex-direction: column; }
+.tpl-executive h2 { border-bottom: 1px solid #d7e0ea; display: inline-block; }
+.tpl-bold .resume-hero { background: #0c1830; color: #fff; margin: -36px -36px 18px; padding: 32px; border-radius: 24px 24px 0 0; }
+.tpl-bold .resume-headline, .tpl-bold .eyebrow, .tpl-bold .role { color: #b7f0d8; }
+
 :focus-visible {
   outline: 2px solid var(--green);
   outline-offset: 2px;
@@ -901,6 +961,12 @@ button { cursor: pointer; }
   .admin-table article { flex-direction: column; align-items: flex-start; }
   .stat-grid { grid-template-columns: 1fr 1fr; }
   .job-row, .resume-hero { flex-direction: column; align-items: flex-start; }
+  .account-shell { grid-template-columns: 1fr; }
+  .account-nav { height: auto; position: sticky; top: 0; z-index: 5; }
+  .account-nav nav { flex-direction: row; overflow: auto; }
+  .account-user { margin-top: 8px; }
+  .account-split, .template-grid, .account-form, .detail-list, .tpl-sidebar .resume-body, .tpl-compact .resume-body { grid-template-columns: 1fr; }
+  .job-card, .account-head, .identity-card { flex-direction: column; align-items: flex-start; }
 }
 
 @media (max-width: 640px) {
