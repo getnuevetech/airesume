@@ -1,37 +1,67 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import { plans, type Billing, type PlanId } from "../data";
+import { plans, type Billing } from "../data";
 import { Check } from "../components/Icons";
+
+type LivePlan = {
+  id: string;
+  name: string;
+  blurb: string;
+  monthlyCents: number;
+  yearlyCents: number;
+  featureLabels: string[];
+  popular: boolean;
+};
 
 const faqs = [
   {
     q: "Do you apply without asking me?",
-    a: "Autopilot prepares an application for each strong match. In this demo the application is simulated in your browser. Nothing is sent to an employer.",
+    a: "Only if your plan includes auto apply and you turn it on. Each application is saved in your tracker with its own resume version.",
   },
   {
     q: "Which files can I upload?",
-    a: "PDF, DOCX, or TXT, up to 10MB. TXT files can be read for a summary and skills. PDF and DOCX are stored by name in this browser.",
+    a: "PDF, DOCX, or TXT, up to 10MB. JobPilot reads the file and asks you to confirm the facts before the account is created.",
   },
   {
     q: "Where does my resume go?",
-    a: "It stays in this browser. JobPilot does not upload your file to a server.",
+    a: "It is stored with your account. You can edit the profile, keep versions, and publish one at a shareable link.",
   },
   {
     q: "Can I change plans?",
-    a: "Yes. Pick another plan on this page. The choice is saved with your session on this device.",
+    a: "Yes, when an admin has upgrades or downgrades enabled. Proration and refunds follow the billing rules in admin.",
   },
 ];
 
 export function PricingPage() {
-  const { plan, billing, setPlan, user } = useApp();
+  const { billing, user } = useApp();
   const [cycle, setCycle] = useState<Billing>(billing);
   const [open, setOpen] = useState<number | null>(0);
+  const [live, setLive] = useState<LivePlan[] | null>(null);
   const navigate = useNavigate();
 
-  function choose(id: PlanId) {
-    setPlan(id, cycle);
-    navigate(user ? "/dashboard" : "/get-started");
+  useEffect(() => {
+    void fetch("/api/plans")
+      .then((response) => response.json())
+      .then((data: { plans?: LivePlan[] }) => setLive(data.plans ?? null))
+      .catch(() => setLive(null));
+  }, []);
+
+  const cards: (LivePlan & { cta: string })[] = live
+    ? live.map((item) => ({ ...item, cta: item.monthlyCents === 0 ? "Get started" : `Choose ${item.name}` }))
+    : plans.map((item) => ({
+        id: item.id,
+        name: item.name,
+        blurb: item.blurb,
+        monthlyCents: Math.round(item.monthly * 100),
+        yearlyCents: Math.round(item.yearly * 12 * 100),
+        featureLabels: item.features,
+        popular: Boolean(item.popular),
+        cta: item.cta,
+      }));
+
+  function choose() {
+    navigate(user ? "/dashboard?view=billing" : "/get-started");
   }
 
   return (
@@ -51,21 +81,20 @@ export function PricingPage() {
         </div>
       </header>
       <div className="price-grid">
-        {plans.map((item) => {
-          const amount = cycle === "monthly" ? item.monthly : item.yearly;
-          const current = plan === item.id && billing === cycle;
+        {cards.map((item) => {
+          const cents = cycle === "monthly" ? item.monthlyCents : item.yearlyCents;
+          const current = user?.planId === item.id;
           return (
             <article key={item.id} className={item.popular ? "price-card popular" : "price-card"}>
               {item.popular ? <span className="badge">Most popular</span> : null}
               <h2>{item.name}</h2>
               <p className="price">
-                <strong>{amount === 0 ? "$0" : `$${amount}`}</strong>
-                <span>{amount === 0 ? "" : "/mo"}</span>
+                <strong>{cents === 0 ? "$0" : `$${(cents / 100).toFixed(0)}`}</strong>
+                <span>{cents === 0 ? "" : cycle === "yearly" ? "/yr" : "/mo"}</span>
               </p>
               <p className="role">{item.blurb}</p>
-              {cycle === "yearly" && amount > 0 ? <p className="role">Billed annually</p> : null}
               <ul>
-                {item.features.map((feature) => (
+                {item.featureLabels.map((feature) => (
                   <li key={feature}>
                     <span className="check-dot">
                       <Check />
@@ -77,7 +106,7 @@ export function PricingPage() {
               <button
                 type="button"
                 className={item.popular ? "btn btn-primary btn-block" : "btn btn-ghost btn-block"}
-                onClick={() => choose(item.id)}
+                onClick={choose}
                 disabled={current}
               >
                 {current ? "Current plan" : item.cta}

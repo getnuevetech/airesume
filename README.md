@@ -19,6 +19,8 @@ npm start
 
 The first admin account is created on the first API boot. Defaults are `admin@jobpilot.app` / `JobPilot-Admin-2026` unless `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set first. The values are written to `server/data/admin-bootstrap.txt`.
 
+After sign-in, the dashboard shows resume rating, tailored jobs, applications, and plan controls. Admins assign each AI function to a provider, edit the plan matrix, add Stripe, PayPal, or a manual ledger, and pull jobs from configured sources. A public resume is served at `/resume/<slug>`.
+
 Google sign-in needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Resume extraction uses a rules parser unless `OPENAI_API_KEY` is set. The product plan is in `docs/EXECUTION_PLAN.md`.
 
 ## Lightsail

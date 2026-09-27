@@ -6,6 +6,7 @@ export type User = {
   provider: "email" | "google";
   role?: "user" | "admin";
   status?: string;
+  planId?: string;
 };
 
 export type ResumeFile = {

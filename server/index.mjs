@@ -15,6 +15,7 @@ import {
   publicUser,
 } from "./db.mjs";
 import { extractCareerProfile, readResumeFile } from "./extract.mjs";
+import { registerPlatform, syncProfileVersion } from "./platform.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const homepageFile = join(here, "..", "shared", "homepage.json");
@@ -409,6 +410,7 @@ app.post("/api/onboarding/activate", (req, res) => {
     Date.now(),
   );
   db.prepare("DELETE FROM drafts WHERE id = ?").run(draft.id);
+  syncProfileVersion(userId);
   setSession(res, userId);
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
   res.json({ user: publicUser(user) });
@@ -431,6 +433,9 @@ app.get("/api/profile", (req, res) => {
       facts: JSON.parse(profile.facts || "[]"),
       preferences: JSON.parse(profile.preferences || "{}"),
       resumeName: profile.resume_name,
+      headline: profile.headline || "",
+      photoUrl: profile.photo_url || "",
+      slug: profile.slug || "",
     },
   });
 });
@@ -485,11 +490,16 @@ app.patch("/api/admin/users/:id", (req, res) => {
   }
   const role = req.body.role === "admin" || req.body.role === "user" ? req.body.role : user.role;
   const status = req.body.status === "disabled" || req.body.status === "active" ? req.body.status : user.status;
+  const planId = req.body.planId ? String(req.body.planId) : user.plan_id || "free";
   if (user.id === admin.id && (role !== "admin" || status !== "active")) {
     res.status(400).json({ error: "You cannot remove your own admin access." });
     return;
   }
-  db.prepare("UPDATE users SET role = ?, status = ? WHERE id = ?").run(role, status, user.id);
+  if (req.body.planId && !db.prepare("SELECT id FROM plans WHERE id = ?").get(planId)) {
+    res.status(400).json({ error: "That plan does not exist." });
+    return;
+  }
+  db.prepare("UPDATE users SET role = ?, status = ?, plan_id = ? WHERE id = ?").run(role, status, planId, user.id);
   if (status === "disabled") db.prepare("DELETE FROM sessions WHERE user_id = ?").run(user.id);
   res.json({ user: publicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id)) });
 });
@@ -572,6 +582,8 @@ app.post("/api/account/password", (req, res) => {
   db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(next), user.id);
   res.json({ ok: true });
 });
+
+registerPlatform(app, { requireUser, requireAdmin, audit, upload, originOf });
 
 app.use("/uploads", express.static(uploadsDir));
 

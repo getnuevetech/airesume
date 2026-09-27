@@ -13,6 +13,7 @@ import { HomePage } from "./pages/Home";
 import { HowItWorksPage } from "./pages/HowItWorks";
 import { LegalPage, NotFoundPage } from "./pages/Legal";
 import { PricingPage } from "./pages/Pricing";
+import { PublicResumePage } from "./pages/PublicResume";
 import { ResetPasswordPage } from "./pages/ResetPassword";
 import { SignInPage } from "./pages/SignIn";
 import { StoriesPage } from "./pages/Stories";
@@ -24,6 +25,7 @@ export default function App() {
         <SiteContentProvider>
         <Routes>
           <Route path="admin" element={<AdminPage />} />
+          <Route path="resume/:slug" element={<PublicResumePage />} />
           <Route element={<Layout />}>
             <Route index element={<HomePage />} />
             <Route path="how-it-works" element={<HowItWorksPage />} />
