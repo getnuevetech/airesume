@@ -5,6 +5,8 @@ import { AppProvider } from "./context/AppContext";
 import { AdminPage } from "./pages/Admin";
 import { BlogPage, BlogPostPage } from "./pages/Blog";
 import { ContactPage } from "./pages/Contact";
+import { AccountShell } from "./account/Shell";
+import { ApplicationsPage, JobsPage, OverviewPage, PlanPage, ProfilePage, ResumePage, SettingsPage, TemplatesPage } from "./account/pages";
 import { DashboardPage } from "./pages/Dashboard";
 import { FeaturesPage } from "./pages/Features";
 import { ForgotPasswordPage } from "./pages/ForgotPassword";
@@ -13,6 +15,7 @@ import { HomePage } from "./pages/Home";
 import { HowItWorksPage } from "./pages/HowItWorks";
 import { LegalPage, NotFoundPage } from "./pages/Legal";
 import { PricingPage } from "./pages/Pricing";
+import { PublicResumePage } from "./pages/PublicResume";
 import { ResetPasswordPage } from "./pages/ResetPassword";
 import { SignInPage } from "./pages/SignIn";
 import { StoriesPage } from "./pages/Stories";
@@ -24,6 +27,17 @@ export default function App() {
         <SiteContentProvider>
         <Routes>
           <Route path="admin" element={<AdminPage />} />
+          <Route path="resume/:slug" element={<PublicResumePage />} />
+          <Route path="account" element={<AccountShell />}>
+            <Route index element={<OverviewPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="resume" element={<ResumePage />} />
+            <Route path="templates" element={<TemplatesPage />} />
+            <Route path="jobs" element={<JobsPage />} />
+            <Route path="applications" element={<ApplicationsPage />} />
+            <Route path="plan" element={<PlanPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
           <Route element={<Layout />}>
             <Route index element={<HomePage />} />
             <Route path="how-it-works" element={<HowItWorksPage />} />

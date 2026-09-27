@@ -100,7 +100,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           });
           setUser(data.user);
           notify(`Welcome back, ${data.user.name.split(" ")[0]}.`);
-          navigate(data.user.role === "admin" ? "/admin" : "/dashboard");
+          navigate(data.user.role === "admin" ? "/admin" : "/account");
           return null;
         } catch (error) {
           return error instanceof Error ? error.message : "Sign in failed.";

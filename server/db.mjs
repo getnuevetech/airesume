@@ -112,5 +112,6 @@ export function publicUser(row) {
     role: row.role,
     provider: row.provider,
     status: row.status,
+    planId: row.plan_id || "free",
   };
 }
