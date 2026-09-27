@@ -306,12 +306,18 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
   try {
     text = await readResumeFile(filename, req.file.buffer);
   } catch {
-    text = "";
+    const kind = lower.endsWith(".pdf") ? "PDF" : "file";
+    res.status(400).json({
+      error: `We could not read that ${kind}. Use a DOCX or TXT resume, or a PDF whose text you can highlight.`,
+    });
+    return;
   }
   text = text.replace(/\u0000/g, "").slice(0, 20000);
   if (text.trim().length < 20) {
     res.status(400).json({
-      error: "We could not read enough text from that file. Upload a TXT or DOCX resume, or a PDF with selectable text.",
+      error: lower.endsWith(".pdf")
+        ? "This PDF has no selectable text, so it looks like a scan or a picture. Save it as DOCX or TXT, or upload a PDF where the words can be highlighted."
+        : "We could not read enough text from that file. Upload a DOCX, TXT, or PDF with selectable text.",
     });
     return;
   }

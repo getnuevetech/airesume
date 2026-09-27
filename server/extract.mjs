@@ -61,8 +61,10 @@ export function deterministicExtract(text) {
   const employment = [];
   let current = null;
   for (const line of experience) {
-    const bullet = line.replace(/^[-•]\s*/, "");
-    if (line.startsWith("-") || line.startsWith("•")) {
+    const bullet = line.replace(/^[-•*]\s*/, "");
+    const marked = /^[-•*]/.test(line);
+    const sentence = current && /[.!?]$/.test(bullet) && !/,/.test(bullet);
+    if (marked || sentence) {
       current?.bullets.push(bullet);
       continue;
     }
@@ -176,6 +178,55 @@ export async function extractCareerProfile(text) {
   return reviewExtraction(merged, text);
 }
 
+function linesFromPdfItems(items) {
+  const lines = [];
+  let line = "";
+  let lastY = null;
+  let lastEnd = null;
+  const flush = () => {
+    const cleaned = line.replace(/[ \t]{2,}/g, " ").trim();
+    if (cleaned) lines.push(cleaned);
+    line = "";
+    lastEnd = null;
+  };
+  for (const item of items) {
+    if (!item || typeof item.str !== "string" || !item.str) continue;
+    const y = item.transform?.[5] ?? 0;
+    const x = item.transform?.[4] ?? 0;
+    const gap = lastEnd == null ? 0 : x - lastEnd;
+    if (lastY != null && Math.abs(y - lastY) > 3) flush();
+    if (line && gap > 1.5 && !line.endsWith(" ") && !item.str.startsWith(" ")) line += " ";
+    line += item.str;
+    lastY = y;
+    lastEnd = x + (Number(item.width) || 0);
+    if (item.hasEOL) flush();
+  }
+  flush();
+  return lines.join("\n");
+}
+
+async function readPdf(buffer) {
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const doc = await getDocument({
+    data: new Uint8Array(buffer),
+    isEvalSupported: false,
+    verbosity: 0,
+    useSystemFonts: true,
+  }).promise;
+  try {
+    const pages = [];
+    for (let number = 1; number <= doc.numPages; number += 1) {
+      const page = await doc.getPage(number);
+      const content = await page.getTextContent();
+      const text = linesFromPdfItems(content.items);
+      if (text) pages.push(text);
+    }
+    return pages.join("\n\n");
+  } finally {
+    await doc.destroy();
+  }
+}
+
 export async function readResumeFile(filename, buffer) {
   const lower = filename.toLowerCase();
   if (lower.endsWith(".txt") || lower.endsWith(".md")) return buffer.toString("utf8");
@@ -195,15 +246,6 @@ export async function readResumeFile(filename, buffer) {
       .replace(/&#\d+;/g, " ")
       .replace(/[ \t]{2,}/g, " ");
   }
-  if (lower.endsWith(".pdf")) {
-    const raw = buffer.toString("latin1");
-    const chunks = [];
-    const pattern = /\((?:\\\)|\\.|[^)\\])*\)/g;
-    for (const match of raw.match(pattern) || []) {
-      const value = match.slice(1, -1).replace(/\\n/g, "\n").replace(/\\([()\\])/g, "$1");
-      if (/[A-Za-z]{3,}/.test(value)) chunks.push(value);
-    }
-    return chunks.join("\n");
-  }
+  if (lower.endsWith(".pdf")) return readPdf(buffer);
   return "";
 }

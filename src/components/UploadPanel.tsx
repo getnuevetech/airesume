@@ -20,8 +20,11 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
 
   async function take(file: File) {
     const name = file.name.toLowerCase();
-    const allowed =
-      name.endsWith(".pdf") || name.endsWith(".docx") || name.endsWith(".txt") || name.endsWith(".md");
+    if (name.endsWith(".doc") && !name.endsWith(".docx")) {
+      setError("Save the older Word .doc file as DOCX, then upload that.");
+      return;
+    }
+    const allowed = name.endsWith(".pdf") || name.endsWith(".docx") || name.endsWith(".txt") || name.endsWith(".md");
     if (!allowed) {
       setError("Use a PDF, DOCX, or TXT file.");
       return;
@@ -88,7 +91,7 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
         id={inputId}
         className="file-input"
         type="file"
-        accept=".pdf,.doc,.docx,.txt,application/pdf,text/plain"
+        accept=".pdf,.docx,.txt,.md,application/pdf,text/plain"
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
