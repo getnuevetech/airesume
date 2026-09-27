@@ -1112,15 +1112,42 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       res.status(404).json({ error: "Provider not found." });
       return;
     }
+    const name = String(req.body.name || provider.name).trim();
+    const model = String(req.body.model || provider.model).trim();
+    const kinds = ["openai", "anthropic", "google", "deterministic"];
+    const kind = kinds.includes(req.body.kind) ? req.body.kind : provider.kind;
+    if (name.length < 2 || model.length < 2) {
+      res.status(400).json({ error: "Name and model are required." });
+      return;
+    }
     const apiKey = req.body.apiKey && !String(req.body.apiKey).startsWith("••••") ? String(req.body.apiKey) : provider.api_key;
-    db.prepare("UPDATE ai_providers SET name = ?, model = ?, api_key = ?, enabled = ? WHERE id = ?").run(
-      String(req.body.name || provider.name),
-      String(req.body.model || provider.model),
-      apiKey,
+    db.prepare("UPDATE ai_providers SET name = ?, kind = ?, model = ?, api_key = ?, enabled = ? WHERE id = ?").run(
+      name,
+      kind,
+      model,
+      kind === "deterministic" ? "" : apiKey,
       req.body.enabled === false ? 0 : 1,
       provider.id,
     );
     res.json({ provider: publicProvider(db.prepare("SELECT * FROM ai_providers WHERE id = ?").get(provider.id)) });
+  });
+
+  app.delete("/api/admin/ai/providers/:id", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const provider = db.prepare("SELECT * FROM ai_providers WHERE id = ?").get(req.params.id);
+    if (!provider) {
+      res.status(404).json({ error: "Provider not found." });
+      return;
+    }
+    const remaining = db.prepare("SELECT COUNT(*) AS count FROM ai_providers WHERE id != ?").get(provider.id).count;
+    if (!remaining) {
+      res.status(400).json({ error: "Keep at least one AI pipeline. Disable it if you only want to turn it off." });
+      return;
+    }
+    const fallback = db.prepare("SELECT * FROM ai_providers WHERE id != ? ORDER BY kind = 'deterministic' DESC, created_at LIMIT 1").get(provider.id);
+    const moved = db.prepare("UPDATE ai_assignments SET provider_id = ? WHERE provider_id = ?").run(fallback.id, provider.id);
+    db.prepare("DELETE FROM ai_providers WHERE id = ?").run(provider.id);
+    res.json({ ok: true, reassigned: moved.changes, fallbackName: fallback.name });
   });
 
   app.put("/api/admin/ai/assignments", (req, res) => {

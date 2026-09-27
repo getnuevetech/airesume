@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../../api";
 
-type Provider = { id: string; name: string; kind: string; model: string; enabled: boolean; apiKey: string };
+type Provider = { id: string; name: string; kind: string; model: string; enabled: boolean; apiKey: string; hasKey: boolean };
 type Assignment = { function_key: string; provider_id: string; enabled: number };
 type AiPayload = { functions: { key: string; label: string; detail: string }[]; providers: Provider[]; assignments: Assignment[] };
 type Plan = {
@@ -36,6 +36,7 @@ type Job = {
 export function AiAdmin() {
   const [data, setData] = useState<AiPayload | null>(null);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [name, setName] = useState("");
   const [kind, setKind] = useState("openai");
   const [model, setModel] = useState("gpt-4o-mini");
@@ -67,8 +68,9 @@ export function AiAdmin() {
   return (
     <div>
       <h1>AI pipelines</h1>
-      <p className="lede">Each function is coded in the product. Choose which provider runs it. Built-in rules stay available when a model is offline.</p>
+      <p className="lede">Each function is coded in the product. Edit a pipeline’s name, provider, model, and key, or remove it. Functions on a removed pipeline move to the one that remains.</p>
       {error ? <p className="form-error">{error}</p> : null}
+      {message ? <p className="role">{message}</p> : null}
       <form className="admin-card admin-grid" onSubmit={add}>
         <label className="field">
           <span>Name</span>
@@ -93,23 +95,9 @@ export function AiAdmin() {
         </label>
         <button className="btn btn-primary" type="submit">Add AI</button>
       </form>
-      <div className="admin-table">
-        {data.providers.map((provider) => (
-          <article key={provider.id}>
-            <div>
-              <strong>{provider.name}</strong>
-              <p className="role">{provider.kind} · {provider.model} · {provider.enabled ? "On" : "Off"} · {provider.apiKey || "No key"}</p>
-            </div>
-            <button
-              className="text-btn"
-              type="button"
-              onClick={() => void api(`/api/admin/ai/providers/${provider.id}`, { method: "PATCH", body: JSON.stringify({ enabled: !provider.enabled, name: provider.name, model: provider.model }) }).then(load)}
-            >
-              {provider.enabled ? "Disable" : "Enable"}
-            </button>
-          </article>
-        ))}
-      </div>
+      {data.providers.map((provider) => (
+        <ProviderCard key={provider.id} provider={provider} onChanged={load} onError={setError} onMessage={setMessage} />
+      ))}
       {data.functions.map((item) => {
         const assignment = data.assignments.find((row) => row.function_key === item.key);
         return (
@@ -136,6 +124,93 @@ export function AiAdmin() {
         );
       })}
     </div>
+  );
+}
+
+function ProviderCard({
+  provider,
+  onChanged,
+  onError,
+  onMessage,
+}: {
+  provider: Provider;
+  onChanged: () => Promise<void>;
+  onError: (message: string) => void;
+  onMessage: (message: string) => void;
+}) {
+  const [name, setName] = useState(provider.name);
+  const [kind, setKind] = useState(provider.kind);
+  const [model, setModel] = useState(provider.model);
+  const [apiKey, setApiKey] = useState("");
+  const [enabled, setEnabled] = useState(provider.enabled);
+
+  useEffect(() => {
+    setName(provider.name);
+    setKind(provider.kind);
+    setModel(provider.model);
+    setApiKey("");
+    setEnabled(provider.enabled);
+  }, [provider]);
+
+  return (
+    <form
+      className="admin-card"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onError("");
+        void api(`/api/admin/ai/providers/${provider.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name, kind, model, apiKey, enabled }),
+        })
+          .then(() => {
+            onMessage(`${name} saved.`);
+            return onChanged();
+          })
+          .catch((err: Error) => onError(err.message));
+      }}
+    >
+      <h2>{provider.name}</h2>
+      <p className="role">{enabled ? "On" : "Off"} · {provider.hasKey ? "Key saved" : "No key"}</p>
+      <div className="admin-grid">
+        <label className="field"><span>Name</span><input value={name} onChange={(event) => setName(event.target.value)} required /></label>
+        <label className="field">
+          <span>Provider</span>
+          <select value={kind} onChange={(event) => setKind(event.target.value)}>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="google">Google</option>
+            <option value="deterministic">Built-in rules</option>
+          </select>
+        </label>
+        <label className="field"><span>Model</span><input value={model} onChange={(event) => setModel(event.target.value)} required /></label>
+        {kind === "deterministic" ? null : (
+          <label className="field">
+            <span>API key</span>
+            <input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={provider.hasKey ? "Saved. Leave blank to keep it." : "Stored for this pipeline"} />
+          </label>
+        )}
+      </div>
+      <label className="check-row"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Enabled</label>
+      <div className="admin-actions">
+        <button className="btn btn-primary btn-sm" type="submit">Save pipeline</button>
+        <button
+          className="text-btn"
+          type="button"
+          onClick={() => {
+            if (!window.confirm(`Remove ${provider.name}? Functions using it will move to another pipeline.`)) return;
+            onError("");
+            void api<{ reassigned: number; fallbackName: string }>(`/api/admin/ai/providers/${provider.id}`, { method: "DELETE" })
+              .then((result) => {
+                onMessage(result.reassigned ? `${provider.name} removed. ${result.reassigned} function${result.reassigned === 1 ? "" : "s"} now use ${result.fallbackName}.` : `${provider.name} removed.`);
+                return onChanged();
+              })
+              .catch((err: Error) => onError(err.message));
+          }}
+        >
+          Remove pipeline
+        </button>
+      </div>
+    </form>
   );
 }
 
