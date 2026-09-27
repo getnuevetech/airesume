@@ -15,8 +15,23 @@ type Plan = {
   active: boolean;
 };
 type Gateway = { id: string; name: string; kind: string; enabled: boolean; mode: string; publicKey: string; secretKey: string };
-type Source = { id: string; name: string; kind: string; config: { url?: string }; enabled: boolean; last_pulled_at: number | null };
-type Job = { id: string; title: string; company: string; category: string; role: string; verification: string; location: string };
+type FeedConfig = { url: string; format: string; authType: string; username: string; headerName: string; employer: string; hasSecret: boolean };
+type Source = { id: string; name: string; kind: string; config: FeedConfig; enabled: boolean; lastPulledAt: number | null };
+type Job = {
+  id: string;
+  title: string;
+  company: string;
+  category: string;
+  role: string;
+  verification: string;
+  location: string;
+  sourceId: string;
+  sourceName: string;
+  primaryCompany: string;
+  primaryUrl: string;
+  primaryEmail: string;
+  active: boolean;
+};
 
 export function AiAdmin() {
   const [data, setData] = useState<AiPayload | null>(null);
@@ -124,11 +139,23 @@ export function AiAdmin() {
   );
 }
 
+const emptyPlan = {
+  name: "",
+  blurb: "",
+  monthlyCents: 0,
+  yearlyCents: 0,
+  popular: false,
+  active: true,
+  features: { profile_edit: true, job_limit: 5, template_limit: 2 } as Record<string, boolean | number>,
+};
+
 export function PlansAdmin() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [features, setFeatures] = useState<{ key: string; label: string }[]>([]);
   const [policy, setPolicy] = useState({ allowUpgrade: true, allowDowngrade: true, allowProration: true, allowRefund: false });
+  const [draft, setDraft] = useState(emptyPlan);
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   async function load() {
     const data = await api<{ plans: Plan[]; features: { key: string; label: string }[]; policy: typeof policy }>("/api/admin/plans");
@@ -148,7 +175,8 @@ export function PlansAdmin() {
   return (
     <div>
       <h1>Plans and features</h1>
-      <p className="lede">What a person can do is decided here. Prices are in cents.</p>
+      <p className="lede">Build a plan from the features below. Prices are in cents. A plan can be removed after every account has been moved off it.</p>
+      {error ? <p className="form-error">{error}</p> : null}
       <section className="admin-card">
         <h2>Upgrade rules</h2>
         <label className="check-row"><input type="checkbox" checked={policy.allowUpgrade} onChange={(event) => setPolicy({ ...policy, allowUpgrade: event.target.checked })} /> Users can upgrade</label>
@@ -158,6 +186,37 @@ export function PlansAdmin() {
         <button className="btn btn-primary btn-sm" type="button" onClick={() => void api("/api/admin/billing-policy", { method: "PUT", body: JSON.stringify(policy) }).then(() => setMessage("Rules saved."))}>Save rules</button>
         {message ? <p className="role">{message}</p> : null}
       </section>
+      <form
+        className="admin-card"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setError("");
+          void api("/api/admin/plans", { method: "POST", body: JSON.stringify(draft) })
+            .then(() => {
+              setDraft(emptyPlan);
+              setMessage("Plan added.");
+              return load();
+            })
+            .catch((err: Error) => setError(err.message));
+        }}
+      >
+        <h2>New plan</h2>
+        <div className="admin-grid">
+          <label className="field"><span>Name</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required /></label>
+          <label className="field"><span>Blurb</span><input value={draft.blurb} onChange={(event) => setDraft({ ...draft, blurb: event.target.value })} /></label>
+          <label className="field"><span>Monthly cents</span><input type="number" value={draft.monthlyCents} onChange={(event) => setDraft({ ...draft, monthlyCents: Number(event.target.value) })} /></label>
+          <label className="field"><span>Yearly cents</span><input type="number" value={draft.yearlyCents} onChange={(event) => setDraft({ ...draft, yearlyCents: Number(event.target.value) })} /></label>
+        </div>
+        <label className="field"><span>Job list size, 0 for all</span><input type="number" value={Number(draft.features.job_limit || 0)} onChange={(event) => setDraft({ ...draft, features: { ...draft.features, job_limit: Number(event.target.value) } })} /></label>
+        <label className="field"><span>Resume templates, 1 to 6</span><input type="number" min={1} max={6} value={Number(draft.features.template_limit || 2)} onChange={(event) => setDraft({ ...draft, features: { ...draft.features, template_limit: Number(event.target.value) } })} /></label>
+        {features.map((feature) => (
+          <label className="check-row" key={feature.key}>
+            <input type="checkbox" checked={Boolean(draft.features[feature.key])} onChange={(event) => setDraft({ ...draft, features: { ...draft.features, [feature.key]: event.target.checked } })} />
+            {feature.label}
+          </label>
+        ))}
+        <button className="btn btn-primary btn-sm" type="submit">Add plan</button>
+      </form>
       {plans.map((plan) => (
         <section className="admin-card" key={plan.id}>
           <div className="admin-grid">
@@ -179,7 +238,21 @@ export function PlansAdmin() {
             </label>
           ))}
           <label className="check-row"><input type="checkbox" checked={plan.popular} onChange={(event) => updatePlan(plan.id, { popular: event.target.checked })} /> Highlight as popular</label>
-          <button className="btn btn-primary btn-sm" type="button" onClick={() => void api(`/api/admin/plans/${plan.id}`, { method: "PUT", body: JSON.stringify(plan) }).then(() => setMessage(`${plan.name} saved.`))}>Save {plan.name}</button>
+          <label className="check-row"><input type="checkbox" checked={plan.active} onChange={(event) => updatePlan(plan.id, { active: event.target.checked })} /> Show this plan to users</label>
+          <div className="admin-actions">
+            <button className="btn btn-primary btn-sm" type="button" onClick={() => void api(`/api/admin/plans/${plan.id}`, { method: "PUT", body: JSON.stringify(plan) }).then(() => setMessage(`${plan.name} saved.`)).catch((err: Error) => setError(err.message))}>Save {plan.name}</button>
+            <button
+              className="text-btn"
+              type="button"
+              onClick={() => {
+                if (!window.confirm(`Delete ${plan.name}? Accounts on this plan must be moved first.`)) return;
+                setError("");
+                void api(`/api/admin/plans/${plan.id}`, { method: "DELETE" }).then(() => { setMessage(`${plan.name} deleted.`); return load(); }).catch((err: Error) => setError(err.message));
+              }}
+            >
+              Delete plan
+            </button>
+          </div>
         </section>
       ))}
     </div>
@@ -261,13 +334,15 @@ export function PaymentsAdmin() {
   );
 }
 
+const blankFeed = { name: "", url: "", format: "auto", authType: "none", username: "", secret: "", headerName: "", employer: "" };
+
 export function JobsAdmin() {
   const [sources, setSources] = useState<Source[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
+  const [feed, setFeed] = useState(blankFeed);
+  const [filter, setFilter] = useState("all");
   const [title, setTitle] = useState("");
   const [company, setCompany] = useState("");
   const [description, setDescription] = useState("");
@@ -282,39 +357,240 @@ export function JobsAdmin() {
     void load().catch((err: Error) => setError(err.message));
   }, []);
 
+  const visible = filter === "all" ? jobs : jobs.filter((job) => job.sourceId === filter);
+
+  async function pull(sourceId?: string) {
+    setError("");
+    try {
+      const data = await api<{ results: { name: string; count?: number; error?: string }[] }>("/api/admin/jobs/pull", {
+        method: "POST",
+        body: JSON.stringify(sourceId ? { sourceId } : {}),
+      });
+      setMessage(data.results.map((item) => `${item.name}: ${item.error || `${item.count} jobs`}`).join(" · ") || "No feeds to pull.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Pull failed.");
+    }
+  }
+
   return (
     <div>
-      <h1>Job sources</h1>
-      <p className="lede">Jobs enter from the built-in catalog, a JSON feed you control, or a listing you add. Pull runs categorization and verification on each enabled source. The app does not scrape job boards.</p>
+      <h1>Job feeds</h1>
+      <p className="lede">Add each JSON or RSS feed once. If a site requires access, store the token or username and password on that feed. Pull reads the feed, labels the employer named in the listing, and keeps each job under its feed.</p>
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="role">{message}</p> : null}
-      <button className="btn btn-primary" type="button" onClick={() => void api<{ results: { name: string; count?: number; error?: string }[] }>("/api/admin/jobs/pull", { method: "POST" }).then((data) => { setMessage(data.results.map((item) => `${item.name}: ${item.error || item.count}`).join(" · ")); return load(); })}>Pull and verify now</button>
-      <form className="admin-card" onSubmit={(event) => { event.preventDefault(); void api("/api/admin/job-sources", { method: "POST", body: JSON.stringify({ name, kind: "json", url }) }).then(load); }}>
-        <h2>JSON feed</h2>
-        <label className="field"><span>Source name</span><input value={name} onChange={(event) => setName(event.target.value)} required /></label>
-        <label className="field"><span>Feed URL</span><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/jobs.json" required /></label>
+      <button className="btn btn-primary" type="button" onClick={() => void pull()}>Pull enabled feeds</button>
+      <form
+        className="admin-card"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setError("");
+          void api("/api/admin/job-sources", { method: "POST", body: JSON.stringify(feed) })
+            .then(() => {
+              setFeed(blankFeed);
+              setMessage("Feed added.");
+              return load();
+            })
+            .catch((err: Error) => setError(err.message));
+        }}
+      >
+        <h2>Add a feed</h2>
+        <div className="admin-grid">
+          <label className="field"><span>Name</span><input value={feed.name} onChange={(event) => setFeed({ ...feed, name: event.target.value })} required /></label>
+          <label className="field"><span>Feed URL</span><input value={feed.url} onChange={(event) => setFeed({ ...feed, url: event.target.value })} placeholder="https://example.com/jobs.json" required /></label>
+          <label className="field">
+            <span>Format</span>
+            <select value={feed.format} onChange={(event) => setFeed({ ...feed, format: event.target.value })}>
+              <option value="auto">Detect JSON or RSS</option>
+              <option value="json">JSON</option>
+              <option value="rss">RSS or Atom</option>
+            </select>
+          </label>
+          <label className="field"><span>Default employer if the feed omits one</span><input value={feed.employer} onChange={(event) => setFeed({ ...feed, employer: event.target.value })} /></label>
+        </div>
+        <FeedAccess feed={feed} secret={feed.secret} onFeed={setFeed} onSecret={(secret) => setFeed({ ...feed, secret })} />
         <button className="btn btn-ghost" type="submit">Add feed</button>
       </form>
       {sources.map((source) => (
-        <p className="role" key={source.id}>{source.name} · {source.kind} · {source.config.url || "no url"} · {source.last_pulled_at ? "pulled" : "not pulled yet"}</p>
+        <FeedCard key={source.id} source={source} onPull={() => pull(source.id)} onChanged={load} onError={setError} />
       ))}
-      <form className="admin-card" onSubmit={(event) => { event.preventDefault(); void api("/api/admin/jobs", { method: "POST", body: JSON.stringify({ title, company, description }) }).then(() => { setTitle(""); setCompany(""); setDescription(""); return load(); }); }}>
+      <form
+        className="admin-card"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setError("");
+          void api("/api/admin/jobs", { method: "POST", body: JSON.stringify({ title, company, description }) })
+            .then(() => {
+              setTitle("");
+              setCompany("");
+              setDescription("");
+              setMessage("Job added.");
+              return load();
+            })
+            .catch((err: Error) => setError(err.message));
+        }}
+      >
         <h2>Add one job</h2>
         <label className="field"><span>Title</span><input value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
         <label className="field"><span>Company</span><input value={company} onChange={(event) => setCompany(event.target.value)} required /></label>
         <label className="field"><span>Description</span><textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
         <button className="btn btn-primary" type="submit">Categorize and save</button>
       </form>
+      <div className="admin-head">
+        <h2>Jobs by feed</h2>
+        <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+          <option value="all">All feeds</option>
+          {sources.map((source) => (
+            <option key={source.id} value={source.id}>{source.name}</option>
+          ))}
+        </select>
+      </div>
       <div className="admin-table">
-        {jobs.map((job) => (
+        {visible.map((job) => (
           <article key={job.id}>
             <div>
               <strong>{job.title}</strong>
-              <p className="role">{job.company} · {job.category} · {job.role} · {job.verification} · {job.location}</p>
+              <p className="role">
+                {job.sourceName} · {job.company}
+                {job.primaryCompany && job.primaryCompany.toLowerCase() !== job.company.toLowerCase() ? ` · Apply to ${job.primaryCompany}` : ""}
+                {job.primaryEmail ? ` · ${job.primaryEmail}` : ""}
+                {" · "}{job.category} · {job.verification}{job.active ? "" : " · hidden"}
+              </p>
             </div>
+            <button
+              className="text-btn"
+              type="button"
+              onClick={() => {
+                if (!window.confirm(`Delete ${job.title} at ${job.company}?`)) return;
+                void api(`/api/admin/jobs/${job.id}`, { method: "DELETE" }).then(load).catch((err: Error) => setError(err.message));
+              }}
+            >
+              Delete
+            </button>
           </article>
         ))}
+        {visible.length ? null : <p className="role">No jobs for this feed yet.</p>}
       </div>
     </div>
+  );
+}
+
+function FeedAccess<T extends { authType: string; username: string; headerName: string }>({
+  feed,
+  secret,
+  onFeed,
+  onSecret,
+}: {
+  feed: T;
+  secret: string;
+  onFeed: (next: T) => void;
+  onSecret: (secret: string) => void;
+}) {
+  return (
+    <div className="admin-grid">
+      <label className="field">
+        <span>Access</span>
+        <select value={feed.authType} onChange={(event) => onFeed({ ...feed, authType: event.target.value })}>
+          <option value="none">No login</option>
+          <option value="bearer">API token</option>
+          <option value="basic">Username and password</option>
+          <option value="header">Custom header</option>
+        </select>
+      </label>
+      {feed.authType === "basic" ? (
+        <label className="field"><span>Username</span><input value={feed.username} onChange={(event) => onFeed({ ...feed, username: event.target.value })} /></label>
+      ) : null}
+      {feed.authType === "header" ? (
+        <label className="field"><span>Header name</span><input value={feed.headerName} onChange={(event) => onFeed({ ...feed, headerName: event.target.value })} placeholder="X-Api-Key" /></label>
+      ) : null}
+      {feed.authType !== "none" ? (
+        <label className="field"><span>{feed.authType === "basic" ? "Password" : "Token"}</span><input type="password" value={secret} onChange={(event) => onSecret(event.target.value)} placeholder="Leave blank to keep the saved value" /></label>
+      ) : null}
+    </div>
+  );
+}
+
+function FeedCard({ source, onPull, onChanged, onError }: { source: Source; onPull: () => Promise<void>; onChanged: () => Promise<void>; onError: (message: string) => void }) {
+  const remote = source.kind === "json" || source.kind === "rss";
+  const [name, setName] = useState(source.name);
+  const [url, setUrl] = useState(source.config.url);
+  const [format, setFormat] = useState(source.config.format || "auto");
+  const [authType, setAuthType] = useState(source.config.authType || "none");
+  const [username, setUsername] = useState(source.config.username);
+  const [headerName, setHeaderName] = useState(source.config.headerName);
+  const [employer, setEmployer] = useState(source.config.employer);
+  const [enabled, setEnabled] = useState(source.enabled);
+  const [secret, setSecret] = useState("");
+
+  useEffect(() => {
+    setName(source.name);
+    setUrl(source.config.url);
+    setFormat(source.config.format || "auto");
+    setAuthType(source.config.authType || "none");
+    setUsername(source.config.username);
+    setHeaderName(source.config.headerName);
+    setEmployer(source.config.employer);
+    setEnabled(source.enabled);
+    setSecret("");
+  }, [source]);
+
+  const pulled = source.lastPulledAt ? new Date(source.lastPulledAt).toLocaleString() : "not pulled yet";
+
+  return (
+    <form
+      className="admin-card"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void api(`/api/admin/job-sources/${source.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ name, url, format, authType, username, headerName, employer, enabled, secret }),
+        }).then(onChanged).catch((err: Error) => onError(err.message));
+      }}
+    >
+      <h2>{source.name}</h2>
+      <p className="role">{source.kind} · {pulled}{source.config.hasSecret ? " · access saved" : ""}</p>
+      <div className="admin-grid">
+        <label className="field"><span>Name</span><input value={name} onChange={(event) => setName(event.target.value)} required /></label>
+        {remote ? <label className="field"><span>Feed URL</span><input value={url} onChange={(event) => setUrl(event.target.value)} required /></label> : null}
+        {remote ? (
+          <label className="field">
+            <span>Format</span>
+            <select value={format} onChange={(event) => setFormat(event.target.value)}>
+              <option value="auto">Detect JSON or RSS</option>
+              <option value="json">JSON</option>
+              <option value="rss">RSS or Atom</option>
+            </select>
+          </label>
+        ) : null}
+        {remote ? <label className="field"><span>Default employer</span><input value={employer} onChange={(event) => setEmployer(event.target.value)} /></label> : null}
+      </div>
+      {remote ? (
+        <FeedAccess
+          feed={{ authType, username, headerName }}
+          secret={secret}
+          onFeed={(next) => {
+            setAuthType(next.authType);
+            setUsername(next.username);
+            setHeaderName(next.headerName);
+          }}
+          onSecret={setSecret}
+        />
+      ) : null}
+      <label className="check-row"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Include in Pull enabled feeds</label>
+      <div className="admin-actions">
+        <button className="btn btn-primary btn-sm" type="submit">Save feed</button>
+        {source.kind !== "manual" ? <button className="btn btn-ghost btn-sm" type="button" onClick={() => void onPull()}>Pull this feed</button> : null}
+        <button
+          className="text-btn"
+          type="button"
+          onClick={() => {
+            if (!window.confirm(`Remove ${source.name} and its jobs?`)) return;
+            void api(`/api/admin/job-sources/${source.id}`, { method: "DELETE" }).then(onChanged).catch((err: Error) => onError(err.message));
+          }}
+        >
+          Remove feed
+        </button>
+      </div>
+    </form>
   );
 }

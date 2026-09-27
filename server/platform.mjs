@@ -5,6 +5,8 @@ import { join, extname } from "node:path";
 import { db, id, uploadsDir } from "./db.mjs";
 import { completeJson } from "./ai-run.mjs";
 import { AI_FUNCTIONS, FEATURES, RESUME_TEMPLATES, migrate, publicPlan, resolveTemplate, templateLimitOf } from "./schema.mjs";
+import { deliverMail } from "./mail.mjs";
+import { feedConfig, fetchFeedListings, normalizeFeedUrl, publicFeedConfig, resolvePrimary } from "./feeds.mjs";
 
 migrate();
 
@@ -288,32 +290,41 @@ async function categorizeAndVerify(job, siblings) {
   return { category, role, verification, note: String(check.json?.note || local.note) };
 }
 
+function jobKey(raw) {
+  return String(raw.externalKey || `${raw.company}-${raw.title}`).slice(0, 180);
+}
+
 function saveJob(sourceId, raw) {
-  const key = String(raw.externalKey || `${raw.company}-${raw.title}`).slice(0, 180);
+  const key = jobKey(raw);
   const existing = db.prepare("SELECT * FROM jobs WHERE source_id = ? AND external_key = ?").get(sourceId, key);
   const skills = Array.isArray(raw.skills) ? raw.skills.map(String).slice(0, 12) : [];
+  const primaryCompany = String(raw.primaryCompany || raw.company || "");
+  const primaryUrl = String(raw.primaryUrl || "");
+  const primaryEmail = String(raw.primaryEmail || "");
   if (existing) {
     db.prepare(
-      `UPDATE jobs SET title = ?, company = ?, location = ?, remote_type = ?, salary_min = ?, salary_max = ?, description = ?, skills = ?, category = ?, role = ?, source_url = ?, verification = ?, verification_note = ?, active = 1
+      `UPDATE jobs SET title = ?, company = ?, location = ?, remote_type = ?, salary_min = ?, salary_max = ?, description = ?, skills = ?, category = ?, role = ?, source_url = ?, verification = ?, verification_note = ?, primary_company = ?, primary_url = ?, primary_email = ?, active = 1
        WHERE id = ?`,
-    ).run(raw.title, raw.company, raw.location || "", raw.remoteType || "", raw.salaryMin || null, raw.salaryMax || null, raw.description || "", JSON.stringify(skills), raw.category || "", raw.role || "", raw.sourceUrl || "", raw.verification, raw.note, existing.id);
+    ).run(raw.title, raw.company, raw.location || "", raw.remoteType || "", raw.salaryMin || null, raw.salaryMax || null, raw.description || "", JSON.stringify(skills), raw.category || "", raw.role || "", raw.sourceUrl || "", raw.verification, raw.note, primaryCompany, primaryUrl, primaryEmail, existing.id);
     return existing.id;
   }
   const jobId = id("job");
   db.prepare(
-    `INSERT INTO jobs (id, source_id, external_key, title, company, location, remote_type, employment_type, salary_min, salary_max, description, skills, category, role, source_url, verification, verification_note, active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'full-time', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-  ).run(jobId, sourceId, key, raw.title, raw.company, raw.location || "", raw.remoteType || "", raw.salaryMin || null, raw.salaryMax || null, raw.description || "", JSON.stringify(skills), raw.category || "", raw.role || "", raw.sourceUrl || "", raw.verification, raw.note, Date.now());
+    `INSERT INTO jobs (id, source_id, external_key, title, company, location, remote_type, employment_type, salary_min, salary_max, description, skills, category, role, source_url, verification, verification_note, primary_company, primary_url, primary_email, active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'full-time', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+  ).run(jobId, sourceId, key, raw.title, raw.company, raw.location || "", raw.remoteType || "", raw.salaryMin || null, raw.salaryMax || null, raw.description || "", JSON.stringify(skills), raw.category || "", raw.role || "", raw.sourceUrl || "", raw.verification, raw.note, primaryCompany, primaryUrl, primaryEmail, Date.now());
   return jobId;
 }
 
 async function pullSource(source) {
-  const rows = [];
+  const config = parse(source.config, {});
+  let rows = [];
   if (source.kind === "catalog") {
-    rows.push(...db.prepare("SELECT * FROM jobs WHERE source_id = ?").all(source.id).map((job) => ({
+    rows = db.prepare("SELECT * FROM jobs WHERE source_id = ?").all(source.id).map((job) => ({
       externalKey: job.external_key,
       title: job.title,
       company: job.company,
+      employer: job.primary_company && job.primary_company !== job.company ? job.primary_company : "",
       location: job.location,
       remoteType: job.remote_type,
       salaryMin: job.salary_min,
@@ -323,43 +334,80 @@ async function pullSource(source) {
       category: job.category,
       role: job.role,
       sourceUrl: job.source_url,
-    })));
-  }
-  if (source.kind === "json") {
-    const config = parse(source.config, {});
-    if (!config.url) throw new Error("Add a JSON feed URL.");
-    const response = await fetch(config.url);
-    if (!response.ok) throw new Error(`Feed returned ${response.status}.`);
-    const body = await response.json();
-    const list = Array.isArray(body) ? body : body.jobs || [];
-    for (const item of list) {
-      if (!item.title || !item.company) continue;
-      rows.push({
-        externalKey: item.id || `${item.company}-${item.title}`,
-        title: String(item.title),
-        company: String(item.company),
-        location: String(item.location || ""),
-        remoteType: String(item.remote_type || item.remoteType || ""),
-        salaryMin: Number(item.salary_min || item.salaryMin) || null,
-        salaryMax: Number(item.salary_max || item.salaryMax) || null,
-        description: String(item.description || item.job_description || ""),
-        skills: item.skills || [],
-        category: String(item.category || ""),
-        role: String(item.role || ""),
-        sourceUrl: String(item.url || item.source_url || config.url),
-      });
-    }
+      applyUrl: job.primary_url || "",
+    }));
+  } else if (source.kind === "json" || source.kind === "rss") {
+    rows = await fetchFeedListings(source, config);
+  } else {
+    return 0;
   }
   const siblings = rows.map((row, index) => ({ id: String(index), title: row.title, company: row.company }));
-  let count = 0;
+  const seen = new Set();
   for (let index = 0; index < rows.length; index += 1) {
     const row = { ...rows[index], id: String(index) };
+    const primary = await resolvePrimary(row);
     const checked = await categorizeAndVerify(row, siblings);
-    saveJob(source.id, { ...row, ...checked, note: checked.note });
-    count += 1;
+    if (primary.primaryCompany && primary.primaryCompany.toLowerCase() !== String(row.company).toLowerCase()) {
+      checked.note = `Apply to ${primary.primaryCompany}. ${checked.note}`;
+    }
+    seen.add(jobKey(row));
+    saveJob(source.id, { ...row, ...checked, ...primary, note: checked.note });
+  }
+  if (source.kind !== "catalog") {
+    const existing = db.prepare("SELECT id, external_key FROM jobs WHERE source_id = ? AND active = 1").all(source.id);
+    for (const job of existing) {
+      if (!seen.has(job.external_key)) db.prepare("UPDATE jobs SET active = 0 WHERE id = ?").run(job.id);
+    }
   }
   db.prepare("UPDATE job_sources SET last_pulled_at = ? WHERE id = ?").run(Date.now(), source.id);
-  return count;
+  return seen.size;
+}
+
+function feedUrlTaken(url, exceptId = "") {
+  let key = "";
+  try {
+    key = normalizeFeedUrl(url);
+  } catch {
+    return false;
+  }
+  const rows = db.prepare("SELECT id, config FROM job_sources").all();
+  return rows.some((row) => {
+    if (row.id === exceptId) return false;
+    const config = parse(row.config, {});
+    if (!config.url) return false;
+    try {
+      return normalizeFeedUrl(config.url) === key;
+    } catch {
+      return false;
+    }
+  });
+}
+
+function publicSource(source) {
+  const config = parse(source.config, {});
+  return {
+    id: source.id,
+    name: source.name,
+    kind: source.kind,
+    enabled: Boolean(source.enabled),
+    lastPulledAt: source.last_pulled_at,
+    config: publicFeedConfig(config),
+  };
+}
+
+async function employerDelivery(user, job, rendered) {
+  const target = job.primary_company || job.company;
+  const email = String(job.primary_email || "").trim();
+  const different = job.primary_company && job.primary_company.toLowerCase() !== String(job.company).toLowerCase();
+  const lead = different ? `Tracked for ${target}, the employer named in the listing.` : `Tracked for ${target}.`;
+  if (!email) return job.primary_url ? `${lead} Employer link saved.` : lead;
+  const result = await deliverMail({
+    to: email,
+    subject: `Application: ${job.title}`,
+    body: `${user.name} (${user.email}) is applying for ${job.title} at ${target}.\n\n${rendered}`,
+  });
+  if (result.sent) return `Sent to ${email} at ${target}.`;
+  return `${lead} The listing includes ${email}, but it was not sent. ${result.error}`;
 }
 
 function maskSecret(value) {
@@ -416,20 +464,23 @@ function tailoredDocument(doc, job, match) {
   return { ...doc, skills };
 }
 
-function createApplication(user, job, mode, doc, preferences) {
+async function createApplication(user, job, mode, doc, preferences) {
   const match = matchJob(doc, preferences, job);
   const versionDoc = tailoredDocument(doc, job, match);
+  const rendered = renderDocument(versionDoc);
   const versionId = id("ver");
+  const targetCompany = job.primary_company || job.company;
   db.prepare(
     `INSERT INTO resume_versions (id, user_id, label, kind, document, rendered, parent_id, active, created_at)
      VALUES (?, ?, ?, 'application', ?, ?, ?, 0, ?)`,
-  ).run(versionId, user.id, `For ${job.company} — ${job.title}`, JSON.stringify(versionDoc), renderDocument(versionDoc), activeVersion(user.id)?.id || null, Date.now());
+  ).run(versionId, user.id, `For ${targetCompany} — ${job.title}`, JSON.stringify(versionDoc), rendered, activeVersion(user.id)?.id || null, Date.now());
+  const delivery = await employerDelivery(user, job, rendered);
   const now = Date.now();
   db.prepare(
-    `INSERT INTO applications (id, user_id, job_id, version_id, mode, status, match_score, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'Applied', ?, ?, ?)
-     ON CONFLICT(user_id, job_id) DO UPDATE SET version_id = excluded.version_id, mode = excluded.mode, status = 'Applied', match_score = excluded.match_score, updated_at = excluded.updated_at`,
-  ).run(id("app"), user.id, job.id, versionId, mode, match.score, now, now);
+    `INSERT INTO applications (id, user_id, job_id, version_id, mode, status, match_score, target_company, target_url, target_email, delivery, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'Applied', ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, job_id) DO UPDATE SET version_id = excluded.version_id, mode = excluded.mode, status = 'Applied', match_score = excluded.match_score, target_company = excluded.target_company, target_url = excluded.target_url, target_email = excluded.target_email, delivery = excluded.delivery, updated_at = excluded.updated_at`,
+  ).run(id("app"), user.id, job.id, versionId, mode, match.score, targetCompany, job.primary_url || job.source_url || "", job.primary_email || "", delivery, now, now);
   return match.score;
 }
 
@@ -456,6 +507,61 @@ function money(cents) {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function canAutoApply(job) {
+  if (job.verification === "Active") return true;
+  const primary = String(job.primary_company || "");
+  return job.verification === "Third-party recruiter" && primary && primary.toLowerCase() !== String(job.company).toLowerCase();
+}
+
+function jobCard(job, match, sourceNames, applied) {
+  const applyCompany = job.primary_company || job.company;
+  const via = applyCompany.toLowerCase() !== String(job.company).toLowerCase() ? job.company : "";
+  return {
+    id: job.id,
+    title: job.title,
+    company: job.company,
+    applyCompany,
+    viaCompany: via,
+    sourceName: sourceNames.get(job.source_id) || "",
+    primaryUrl: job.primary_url || "",
+    location: job.location,
+    remoteType: job.remote_type,
+    salaryMin: job.salary_min,
+    salaryMax: job.salary_max,
+    category: job.category,
+    role: job.role,
+    verification: job.verification,
+    description: job.description,
+    score: match.score,
+    matched: match.matched,
+    missing: match.missing,
+    applied,
+  };
+}
+
+function featuresFrom(input, base) {
+  const features = { ...base };
+  for (const feature of FEATURES) {
+    if (input && Object.prototype.hasOwnProperty.call(input, feature.key)) features[feature.key] = Boolean(input[feature.key]);
+  }
+  if (input && Object.prototype.hasOwnProperty.call(input, "job_limit")) features.job_limit = Math.max(0, Number(input.job_limit) || 0);
+  if (input && Object.prototype.hasOwnProperty.call(input, "template_limit")) {
+    features.template_limit = Math.max(1, Math.min(RESUME_TEMPLATES.length, Number(input.template_limit) || 1));
+  }
+  return features;
+}
+
+function planSlug(name) {
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "plan";
+  let next = base;
+  let count = 2;
+  while (db.prepare("SELECT id FROM plans WHERE id = ?").get(next)) {
+    next = `${base}-${count}`;
+    count += 1;
+  }
+  return next;
+}
+
 export function registerPlatform(app, { requireUser, requireAdmin, audit, upload, originOf }) {
   app.get("/api/plans", (_req, res) => {
     const plans = db.prepare("SELECT * FROM plans WHERE active = 1 ORDER BY sort_order").all().map(publicPlan);
@@ -472,6 +578,7 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     const doc = version ? parse(version.document, {}) : { skills: [], employment: [], education: [] };
     const preferences = profile ? parse(profile.preferences, {}) : {};
     const jobs = db.prepare("SELECT * FROM jobs WHERE active = 1").all();
+    const sourceNames = new Map(db.prepare("SELECT id, name FROM job_sources").all().map((source) => [source.id, source.name]));
     const applications = db.prepare("SELECT * FROM applications WHERE user_id = ?").all(user.id);
     const appliedIds = new Set(applications.map((item) => item.job_id));
     let ranked = jobs
@@ -499,26 +606,25 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
         recommended: ranked.filter((item) => item.score >= 70).length,
         versions: versions.length,
       },
-      jobs: ranked.map((item) => ({
-        id: item.job.id,
-        title: item.job.title,
-        company: item.job.company,
-        location: item.job.location,
-        remoteType: item.job.remote_type,
-        salaryMin: item.job.salary_min,
-        salaryMax: item.job.salary_max,
-        category: item.job.category,
-        role: item.job.role,
-        verification: item.job.verification,
-        description: item.job.description,
-        score: item.score,
-        matched: item.matched,
-        missing: item.missing,
-        applied: appliedIds.has(item.job.id),
-      })),
+      jobs: ranked.map((item) => jobCard(item.job, item, sourceNames, appliedIds.has(item.job.id))),
       applications: applications.map((item) => {
-        const job = jobs.find((row) => row.id === item.job_id);
-        return { id: item.id, jobId: item.job_id, title: job?.title || "Role", company: job?.company || "", status: item.status, mode: item.mode, match: item.match_score, versionId: item.version_id };
+        const job = jobs.find((row) => row.id === item.job_id) || db.prepare("SELECT * FROM jobs WHERE id = ?").get(item.job_id);
+        const target = item.target_company || job?.primary_company || job?.company || "";
+        const poster = job?.company || "";
+        return {
+          id: item.id,
+          jobId: item.job_id,
+          title: job?.title || "Role",
+          company: target || poster,
+          viaCompany: target && poster && target.toLowerCase() !== poster.toLowerCase() ? poster : "",
+          sourceName: job ? sourceNames.get(job.source_id) || "" : "",
+          targetUrl: item.target_url || "",
+          delivery: item.delivery || "",
+          status: item.status,
+          mode: item.mode,
+          match: item.match_score,
+          versionId: item.version_id,
+        };
       }),
       review: review
         ? { id: review.id, rating: review.rating, feedback: parse(review.feedback, []), recommendations: parse(review.recommendations, []), provider: review.provider, model: review.model }
@@ -732,7 +838,7 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     res.json({ ok: true });
   });
 
-  app.post("/api/applications", (req, res) => {
+  app.post("/api/applications", async (req, res) => {
     const user = requireUser(req, res);
     if (!user) return;
     if (!requireFeature(user, "manual_apply", res)) return;
@@ -743,11 +849,11 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       res.status(400).json({ error: "That job is not available." });
       return;
     }
-    const score = createApplication(user, job, "manual", parse(version.document, {}), parse(profile.preferences, {}));
+    const score = await createApplication(user, job, "manual", parse(version.document, {}), parse(profile.preferences, {}));
     res.json({ ok: true, score });
   });
 
-  app.post("/api/applications/auto", (req, res) => {
+  app.post("/api/applications/auto", async (req, res) => {
     const user = requireUser(req, res);
     if (!user) return;
     if (!requireFeature(user, "auto_apply", res)) return;
@@ -765,13 +871,14 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     const preferences = parse(profile.preferences, {});
     const existing = new Set(db.prepare("SELECT job_id FROM applications WHERE user_id = ?").all(user.id).map((item) => item.job_id));
     const ready = db
-      .prepare("SELECT * FROM jobs WHERE active = 1 AND verification = 'Active'")
+      .prepare("SELECT * FROM jobs WHERE active = 1")
       .all()
+      .filter(canAutoApply)
       .map((job) => ({ job, ...matchJob(doc, preferences, job) }))
       .filter((item) => item.score >= (user.auto_min || 85) && !existing.has(item.job.id))
       .sort((a, b) => b.score - a.score)
       .slice(0, 10);
-    for (const item of ready) createApplication(user, item.job, "auto", doc, preferences);
+    for (const item of ready) await createApplication(user, item.job, "auto", doc, preferences);
     res.json({ applied: ready.length });
   });
 
@@ -1047,15 +1154,7 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       res.status(404).json({ error: "Plan not found." });
       return;
     }
-    const current = parse(plan.features, {});
-    const features = { ...current };
-    for (const feature of FEATURES) {
-      if (req.body.features && Object.prototype.hasOwnProperty.call(req.body.features, feature.key)) features[feature.key] = Boolean(req.body.features[feature.key]);
-    }
-    if (req.body.features && Object.prototype.hasOwnProperty.call(req.body.features, "job_limit")) features.job_limit = Math.max(0, Number(req.body.features.job_limit) || 0);
-    if (req.body.features && Object.prototype.hasOwnProperty.call(req.body.features, "template_limit")) {
-      features.template_limit = Math.max(1, Math.min(RESUME_TEMPLATES.length, Number(req.body.features.template_limit) || 1));
-    }
+    const features = featuresFrom(req.body.features, parse(plan.features, {}));
     db.prepare("UPDATE plans SET name = ?, blurb = ?, monthly_cents = ?, yearly_cents = ?, features = ?, popular = ?, active = ? WHERE id = ?").run(
       String(req.body.name || plan.name),
       String(req.body.blurb ?? plan.blurb),
@@ -1067,6 +1166,54 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       plan.id,
     );
     res.json({ plan: publicPlan(db.prepare("SELECT * FROM plans WHERE id = ?").get(plan.id)) });
+  });
+
+  app.post("/api/admin/plans", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const name = String(req.body.name || "").trim();
+    if (name.length < 2) {
+      res.status(400).json({ error: "Name the plan." });
+      return;
+    }
+    const planId = planSlug(name);
+    const sort = (db.prepare("SELECT MAX(sort_order) AS n FROM plans").get()?.n || 0) + 1;
+    const features = featuresFrom(req.body.features, { profile_edit: true, job_limit: 5, template_limit: 2 });
+    db.prepare(
+      "INSERT INTO plans (id, name, blurb, monthly_cents, yearly_cents, features, sort_order, popular, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run(
+      planId,
+      name,
+      String(req.body.blurb || ""),
+      Math.max(0, Number(req.body.monthlyCents) || 0),
+      Math.max(0, Number(req.body.yearlyCents) || 0),
+      JSON.stringify(features),
+      sort,
+      req.body.popular ? 1 : 0,
+      req.body.active === false ? 0 : 1,
+    );
+    res.json({ plan: publicPlan(db.prepare("SELECT * FROM plans WHERE id = ?").get(planId)) });
+  });
+
+  app.delete("/api/admin/plans/:id", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const plan = db.prepare("SELECT * FROM plans WHERE id = ?").get(req.params.id);
+    if (!plan) {
+      res.status(404).json({ error: "Plan not found." });
+      return;
+    }
+    if (db.prepare("SELECT COUNT(*) AS count FROM plans").get().count <= 1) {
+      res.status(400).json({ error: "Keep at least one plan." });
+      return;
+    }
+    const users = db.prepare("SELECT COUNT(*) AS count FROM users WHERE plan_id = ?").get(plan.id).count;
+    const subscriptions = db.prepare("SELECT COUNT(*) AS count FROM subscriptions WHERE plan_id = ?").get(plan.id).count;
+    if (users || subscriptions) {
+      const count = Math.max(users, subscriptions);
+      res.status(400).json({ error: `Move ${count} account${count === 1 ? "" : "s"} off ${plan.name} before deleting it.` });
+      return;
+    }
+    db.prepare("DELETE FROM plans WHERE id = ?").run(plan.id);
+    res.json({ ok: true });
   });
 
   app.put("/api/admin/billing-policy", (req, res) => {
@@ -1129,33 +1276,122 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
 
   app.get("/api/admin/jobs", (req, res) => {
     if (!requireAdmin(req, res)) return;
+    const sources = db.prepare("SELECT * FROM job_sources ORDER BY created_at").all();
+    const names = new Map(sources.map((source) => [source.id, source.name]));
     res.json({
-      sources: db.prepare("SELECT * FROM job_sources ORDER BY created_at").all().map((source) => ({ ...source, config: parse(source.config, {}), enabled: Boolean(source.enabled) })),
-      jobs: db.prepare("SELECT * FROM jobs ORDER BY created_at DESC LIMIT 100").all().map((job) => ({ ...job, skills: parse(job.skills, []) })),
+      sources: sources.map(publicSource),
+      jobs: db.prepare("SELECT * FROM jobs ORDER BY created_at DESC LIMIT 300").all().map((job) => ({
+        id: job.id,
+        title: job.title,
+        company: job.company,
+        category: job.category,
+        role: job.role,
+        verification: job.verification,
+        location: job.location,
+        sourceId: job.source_id,
+        sourceName: names.get(job.source_id) || "Unknown feed",
+        primaryCompany: job.primary_company || "",
+        primaryUrl: job.primary_url || "",
+        primaryEmail: job.primary_email || "",
+        active: Boolean(job.active),
+      })),
     });
   });
 
   app.post("/api/admin/job-sources", (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const kind = ["json", "manual"].includes(req.body.kind) ? req.body.kind : "";
     const name = String(req.body.name || "").trim();
-    if (!kind || name.length < 2) {
-      res.status(400).json({ error: "Name the source and choose JSON feed or manual entry." });
+    if (name.length < 2) {
+      res.status(400).json({ error: "Name the feed." });
       return;
     }
-    db.prepare("INSERT INTO job_sources (id, name, kind, config, enabled, created_at) VALUES (?, ?, ?, ?, 1, ?)").run(
-      id("src"),
+    let url = "";
+    try {
+      url = normalizeFeedUrl(req.body.url);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Enter a valid feed URL." });
+      return;
+    }
+    if (feedUrlTaken(url)) {
+      res.status(409).json({ error: "That feed is already added." });
+      return;
+    }
+    const config = feedConfig({ ...req.body, url });
+    const sourceId = id("src");
+    db.prepare("INSERT INTO job_sources (id, name, kind, config, enabled, created_at) VALUES (?, ?, 'json', ?, ?, ?)").run(
+      sourceId,
       name,
-      kind,
-      JSON.stringify({ url: String(req.body.url || "") }),
+      JSON.stringify(config),
+      req.body.enabled === false ? 0 : 1,
       Date.now(),
     );
-    res.json({ ok: true });
+    res.json({ source: publicSource(db.prepare("SELECT * FROM job_sources WHERE id = ?").get(sourceId)) });
+  });
+
+  app.put("/api/admin/job-sources/:id", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const source = db.prepare("SELECT * FROM job_sources WHERE id = ?").get(req.params.id);
+    if (!source) {
+      res.status(404).json({ error: "Feed not found." });
+      return;
+    }
+    const name = String(req.body.name || source.name).trim();
+    if (name.length < 2) {
+      res.status(400).json({ error: "Name the feed." });
+      return;
+    }
+    const current = parse(source.config, {});
+    let url = current.url || "";
+    if (source.kind === "json" || source.kind === "rss" || req.body.url) {
+      try {
+        url = req.body.url == null || req.body.url === "" ? url : normalizeFeedUrl(req.body.url);
+      } catch (error) {
+        res.status(400).json({ error: error instanceof Error ? error.message : "Enter a valid feed URL." });
+        return;
+      }
+    }
+    if (url && feedUrlTaken(url, source.id)) {
+      res.status(409).json({ error: "That feed is already added." });
+      return;
+    }
+    if ((source.kind === "json" || source.kind === "rss") && !url) {
+      res.status(400).json({ error: "Add a feed URL." });
+      return;
+    }
+    const config = feedConfig({ ...req.body, url }, current);
+    db.prepare("UPDATE job_sources SET name = ?, config = ?, enabled = ? WHERE id = ?").run(
+      name,
+      JSON.stringify(config),
+      req.body.enabled === false ? 0 : 1,
+      source.id,
+    );
+    res.json({ source: publicSource(db.prepare("SELECT * FROM job_sources WHERE id = ?").get(source.id)) });
+  });
+
+  app.delete("/api/admin/job-sources/:id", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const source = db.prepare("SELECT * FROM job_sources WHERE id = ?").get(req.params.id);
+    if (!source) {
+      res.status(404).json({ error: "Feed not found." });
+      return;
+    }
+    const jobs = db.prepare("SELECT id FROM jobs WHERE source_id = ?").all(source.id);
+    for (const job of jobs) db.prepare("DELETE FROM applications WHERE job_id = ?").run(job.id);
+    db.prepare("DELETE FROM jobs WHERE source_id = ?").run(source.id);
+    db.prepare("DELETE FROM job_sources WHERE id = ?").run(source.id);
+    res.json({ ok: true, removedJobs: jobs.length });
   });
 
   app.post("/api/admin/jobs/pull", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const sources = db.prepare("SELECT * FROM job_sources WHERE enabled = 1 AND kind != 'manual'").all();
+    const requested = String(req.body.sourceId || "");
+    const sources = requested
+      ? db.prepare("SELECT * FROM job_sources WHERE id = ? AND kind != 'manual'").all(requested)
+      : db.prepare("SELECT * FROM job_sources WHERE enabled = 1 AND kind != 'manual'").all();
+    if (requested && !sources.length) {
+      res.status(404).json({ error: "Feed not found." });
+      return;
+    }
     const results = [];
     for (const source of sources) {
       try {
@@ -1167,6 +1403,18 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       }
     }
     res.json({ results });
+  });
+
+  app.delete("/api/admin/jobs/:id", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const job = db.prepare("SELECT id FROM jobs WHERE id = ?").get(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Job not found." });
+      return;
+    }
+    db.prepare("DELETE FROM applications WHERE job_id = ?").run(job.id);
+    db.prepare("DELETE FROM jobs WHERE id = ?").run(job.id);
+    res.json({ ok: true });
   });
 
   app.post("/api/admin/jobs", async (req, res) => {

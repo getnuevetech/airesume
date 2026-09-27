@@ -7,6 +7,7 @@ export const AI_FUNCTIONS = [
   { key: "resume_verify", label: "Fact check", detail: "Rejects resume claims that are not in the profile." },
   { key: "job_categorize", label: "Job categorization", detail: "Assigns a category and role to each job." },
   { key: "job_verify", label: "Job verification", detail: "Checks whether a listing looks active, duplicate, or unclear." },
+  { key: "job_primary", label: "Primary recruiter", detail: "Finds the hiring company in a feed listing when the poster is an aggregator." },
   { key: "job_match", label: "Job match", detail: "Explains how a job fits the career profile." },
   { key: "image_enhance", label: "Photo enhancement", detail: "Chooses safe contrast, color, and sharpness for a headshot." },
 ];
@@ -73,6 +74,15 @@ export function migrate() {
   addColumn("profiles", "photo_url", "TEXT DEFAULT ''");
   addColumn("profiles", "slug", "TEXT DEFAULT ''");
   addColumn("profiles", "template", "TEXT DEFAULT 'classic'");
+  addColumn("jobs", "primary_company", "TEXT DEFAULT ''");
+  addColumn("jobs", "primary_url", "TEXT DEFAULT ''");
+  addColumn("jobs", "primary_email", "TEXT DEFAULT ''");
+  addColumn("applications", "target_company", "TEXT DEFAULT ''");
+  addColumn("applications", "target_url", "TEXT DEFAULT ''");
+  addColumn("applications", "target_email", "TEXT DEFAULT ''");
+  addColumn("applications", "delivery", "TEXT DEFAULT ''");
+  addColumn("mail_outbox", "status", "TEXT DEFAULT 'stored'");
+  addColumn("mail_outbox", "error", "TEXT DEFAULT ''");
   db.exec(`
     CREATE TABLE IF NOT EXISTS ai_providers (
       id TEXT PRIMARY KEY,
@@ -273,6 +283,16 @@ export function migrate() {
         Date.now(),
       );
     });
+  }
+
+  const fallbackProvider = db.prepare("SELECT id FROM ai_providers WHERE enabled = 1 ORDER BY created_at LIMIT 1").get();
+  if (fallbackProvider) {
+    const assignMissing = db.prepare("INSERT INTO ai_assignments (function_key, provider_id, enabled) VALUES (?, ?, 1)");
+    for (const item of AI_FUNCTIONS) {
+      if (!db.prepare("SELECT function_key FROM ai_assignments WHERE function_key = ?").get(item.key)) {
+        assignMissing.run(item.key, fallbackProvider.id);
+      }
+    }
   }
 
   const templateDefaults = { free: 2, starter: 3, pro: 4, autopilot: 6 };

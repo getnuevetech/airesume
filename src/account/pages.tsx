@@ -59,7 +59,8 @@ export function OverviewPage() {
             <div className="quiet-row" key={job.id}>
               <div>
                 <strong>{job.title}</strong>
-                <p>{job.company} · {job.location || job.remoteType}</p>
+                <p>{job.applyCompany || job.company} · {job.location || job.remoteType}</p>
+                {job.viaCompany ? <p className="role">Listed by {job.viaCompany}{job.sourceName ? ` on ${job.sourceName}` : ""}</p> : null}
               </div>
               <span className="match-badge">{job.score}%</span>
             </div>
@@ -391,7 +392,8 @@ export function JobsPage() {
             <div>
               <p className="role">{job.category} · {job.verification}</p>
               <h2>{job.title}</h2>
-              <p>{job.company} · {job.location || job.remoteType}</p>
+              <p>{job.applyCompany || job.company} · {job.location || job.remoteType}</p>
+              {job.viaCompany ? <p className="role">Listed by {job.viaCompany}{job.sourceName ? ` on ${job.sourceName}` : ""}. This application goes to {job.applyCompany}.</p> : null}
               <p className="lede">{job.description}</p>
               <p className="role">{job.matched.join(", ") || "Limited skill overlap"}{job.missing.length ? ` · Gap: ${job.missing.join(", ")}` : ""}</p>
             </div>
@@ -399,7 +401,7 @@ export function JobsPage() {
               <span className="match-badge">{job.score}%</span>
               {job.applied ? <p className="role">In your tracker</p> : (
                 <button className="btn btn-primary btn-sm" type="button" disabled={!data.features.manual_apply} onClick={() => void api("/api/applications", { method: "POST", body: JSON.stringify({ jobId: job.id }) }).then(reload).catch((err: Error) => setError(err.message))}>
-                  {data.features.manual_apply ? "Apply" : "Upgrade to apply"}
+                  {data.features.manual_apply ? (job.viaCompany ? `Apply to ${job.applyCompany}` : "Apply") : "Upgrade to apply"}
                 </button>
               )}
             </div>
@@ -434,6 +436,9 @@ export function ApplicationsPage() {
             <div>
               <h2>{item.title}</h2>
               <p className="role">{item.company} · {item.mode} · {item.match}% match</p>
+              {item.viaCompany ? <p className="role">Found through {item.viaCompany}{item.sourceName ? ` on ${item.sourceName}` : ""}</p> : null}
+              {item.delivery ? <p className="role">{item.delivery}</p> : null}
+              {item.targetUrl ? <a href={item.targetUrl} target="_blank" rel="noreferrer">Open employer listing</a> : null}
             </div>
             <select value={item.status} onChange={(event) => void api(`/api/applications/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: event.target.value }) }).then(reload)}>
               {STATUSES.map((status) => <option key={status}>{status}</option>)}

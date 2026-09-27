@@ -16,6 +16,7 @@ import {
 } from "./db.mjs";
 import { extractCareerProfile, readResumeFile } from "./extract.mjs";
 import { registerPlatform, syncProfileVersion } from "./platform.mjs";
+import { deliverMail, publicMailSettings, saveMailSettings } from "./mail.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const homepageFile = join(here, "..", "shared", "homepage.json");
@@ -167,28 +168,28 @@ app.post("/api/auth/logout", (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/api/auth/forgot-password", (req, res) => {
+app.post("/api/auth/forgot-password", async (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase();
   const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
   let devLink = "";
+  let sent = false;
   if (user && user.provider === "email" && user.status === "active") {
     const token = randomBytes(24).toString("hex");
     db.prepare(
       "INSERT INTO password_resets (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)",
     ).run(id("rst"), user.id, sha256(token), Date.now() + 1000 * 60 * 60);
     const link = `${originOf(req)}/reset-password?token=${token}`;
-    db.prepare("INSERT INTO mail_outbox (id, to_email, subject, body, created_at) VALUES (?, ?, ?, ?, ?)").run(
-      id("mail"),
-      user.email,
-      "Reset your JobPilot password",
-      `Open this link to choose a new password. It expires in one hour.\n\n${link}`,
-      Date.now(),
-    );
-    if (!process.env.SMTP_HOST) devLink = link;
+    const delivery = await deliverMail({
+      to: user.email,
+      subject: "Reset your JobPilot password",
+      body: `Open this link to choose a new password. It expires in one hour.\n\n${link}`,
+    });
+    sent = delivery.sent;
+    if (!sent) devLink = link;
   }
   res.json({
     ok: true,
-    message: process.env.SMTP_HOST
+    message: sent
       ? "If an account exists, a reset link is on its way."
       : "Email delivery is not configured on this server. If the account exists, the reset link is shown below and saved for admins.",
     devLink,
@@ -526,7 +527,7 @@ app.post("/api/admin/users", (req, res) => {
   res.json({ user: publicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(userId)) });
 });
 
-app.post("/api/admin/users/:id/reset-link", (req, res) => {
+app.post("/api/admin/users/:id/reset-link", async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
   if (!user || user.provider !== "email") {
@@ -541,14 +542,43 @@ app.post("/api/admin/users/:id/reset-link", (req, res) => {
     Date.now() + 1000 * 60 * 60,
   );
   const link = `${originOf(req)}/reset-password?token=${token}`;
-  db.prepare("INSERT INTO mail_outbox (id, to_email, subject, body, created_at) VALUES (?, ?, ?, ?, ?)").run(
-    id("mail"),
-    user.email,
-    "Reset your JobPilot password",
-    link,
-    Date.now(),
-  );
-  res.json({ link });
+  const delivery = await deliverMail({
+    to: user.email,
+    subject: "Reset your JobPilot password",
+    body: `Open this link to choose a new password. It expires in one hour.\n\n${link}`,
+  });
+  res.json({ link, sent: delivery.sent, error: delivery.error });
+});
+
+app.get("/api/admin/email", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.json({ settings: publicMailSettings() });
+});
+
+app.put("/api/admin/email", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const fromEmail = String(req.body.fromEmail || "").trim();
+  if (fromEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fromEmail)) {
+    res.status(400).json({ error: "Enter a valid from address." });
+    return;
+  }
+  res.json({ settings: saveMailSettings(req.body) });
+});
+
+app.post("/api/admin/email/test", async (req, res) => {
+  const admin = requireAdmin(req, res);
+  if (!admin) return;
+  const to = String(req.body.to || admin.email).trim();
+  const delivery = await deliverMail({
+    to,
+    subject: "JobPilot email test",
+    body: "Outbound email from JobPilot is working.",
+  });
+  if (!delivery.sent) {
+    res.status(400).json({ error: delivery.error || "The test email was not sent." });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 app.get("/api/admin/outbox", (req, res) => {

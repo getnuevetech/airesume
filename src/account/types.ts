@@ -4,6 +4,10 @@ export type AccountJob = {
   id: string;
   title: string;
   company: string;
+  applyCompany: string;
+  viaCompany: string;
+  sourceName: string;
+  primaryUrl: string;
   location: string;
   remoteType: string;
   salaryMin: number | null;
@@ -40,7 +44,7 @@ export type AccountData = {
   autoMin: number;
   stats: { resumeRating: number | null; applied: number; responded: number; available: number; recommended: number; versions: number };
   jobs: AccountJob[];
-  applications: { id: string; title: string; company: string; status: string; mode: string; match: number }[];
+  applications: { id: string; title: string; company: string; viaCompany: string; sourceName: string; targetUrl: string; delivery: string; status: string; mode: string; match: number }[];
   review: { id: string; rating: number; feedback: string[]; recommendations: Recommendation[]; provider: string; model: string } | null;
   versions: { id: string; label: string; kind: string; active: boolean; rendered: string }[];
   template: string;

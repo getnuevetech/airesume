@@ -37,7 +37,7 @@ export function AdminPage() {
           Admins
         </button>
         <button type="button" className={tab === "mail" ? "on" : ""} onClick={() => setTab("mail")}>
-          Password links
+          Email
         </button>
         <button type="button" className={tab === "ai" ? "on" : ""} onClick={() => setTab("ai")}>
           AI pipelines
@@ -545,22 +545,80 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" }) {
   );
 }
 
+type MailSettings = { host: string; port: number; secure: boolean; user: string; fromEmail: string; fromName: string; hasPassword: boolean; configured: boolean };
+
 function MailEditor() {
   const [messages, setMessages] = useState<Mail[]>([]);
   const [entries, setEntries] = useState<Audit[]>([]);
-  useEffect(() => {
+  const [settings, setSettings] = useState<MailSettings>({ host: "", port: 587, secure: false, user: "", fromEmail: "", fromName: "JobPilot", hasPassword: false, configured: false });
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  function load() {
     void api<{ messages: Mail[] }>("/api/admin/outbox").then((data) => setMessages(data.messages));
     void api<{ entries: Audit[] }>("/api/admin/audit").then((data) => setEntries(data.entries));
+    void api<{ settings: MailSettings }>("/api/admin/email").then((data) => setSettings(data.settings)).catch((err: Error) => setError(err.message));
+  }
+
+  useEffect(() => {
+    load();
   }, []);
+
   return (
     <div>
-      <h1>Password links and AI log</h1>
-      <p className="lede">Until email delivery is configured, reset links are stored here.</p>
-      {messages.map((message) => (
-        <article className="admin-card" key={message.id}>
-          <strong>{message.subject}</strong>
-          <p className="role">{message.to_email}</p>
-          <p>{message.body}</p>
+      <h1>Outbound email</h1>
+      <p className="lede">Password resets and applications sent to an employer email use these SMTP details. Until a host and from address are saved, messages stay in the list below.</p>
+      {error ? <p className="form-error">{error}</p> : null}
+      {message ? <p className="role">{message}</p> : null}
+      <form
+        className="admin-card"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setError("");
+          void api<{ settings: MailSettings }>("/api/admin/email", {
+            method: "PUT",
+            body: JSON.stringify({ ...settings, password }),
+          })
+            .then((data) => {
+              setSettings(data.settings);
+              setPassword("");
+              setMessage("Email settings saved.");
+            })
+            .catch((err: Error) => setError(err.message));
+        }}
+      >
+        <div className="admin-grid">
+          <label className="field"><span>SMTP host</span><input value={settings.host} onChange={(event) => setSettings({ ...settings, host: event.target.value })} placeholder="smtp.example.com" /></label>
+          <label className="field"><span>Port</span><input type="number" value={settings.port} onChange={(event) => setSettings({ ...settings, port: Number(event.target.value) })} /></label>
+          <label className="field"><span>Username</span><input value={settings.user} onChange={(event) => setSettings({ ...settings, user: event.target.value })} /></label>
+          <label className="field"><span>Password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={settings.hasPassword ? "Saved. Leave blank to keep it." : ""} /></label>
+          <label className="field"><span>From name</span><input value={settings.fromName} onChange={(event) => setSettings({ ...settings, fromName: event.target.value })} /></label>
+          <label className="field"><span>From email</span><input type="email" value={settings.fromEmail} onChange={(event) => setSettings({ ...settings, fromEmail: event.target.value })} /></label>
+        </div>
+        <label className="check-row"><input type="checkbox" checked={settings.secure} onChange={(event) => setSettings({ ...settings, secure: event.target.checked })} /> Use implicit TLS, usually port 465</label>
+        <div className="admin-actions">
+          <button className="btn btn-primary btn-sm" type="submit">Save email settings</button>
+          <button
+            className="btn btn-ghost btn-sm"
+            type="button"
+            onClick={() => {
+              setError("");
+              void api("/api/admin/email/test", { method: "POST", body: "{}" })
+                .then(() => setMessage("Test email sent."))
+                .catch((err: Error) => setError(err.message));
+            }}
+          >
+            Send a test
+          </button>
+        </div>
+      </form>
+      <h2>Sent and stored messages</h2>
+      {messages.map((messageItem) => (
+        <article className="admin-card" key={messageItem.id}>
+          <strong>{messageItem.subject}</strong>
+          <p className="role">{messageItem.to_email}</p>
+          <p>{messageItem.body}</p>
         </article>
       ))}
       <h2>AI audit</h2>
