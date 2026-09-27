@@ -61,7 +61,7 @@ export function Header() {
                   Admin
                 </NavLink>
               ) : null}
-              <NavLink to="/dashboard" className="btn btn-primary btn-sm">
+              <NavLink to="/account" className="btn btn-primary btn-sm">
                 {content.dashboardLabel}
               </NavLink>
             </>
@@ -99,7 +99,7 @@ export function Header() {
                 Admin
               </NavLink>
             ) : null}
-            <NavLink to="/dashboard" className="nav-link">
+            <NavLink to="/account" className="nav-link">
               {content.dashboardLabel}
             </NavLink>
           </>

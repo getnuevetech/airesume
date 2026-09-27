@@ -8,7 +8,7 @@ export function SignInPage() {
   const navigate = useNavigate();
   useEffect(() => {
     if (!user) return;
-    navigate(user.role === "admin" ? "/admin" : "/dashboard", { replace: true });
+    navigate(user.role === "admin" ? "/admin" : "/account", { replace: true });
   }, [user, navigate]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

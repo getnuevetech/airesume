@@ -61,7 +61,7 @@ export function PricingPage() {
       }));
 
   function choose() {
-    navigate(user ? "/dashboard?view=billing" : "/get-started");
+    navigate(user ? "/account/plan" : "/get-started");
   }
 
   return (

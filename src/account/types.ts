@@ -1,0 +1,63 @@
+export type Employment = { title: string; employer: string; dates?: string; bullets: string[] };
+export type Recommendation = { id: string; title: string; detail: string; kind: string; proposed?: string };
+export type AccountJob = {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  remoteType: string;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  category: string;
+  verification: string;
+  description: string;
+  score: number;
+  matched: string[];
+  missing: string[];
+  applied: boolean;
+};
+export type AccountData = {
+  profile: {
+    headline: string;
+    summary: string;
+    skills: string[];
+    employment: Employment[];
+    education: string[];
+    preferences: { salary?: string; workArrangement?: string; locations?: string; workAuthorization?: string };
+    resumeName: string;
+    photoUrl: string;
+    slug: string;
+    city: string;
+    address: string;
+    shareContact: boolean;
+  } | null;
+  plan: { id: string; name: string; monthlyCents: number; yearlyCents: number };
+  features: Record<string, boolean | number>;
+  policy: { allowUpgrade: boolean; allowDowngrade: boolean; allowProration: boolean; allowRefund: boolean };
+  plans: { id: string; name: string; blurb: string; monthlyCents: number; yearlyCents: number; popular: boolean }[];
+  gateways: { id: string; name: string; kind: string }[];
+  autoApply: boolean;
+  autoMin: number;
+  stats: { resumeRating: number | null; applied: number; responded: number; available: number; recommended: number; versions: number };
+  jobs: AccountJob[];
+  applications: { id: string; title: string; company: string; status: string; mode: string; match: number }[];
+  review: { id: string; rating: number; feedback: string[]; recommendations: Recommendation[]; provider: string; model: string } | null;
+  versions: { id: string; label: string; kind: string; active: boolean; rendered: string }[];
+  template: string;
+  templateLimit: number;
+  templates: { id: string; name: string; detail: string }[];
+};
+
+export type ResumeView = {
+  name: string;
+  headline: string;
+  summary: string;
+  skills: string[];
+  employment: { title?: string; employer?: string; dates?: string; bullets?: string[] }[];
+  education: string[];
+  photoUrl: string;
+  city: string;
+  email: string;
+  phone: string;
+  template: string;
+};

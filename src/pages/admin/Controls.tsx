@@ -167,6 +167,7 @@ export function PlansAdmin() {
             <label className="field"><span>Yearly cents</span><input type="number" value={plan.yearlyCents} onChange={(event) => updatePlan(plan.id, { yearlyCents: Number(event.target.value) })} /></label>
           </div>
           <label className="field"><span>Job list size, 0 for all</span><input type="number" value={Number(plan.features.job_limit || 0)} onChange={(event) => updatePlan(plan.id, { features: { ...plan.features, job_limit: Number(event.target.value) } })} /></label>
+          <label className="field"><span>Resume templates, 1 to 6</span><input type="number" min={1} max={6} value={Number(plan.features.template_limit || 2)} onChange={(event) => updatePlan(plan.id, { features: { ...plan.features, template_limit: Number(event.target.value) } })} /></label>
           {features.map((feature) => (
             <label className="check-row" key={feature.key}>
               <input

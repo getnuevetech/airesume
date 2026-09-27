@@ -11,6 +11,27 @@ export const AI_FUNCTIONS = [
   { key: "image_enhance", label: "Photo enhancement", detail: "Chooses safe contrast, color, and sharpness for a headshot." },
 ];
 
+export const RESUME_TEMPLATES = [
+  { id: "classic", name: "Classic", detail: "Single column with a green accent." },
+  { id: "sidebar", name: "Sidebar", detail: "Navy rail for contact and skills." },
+  { id: "signal", name: "Signal", detail: "Mint header and open spacing." },
+  { id: "executive", name: "Executive", detail: "Centered name and formal rules." },
+  { id: "compact", name: "Compact", detail: "Two columns on one page." },
+  { id: "bold", name: "Bold", detail: "Dark header and high contrast." },
+];
+
+export function templateLimitOf(features) {
+  const value = Number(features?.template_limit);
+  if (!Number.isFinite(value)) return 2;
+  return Math.max(1, Math.min(RESUME_TEMPLATES.length, Math.round(value)));
+}
+
+export function resolveTemplate(templateId, limit) {
+  const index = RESUME_TEMPLATES.findIndex((item) => item.id === templateId);
+  if (index < 0 || index >= limit) return RESUME_TEMPLATES[0].id;
+  return RESUME_TEMPLATES[index].id;
+}
+
 export const FEATURES = [
   { key: "profile_edit", label: "Edit profile" },
   { key: "resume_review", label: "Resume review" },
@@ -51,6 +72,7 @@ export function migrate() {
   addColumn("profiles", "headline", "TEXT DEFAULT ''");
   addColumn("profiles", "photo_url", "TEXT DEFAULT ''");
   addColumn("profiles", "slug", "TEXT DEFAULT ''");
+  addColumn("profiles", "template", "TEXT DEFAULT 'classic'");
   db.exec(`
     CREATE TABLE IF NOT EXISTS ai_providers (
       id TEXT PRIMARY KEY,
@@ -201,10 +223,10 @@ export function migrate() {
       "INSERT INTO plans (id, name, blurb, monthly_cents, yearly_cents, features, sort_order, popular, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
     );
     const rows = [
-      ["free", "Free", "Profile, review, and a short job list.", 0, 0, { profile_edit: true, resume_review: true, resume_upscale: false, job_browse: true, job_limit: 5, manual_apply: false, auto_apply: false, public_profile: true, image_enhance: false }, 1, 0],
-      ["starter", "Starter", "Upscale the resume and apply yourself.", 799, 7900, { profile_edit: true, resume_review: true, resume_upscale: true, job_browse: true, job_limit: 15, manual_apply: true, auto_apply: false, public_profile: true, image_enhance: false }, 2, 0],
-      ["pro", "Pro", "Every tailored version and the full job list.", 1499, 9900, { profile_edit: true, resume_review: true, resume_upscale: true, job_browse: true, job_limit: 0, manual_apply: true, auto_apply: false, public_profile: true, image_enhance: true }, 3, 1],
-      ["autopilot", "Autopilot", "Auto-apply when the match clears your bar.", 2499, 19900, { profile_edit: true, resume_review: true, resume_upscale: true, job_browse: true, job_limit: 0, manual_apply: true, auto_apply: true, public_profile: true, image_enhance: true }, 4, 0],
+      ["free", "Free", "Profile, review, and a short job list.", 0, 0, { profile_edit: true, resume_review: true, resume_upscale: false, job_browse: true, job_limit: 5, manual_apply: false, auto_apply: false, public_profile: true, image_enhance: false, template_limit: 2 }, 1, 0],
+      ["starter", "Starter", "Upscale the resume and apply yourself.", 799, 7900, { profile_edit: true, resume_review: true, resume_upscale: true, job_browse: true, job_limit: 15, manual_apply: true, auto_apply: false, public_profile: true, image_enhance: false, template_limit: 3 }, 2, 0],
+      ["pro", "Pro", "Every tailored version and the full job list.", 1499, 9900, { profile_edit: true, resume_review: true, resume_upscale: true, job_browse: true, job_limit: 0, manual_apply: true, auto_apply: false, public_profile: true, image_enhance: true, template_limit: 4 }, 3, 1],
+      ["autopilot", "Autopilot", "Auto-apply when the match clears your bar.", 2499, 19900, { profile_edit: true, resume_review: true, resume_upscale: true, job_browse: true, job_limit: 0, manual_apply: true, auto_apply: true, public_profile: true, image_enhance: true, template_limit: 6 }, 4, 0],
     ];
     for (const row of rows) insert.run(row[0], row[1], row[2], row[3], row[4], JSON.stringify(row[5]), row[6], row[7]);
   }
@@ -252,6 +274,15 @@ export function migrate() {
       );
     });
   }
+
+  const templateDefaults = { free: 2, starter: 3, pro: 4, autopilot: 6 };
+  for (const plan of db.prepare("SELECT id, features FROM plans").all()) {
+    const features = JSON.parse(plan.features || "{}");
+    if (features.template_limit == null) {
+      features.template_limit = templateDefaults[plan.id] ?? 2;
+      db.prepare("UPDATE plans SET features = ? WHERE id = ?").run(JSON.stringify(features), plan.id);
+    }
+  }
 }
 
 export function featureLabels(features) {
@@ -264,6 +295,7 @@ export function featureLabels(features) {
   if (features.auto_apply) labels.push("Auto apply");
   if (features.public_profile) labels.push("Shareable resume link");
   if (features.image_enhance) labels.push("Headshot enhancement");
+  labels.push(`${templateLimitOf(features)} resume template${templateLimitOf(features) === 1 ? "" : "s"}`);
   return labels;
 }
 

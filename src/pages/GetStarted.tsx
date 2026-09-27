@@ -86,7 +86,7 @@ export function GetStartedPage() {
       sessionStorage.removeItem("jp-draft");
       await refresh();
       notify("Account created from your resume.");
-      navigate("/dashboard");
+      navigate("/account");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create the account.");
     }
@@ -134,7 +134,7 @@ export function GetStartedPage() {
         </ul>
         {user ? (
           <p>
-            You are already signed in as {user.email}. <Link to="/dashboard">Go to your dashboard</Link> or sign out to create another account.
+            You are already signed in as {user.email}. <Link to="/account">Open your account</Link> or sign out to create another account.
           </p>
         ) : null}
       </div>

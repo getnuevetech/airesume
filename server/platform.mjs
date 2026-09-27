@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, extname } from "node:path";
 import { db, id, uploadsDir } from "./db.mjs";
 import { completeJson } from "./ai-run.mjs";
-import { AI_FUNCTIONS, FEATURES, migrate, publicPlan } from "./schema.mjs";
+import { AI_FUNCTIONS, FEATURES, RESUME_TEMPLATES, migrate, publicPlan, resolveTemplate, templateLimitOf } from "./schema.mjs";
 
 migrate();
 
@@ -446,6 +446,8 @@ function profilePayload(profile, user) {
     resumeName: profile.resume_name || "",
     photoUrl: profile.photo_url || "",
     slug: profile.slug || "",
+    city: user?.city || "",
+    address: user?.address || "",
     shareContact: parse(profile.preferences, {}).shareContact !== false,
   };
 }
@@ -522,7 +524,29 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
         ? { id: review.id, rating: review.rating, feedback: parse(review.feedback, []), recommendations: parse(review.recommendations, []), provider: review.provider, model: review.model }
         : null,
       versions,
+      template: resolveTemplate(profile?.template, templateLimitOf(access.features)),
+      templateLimit: templateLimitOf(access.features),
+      templates: RESUME_TEMPLATES,
     });
+  });
+
+  app.put("/api/account/template", (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const access = featuresOf(user);
+    const limit = templateLimitOf(access.features);
+    const templateId = String(req.body.template || "");
+    const index = RESUME_TEMPLATES.findIndex((item) => item.id === templateId);
+    if (index < 0) {
+      res.status(400).json({ error: "Choose one of the resume templates." });
+      return;
+    }
+    if (index >= limit) {
+      res.status(403).json({ error: `The ${access.plan.name} plan includes ${limit} template${limit === 1 ? "" : "s"}.` });
+      return;
+    }
+    db.prepare("UPDATE profiles SET template = ?, updated_at = ? WHERE user_id = ?").run(templateId, Date.now(), user.id);
+    res.json({ template: templateId });
   });
 
   app.put("/api/profile", (req, res) => {
@@ -802,6 +826,7 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       city: user.city || "",
       email: preferences.shareContact === false ? "" : user.email,
       phone: preferences.shareContact === false ? "" : user.phone || "",
+      template: resolveTemplate(profile.template, templateLimitOf(featuresOf(user).features)),
     });
   });
 
@@ -845,8 +870,8 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
         "line_items[0][price_data][product_data][name]": `${plan.name} ${cycle}`,
         "line_items[0][price_data][unit_amount]": String(amount),
         "line_items[0][quantity]": "1",
-        success_url: `${originOf(req)}/dashboard?checkout=success&checkout_id=${checkoutId}`,
-        cancel_url: `${originOf(req)}/dashboard?checkout=cancel`,
+        success_url: `${originOf(req)}/account/plan?checkout=success&checkout_id=${checkoutId}`,
+        cancel_url: `${originOf(req)}/account/plan?checkout=cancel`,
         client_reference_id: user.id,
       });
       const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
@@ -883,7 +908,7 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
         body: JSON.stringify({
           intent: "CAPTURE",
           purchase_units: [{ amount: { currency_code: "USD", value: (amount / 100).toFixed(2) }, description: plan.name }],
-          application_context: { return_url: `${originOf(req)}/dashboard?checkout=success&checkout_id=${checkoutId}`, cancel_url: `${originOf(req)}/dashboard?checkout=cancel` },
+          application_context: { return_url: `${originOf(req)}/account/plan?checkout=success&checkout_id=${checkoutId}`, cancel_url: `${originOf(req)}/account/plan?checkout=cancel` },
         }),
       });
       const order = await orderResponse.json();
@@ -1028,6 +1053,9 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       if (req.body.features && Object.prototype.hasOwnProperty.call(req.body.features, feature.key)) features[feature.key] = Boolean(req.body.features[feature.key]);
     }
     if (req.body.features && Object.prototype.hasOwnProperty.call(req.body.features, "job_limit")) features.job_limit = Math.max(0, Number(req.body.features.job_limit) || 0);
+    if (req.body.features && Object.prototype.hasOwnProperty.call(req.body.features, "template_limit")) {
+      features.template_limit = Math.max(1, Math.min(RESUME_TEMPLATES.length, Number(req.body.features.template_limit) || 1));
+    }
     db.prepare("UPDATE plans SET name = ?, blurb = ?, monthly_cents = ?, yearly_cents = ?, features = ?, popular = ?, active = ? WHERE id = ?").run(
       String(req.body.name || plan.name),
       String(req.body.blurb ?? plan.blurb),
