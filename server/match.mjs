@@ -214,11 +214,21 @@ function yearsScore(doc, requirements) {
 }
 
 export function matchLabel(score) {
-  if (score >= 85) return "strong";
-  if (score >= 70) return "good";
-  if (score >= 55) return "possible";
-  if (score >= 40) return "weak";
-  return "not recommended";
+  if (score >= 85) return "Strong match";
+  if (score >= 70) return "Good match";
+  if (score >= 55) return "Possible match";
+  if (score >= 40) return "Weak match";
+  return "Not recommended";
+}
+
+export function matchLabelKey(scoreOrLabel) {
+  const value = String(scoreOrLabel || "").toLowerCase();
+  if (/^\d+$/.test(value)) return matchLabelKey(matchLabel(Number(value)));
+  if (value.includes("strong")) return "strong";
+  if (value.includes("good")) return "good";
+  if (value.includes("possible")) return "possible";
+  if (value.includes("weak")) return "weak";
+  return "not_recommended";
 }
 
 /**
@@ -267,6 +277,7 @@ export function matchJob(doc, preferences, job) {
   return {
     score: clamped,
     label,
+    labelKey: matchLabelKey(label),
     matched,
     missing,
     preferredMatched,

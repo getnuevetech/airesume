@@ -76,12 +76,15 @@ Browser
 3. ~~Draft retention / deletion for unactivated uploads~~
 4. ~~Account privacy controls (export / delete)~~
 5. ~~Stronger second-model career fact review~~
+6. ~~Shared job schema + authenticity/duplicate flags~~ (done on `cursor/job-intel-readiness-b068`)
+7. ~~Requirement-extraction AI before matching~~
+8. ~~Threshold match labels (Strong / Good / Possible / Weak)~~
+9. ~~Application readiness engine gates~~
 
-Next after Slice B:
-1. Shared job schema hardening + authenticity/duplicate flags
-2. Requirement-extraction AI before matching
-3. Threshold match labels polish
-4. Application readiness engine gates
+Next after Slice C (Slice D — application quality loop):
+1. Review-first Assisted Apply as default
+2. Browser apply kit completion metrics
+3. Resume version pinned per application
 
 ### Deferred unless explicitly requested
 

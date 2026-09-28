@@ -101,6 +101,8 @@ test("matchJob uses hybrid weights and labels", () => {
   const match = matchJob(doc, { locations: "Remote", salary: "150000" }, job);
   assert.ok(match.score >= 70, `expected strongish score, got ${match.score}`);
   assert.equal(matchLabel(match.score), match.label);
+  assert.ok(["strong", "good"].includes(match.labelKey));
+  assert.match(match.label, /Strong match|Good match/i);
   assert.ok(match.matched.includes("Product management"));
   assert.ok(match.explanation.length > 10);
 });
