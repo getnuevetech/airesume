@@ -70,9 +70,13 @@ Browser (+ optional extension)
 2. Admin → Launch live ops panel (`/api/admin/launch-readiness`) — **shipped**
 3. Production env example + Chrome Web Store packaging notes (deferred listing) — **shipped**
 
-### Done (Slices A–M) — do not reopen unless regressing
+### Slice N — Tracker outcome statuses
+1. Add Employer viewed, Recruiter contact, and Hired to the application tracker — **shipped**
+2. Wire follow-up reminders, career insights, interview/voice prep eligibility — **shipped**
 
-Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply quality loop, outcomes/interview/follow-ups, extension capture MVP, Auto-Apply auth, TURN env, security headers/rate limits, hide model names, launch readiness panel.
+### Done (Slices A–N) — do not reopen unless regressing
+
+Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply quality loop, outcomes/interview/follow-ups, extension capture MVP, Auto-Apply auth, TURN env, security headers/rate limits, hide model names, launch readiness panel, richer tracker outcomes.
 
 ### Deferred unless explicitly requested
 
@@ -82,6 +86,8 @@ Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply
 - Employer feature expansion
 - Salary negotiation / recruiter outreach agents
 - SFU media stack
+- Upscale clarification → Fact Ledger closed loop
+- Producer/reviewer disagreement reconciliation
 
 ## Pricing gates (implemented in admin plan matrix)
 

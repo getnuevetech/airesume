@@ -11,6 +11,18 @@ const TEMPLATES = {
     detail: "If you have not heard back, send a short note confirming interest. Do not invent new claims.",
     delayMs: 3 * DAY,
   },
+  "Employer viewed": {
+    kind: "viewed_followup",
+    title: "Employer viewed — stay ready",
+    detail: "Your application was viewed. Keep interview prep current and avoid inventing new claims if they reach out.",
+    delayMs: 2 * DAY,
+  },
+  "Recruiter contact": {
+    kind: "recruiter_reply",
+    title: "Reply to the recruiter",
+    detail: "Respond promptly with facts from your Fact Ledger only. Confirm logistics yourself.",
+    delayMs: 0,
+  },
   Responded: {
     kind: "response_prep",
     title: "Prepare for the next conversation",
@@ -27,6 +39,12 @@ const TEMPLATES = {
     kind: "offer_review",
     title: "Review the offer details carefully",
     detail: "Confirm compensation, start date, and authorization questions yourself before accepting.",
+    delayMs: 0,
+  },
+  Hired: {
+    kind: "hired_confirm",
+    title: "Confirm start details",
+    detail: "Save the offer letter, start date, and onboarding steps. Update JobPilot when you start.",
     delayMs: 0,
   },
 };

@@ -3,8 +3,9 @@
 import { db } from "./db.mjs";
 import { matchJob } from "./match.mjs";
 import { buildInterviewPrep } from "./interview-prep.mjs";
+import { PREP_ELIGIBLE_STATUSES } from "./apply-rules.mjs";
 
-const PREP_STATUSES = ["Ready", "Review required", "Applied", "Responded", "Interview", "Offer"];
+const PREP_STATUSES = PREP_ELIGIBLE_STATUSES;
 
 export function registerInterview(app, ctx) {
   const {

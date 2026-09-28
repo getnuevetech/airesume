@@ -223,7 +223,7 @@ export function InsightsPage() {
                     <strong>{lesson.title}</strong>
                     <p className="role">{lesson.detail}</p>
                   </article>
-                )) : <p className="role">Move applications to Applied / Interview / Offer to unlock outcome lessons.</p>}
+                )) : <p className="role">Move applications to Employer viewed / Interview / Offer / Hired to unlock outcome lessons.</p>}
               </section>
             ) : null}
             <div className="account-split">
@@ -382,10 +382,23 @@ type VoiceSession = {
 export function InterviewPage() {
   const { data, setError } = useAccount();
   const eligible = (data?.applications || []).filter((item) =>
-    ["Ready", "Review required", "Applied", "Responded", "Interview", "Offer"].includes(item.status),
+    ["Ready", "Review required", "Applied", "Employer viewed", "Recruiter contact", "Responded", "Interview", "Offer", "Hired"].includes(
+      item.status,
+    ),
   );
   const priority = [...eligible].sort((a, b) => {
-    const rank = (status: string) => ({ Interview: 0, Offer: 1, Responded: 2, Applied: 3, Ready: 4, "Review required": 5 }[status] ?? 9);
+    const rank = (status: string) =>
+      ({
+        Hired: 0,
+        Offer: 1,
+        Interview: 2,
+        "Recruiter contact": 3,
+        Responded: 4,
+        "Employer viewed": 5,
+        Applied: 6,
+        Ready: 7,
+        "Review required": 8,
+      }[status] ?? 9);
     return rank(a.status) - rank(b.status);
   });
   const [selected, setSelected] = useState("");
@@ -411,7 +424,7 @@ export function InterviewPage() {
         {!priority.length ? (
           <section className="account-card">
             <h2>No interview-ready applications yet</h2>
-            <p className="lede">Prep unlocks for Ready, Review required, Applied, Responded, Interview, and Offer rows in your tracker.</p>
+            <p className="lede">Prep unlocks for Ready through Hired rows in your tracker, including Employer viewed and Recruiter contact.</p>
             <Link className="btn btn-primary btn-sm" to="/account/applications">Open tracker</Link>
           </section>
         ) : (
@@ -1296,7 +1309,25 @@ export function JobsPage() {
 export function ApplicationsPage() {
   const { data, reload, setMessage, setError } = useAccount();
   if (!data) return null;
-  const statuses = data.statuses?.length ? data.statuses : ["Found", "Reviewed", "Skipped", "Resume preparing", "Ready", "Review required", "Applied", "Responded", "Interview", "Offer", "Rejected", "Withdrawn"];
+  const statuses = data.statuses?.length
+    ? data.statuses
+    : [
+        "Found",
+        "Reviewed",
+        "Skipped",
+        "Resume preparing",
+        "Ready",
+        "Review required",
+        "Applied",
+        "Employer viewed",
+        "Recruiter contact",
+        "Responded",
+        "Interview",
+        "Offer",
+        "Hired",
+        "Rejected",
+        "Withdrawn",
+      ];
   return (
     <Gate>
       <div className="account-page">
@@ -1397,7 +1428,7 @@ export function ApplicationsPage() {
                 onError={(message) => setError(message)}
               />
             ) : null}
-            {["Ready", "Review required", "Applied", "Responded", "Interview", "Offer"].includes(item.status) ? (
+            {["Ready", "Review required", "Applied", "Employer viewed", "Recruiter contact", "Responded", "Interview", "Offer", "Hired"].includes(item.status) ? (
               <InterviewPrepPanel
                 applicationId={item.id}
                 onError={(message) => setError(message)}
@@ -1646,7 +1677,7 @@ function FollowUpsPanel({
     return (
       <section className="account-card">
         <h2>Follow-up reminders</h2>
-        <p className="role">Reminders appear after you mark Applied, Responded, Interview, or Offer.</p>
+        <p className="role">Reminders appear after Applied, Employer viewed, Recruiter contact, Responded, Interview, Offer, or Hired.</p>
       </section>
     );
   }

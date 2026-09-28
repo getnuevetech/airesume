@@ -1,6 +1,7 @@
 /** Deterministic career intelligence from profile facts and the job catalog. */
 
 import { matchJob } from "./match.mjs";
+import { isOutcomeStatus, isSubmittedStatus } from "./apply-rules.mjs";
 
 function lower(value) {
   return String(value || "").toLowerCase().trim();
@@ -100,12 +101,11 @@ export function buildCareerInsights({ doc = {}, preferences = {}, jobs = [], app
     statusCounts[status] = (statusCounts[status] || 0) + 1;
   }
   const tracked = applications.length;
-  const submitted = applications.filter((item) =>
-    ["Applied", "Responded", "Interview", "Offer", "Rejected", "Withdrawn"].includes(item.status),
-  ).length;
-  const responses = applications.filter((item) => ["Responded", "Interview", "Offer"].includes(item.status)).length;
-  const interviews = applications.filter((item) => ["Interview", "Offer"].includes(item.status)).length;
-  const offers = applications.filter((item) => item.status === "Offer").length;
+  const submitted = applications.filter((item) => isSubmittedStatus(item.status)).length;
+  const responses = applications.filter((item) => isOutcomeStatus(item.status)).length;
+  const interviews = applications.filter((item) => ["Interview", "Offer", "Hired"].includes(item.status)).length;
+  const offers = applications.filter((item) => ["Offer", "Hired"].includes(item.status)).length;
+  const hired = applications.filter((item) => item.status === "Hired").length;
   const rejected = applications.filter((item) => item.status === "Rejected").length;
   const ready = applications.filter((item) => item.status === "Ready").length;
   const reviewRequired = applications.filter((item) => item.status === "Review required").length;
@@ -119,7 +119,7 @@ export function buildCareerInsights({ doc = {}, preferences = {}, jobs = [], app
       return { app, job, matchScore, status: String(app.status || "") };
     })
     .filter((row) => row.status);
-  const advanced = outcomeRows.filter((row) => ["Responded", "Interview", "Offer"].includes(row.status));
+  const advanced = outcomeRows.filter((row) => isOutcomeStatus(row.status));
   const stalled = outcomeRows.filter((row) => ["Applied", "Rejected", "Withdrawn"].includes(row.status));
   const winningDemand = new Map();
   const winningCategories = new Map();
@@ -140,6 +140,7 @@ export function buildCareerInsights({ doc = {}, preferences = {}, jobs = [], app
   const outcomes = {
     interviews,
     offers,
+    hired,
     rejected,
     advanced: advanced.length,
     stalled: stalled.length,
@@ -232,6 +233,7 @@ export function buildCareerInsights({ doc = {}, preferences = {}, jobs = [], app
       responses,
       interviews,
       offers,
+      hired,
       rejected,
       responseRate: submitted ? Math.round((responses / submitted) * 100) : null,
       interviewRate: submitted ? Math.round((interviews / submitted) * 100) : null,

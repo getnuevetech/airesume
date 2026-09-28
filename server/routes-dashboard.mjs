@@ -2,7 +2,7 @@
 
 import { db } from "./db.mjs";
 import { matchJob } from "./match.mjs";
-import { TRACKER_STATUSES } from "./apply-rules.mjs";
+import { TRACKER_STATUSES, isOutcomeStatus, isSubmittedStatus } from "./apply-rules.mjs";
 import { allowExplanation, explanationQuota, redactMatch, reviewQuota } from "./quota.mjs";
 import { publicPlan, resolveTemplate, templateLimitOf, RESUME_TEMPLATES } from "./schema.mjs";
 import { applyKitMetrics } from "./apply-kit-metrics.mjs";
@@ -106,8 +106,8 @@ export function registerDashboard(app, ctx) {
     const reviews = reviewQuota(user.id, access.features);
     const review = db.prepare("SELECT * FROM resume_reviews WHERE user_id = ? ORDER BY created_at DESC LIMIT 1").get(user.id);
     const versions = db.prepare("SELECT * FROM resume_versions WHERE user_id = ? ORDER BY created_at DESC").all(user.id).map(publicVersion);
-    const responded = applications.filter((item) => ["Responded", "Interview", "Offer"].includes(item.status)).length;
-    const submitted = applications.filter((item) => item.status === "Applied" || ["Responded", "Interview", "Offer", "Rejected", "Withdrawn"].includes(item.status)).length;
+    const responded = applications.filter((item) => isOutcomeStatus(item.status)).length;
+    const submitted = applications.filter((item) => isSubmittedStatus(item.status)).length;
     const readyCount = applications.filter((item) => item.status === "Ready").length;
     const reviewCount = applications.filter((item) => item.status === "Review required").length;
     const kitStats = applyKitMetrics({ userId: user.id });

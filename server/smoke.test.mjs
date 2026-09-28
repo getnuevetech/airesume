@@ -142,6 +142,9 @@ test("tailoredDocument only reorders existing content", () => {
 test("autoDecision never chooses silent submit", () => {
   assert.ok(TRACKER_STATUSES.includes("Ready"));
   assert.ok(TRACKER_STATUSES.includes("Review required"));
+  assert.ok(TRACKER_STATUSES.includes("Employer viewed"));
+  assert.ok(TRACKER_STATUSES.includes("Recruiter contact"));
+  assert.ok(TRACKER_STATUSES.includes("Hired"));
   const job = {
     title: "Product Manager",
     company: "Northstar",

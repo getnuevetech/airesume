@@ -8,15 +8,57 @@ export const TRACKER_STATUSES = [
   "Ready",
   "Review required",
   "Applied",
+  "Employer viewed",
+  "Recruiter contact",
   "Responded",
   "Interview",
   "Offer",
+  "Hired",
   "Rejected",
   "Withdrawn",
 ];
 
 export const PRE_APPLY_STATUSES = new Set(["Found", "Reviewed", "Skipped", "Resume preparing", "Ready", "Review required"]);
-export const SUBMITTED_STATUSES = new Set(["Applied", "Responded", "Interview", "Offer", "Rejected", "Withdrawn"]);
+export const SUBMITTED_STATUSES = new Set([
+  "Applied",
+  "Employer viewed",
+  "Recruiter contact",
+  "Responded",
+  "Interview",
+  "Offer",
+  "Hired",
+  "Rejected",
+  "Withdrawn",
+]);
+/** Employer engagement / late-stage outcomes after Applied. */
+export const OUTCOME_STATUSES = new Set([
+  "Employer viewed",
+  "Recruiter contact",
+  "Responded",
+  "Interview",
+  "Offer",
+  "Hired",
+]);
+/** Statuses that unlock interview prep / voice practice. */
+export const PREP_ELIGIBLE_STATUSES = [
+  "Ready",
+  "Review required",
+  "Applied",
+  "Employer viewed",
+  "Recruiter contact",
+  "Responded",
+  "Interview",
+  "Offer",
+  "Hired",
+];
+
+export function isSubmittedStatus(status) {
+  return SUBMITTED_STATUSES.has(String(status || ""));
+}
+
+export function isOutcomeStatus(status) {
+  return OUTCOME_STATUSES.has(String(status || ""));
+}
 
 function lower(value) {
   return String(value || "").toLowerCase();
