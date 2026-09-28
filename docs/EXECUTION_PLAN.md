@@ -29,6 +29,7 @@ Already live beyond early Phase 1:
 - Live employer voice interviews with join codes and fact-safe answer scoring
 - Employer job postings into the catalog plus outbound invites to public candidates
 - Multi-party interview rooms with host/interviewer/candidate links and shared live transcript
+- Employer analytics funnel plus configurable SLA breach workflows
 - Billing, resume, applications, jobs-admin, dashboard, profile, admin AI, and admin plans routes extracted from `platform.mjs`
 - Plans, Stripe/PayPal/manual billing hooks, AI provider admin, public `/resume/:slug`
 
@@ -68,11 +69,12 @@ Browser
 15. Live employer-led voice interviews with join codes
 16. Employer job postings and outbound candidate invites
 17. Multi-party interview rooms (host, interviewer, candidate)
+18. Employer analytics and SLA workflows
 
 ### Later
 
-- Employer analytics and SLA workflows
 - Realtime WebRTC audio rooms
+- Employer team seats and permissions
 
 ## Pricing gates (implemented in admin plan matrix)
 

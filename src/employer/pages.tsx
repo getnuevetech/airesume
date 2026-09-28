@@ -90,6 +90,7 @@ export function EmployerShell() {
           <NavLink to="/employer/postings" className={({ isActive }) => (isActive ? "on" : "")}>Postings</NavLink>
           <NavLink to="/employer/interviews" className={({ isActive }) => (isActive ? "on" : "")}>Interviews</NavLink>
           <NavLink to="/employer/rooms" className={({ isActive }) => (isActive ? "on" : "")}>Rooms</NavLink>
+          <NavLink to="/employer/analytics" className={({ isActive }) => (isActive ? "on" : "")}>Analytics</NavLink>
           <NavLink to="/employer/company" className={({ isActive }) => (isActive ? "on" : "")}>Company</NavLink>
         </nav>
         <div className="account-user">
@@ -148,7 +149,7 @@ export function EmployerLandingPage() {
       {mode === "intro" ? (
         <section className="account-card">
           <h2>Employer workspace</h2>
-          <p className="lede">Create a company account, post open roles, invite candidates, and run multi-party interview rooms.</p>
+          <p className="lede">Create a company account, post roles, run interview rooms, and watch hiring SLAs on analytics.</p>
           <div className="job-actions" style={{ justifyContent: "flex-start" }}>
             <button className="btn btn-primary" type="button" onClick={() => setMode("register")}>Create employer account</button>
             <Link className="btn btn-ghost" to="/signin">Sign in</Link>
@@ -708,6 +709,158 @@ export function EmployerPostingsPage() {
           </div>
         ))}
       </section>
+    </div>
+  );
+}
+
+export function EmployerAnalyticsPage() {
+  const [analytics, setAnalytics] = useState<{
+    funnel: Record<string, number>;
+    postings: Record<string, number>;
+    invites: { total: number; open: number; acceptRate: number | null; counts: Record<string, number> };
+    interviews: Record<string, number>;
+    rates: {
+      hireRate: number | null;
+      inviteAcceptRate: number | null;
+      medianHoursToInterview: number | null;
+      medianInviteResponseHours: number | null;
+    };
+    recent: Record<string, number>;
+  } | null>(null);
+  const [breaches, setBreaches] = useState<{
+    id: string;
+    kind: string;
+    severity: string;
+    title: string;
+    detail: string;
+    action: string;
+    candidateName: string;
+    hoursOver: number;
+  }[]>([]);
+  const [insights, setInsights] = useState<{ id: string; title: string; detail: string }[]>([]);
+  const [sla, setSla] = useState({ reviewHours: 48, inviteHours: 72, interviewHours: 168 });
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [loaded, setLoaded] = useState(false);
+
+  async function load() {
+    const data = await api<{
+      analytics: NonNullable<typeof analytics>;
+      breaches: typeof breaches;
+      insights: typeof insights;
+      sla: typeof sla;
+    }>("/api/employer/analytics");
+    setAnalytics(data.analytics);
+    setBreaches(data.breaches);
+    setInsights(data.insights);
+    setSla(data.sla);
+    setLoaded(true);
+  }
+
+  useEffect(() => {
+    void load().catch((err: Error) => {
+      setError(err.message);
+      setLoaded(true);
+    });
+  }, []);
+
+  async function saveSla(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    try {
+      const data = await api<{ sla: typeof sla }>("/api/employer/sla", {
+        method: "PUT",
+        body: JSON.stringify(sla),
+      });
+      setSla(data.sla);
+      setMessage("SLA targets saved.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save SLA settings.");
+    }
+  }
+
+  return (
+    <div className="account-page">
+      <header className="account-head">
+        <div>
+          <p className="eyebrow">Hiring health</p>
+          <h1>Analytics</h1>
+          <p className="lede">Funnel counts, invite and hire rates, and SLA breaches from your live pipeline data.</p>
+        </div>
+        <Link className="btn btn-ghost btn-sm" to="/employer/pipeline">Open pipeline</Link>
+      </header>
+      {error ? <p className="form-error">{error}</p> : null}
+      {message ? <p className="role">{message}</p> : null}
+      {!loaded || !analytics ? <p className="lede">Loading analytics…</p> : (
+        <>
+          <div className="stat-grid">
+            <p className="stat account-tile"><strong>{analytics.funnel.active}</strong><span>Active pipeline</span></p>
+            <p className="stat account-tile"><strong>{analytics.postings.open}</strong><span>Open postings</span></p>
+            <p className="stat account-tile"><strong>{analytics.invites.open}</strong><span>Open invites</span></p>
+            <p className="stat account-tile"><strong>{analytics.rates.hireRate == null ? "—" : `${analytics.rates.hireRate}%`}</strong><span>Hire rate</span></p>
+          </div>
+          <div className="account-split">
+            <section className="account-card">
+              <h2>Funnel</h2>
+              {["saved", "reviewing", "interviewing", "offer", "hired", "passed"].map((key) => (
+                <div className="quiet-row" key={key}>
+                  <strong>{key}</strong>
+                  <span>{analytics.funnel[key] || 0}</span>
+                </div>
+              ))}
+            </section>
+            <section className="account-card">
+              <h2>This week</h2>
+              <div className="quiet-row"><strong>Saved</strong><span>{analytics.recent.pipelineAdds}</span></div>
+              <div className="quiet-row"><strong>Invites sent</strong><span>{analytics.recent.invitesSent}</span></div>
+              <div className="quiet-row"><strong>Rooms opened</strong><span>{analytics.recent.roomsOpened}</span></div>
+              <div className="quiet-row"><strong>Hires</strong><span>{analytics.recent.hires}</span></div>
+              <p className="role" style={{ marginTop: 12 }}>
+                Median hours to interview: {analytics.rates.medianHoursToInterview ?? "—"}. Invite accept rate: {analytics.rates.inviteAcceptRate == null ? "—" : `${analytics.rates.inviteAcceptRate}%`}.
+              </p>
+            </section>
+          </div>
+          <section className="account-card">
+            <h2>SLA breaches</h2>
+            {!breaches.length ? <p className="role">No breaches against your current targets.</p> : null}
+            {breaches.map((item) => (
+              <article className="insight-focus" key={item.id}>
+                <strong>{item.title}{item.candidateName ? ` · ${item.candidateName}` : ""}</strong>
+                <p className="role">{item.detail} · {item.severity} · {item.action}</p>
+              </article>
+            ))}
+          </section>
+          <section className="account-card">
+            <h2>Focus next</h2>
+            {insights.map((item) => (
+              <article className="insight-focus" key={item.id}>
+                <strong>{item.title}</strong>
+                <p className="role">{item.detail}</p>
+              </article>
+            ))}
+          </section>
+          <form className="account-card" onSubmit={saveSla}>
+            <h2>SLA targets (hours)</h2>
+            <div className="admin-grid">
+              <label className="field">
+                <span>Review backlog</span>
+                <input type="number" min={1} max={720} value={sla.reviewHours} onChange={(event) => setSla({ ...sla, reviewHours: Number(event.target.value) })} />
+              </label>
+              <label className="field">
+                <span>Invite response wait</span>
+                <input type="number" min={1} max={720} value={sla.inviteHours} onChange={(event) => setSla({ ...sla, inviteHours: Number(event.target.value) })} />
+              </label>
+              <label className="field">
+                <span>Interview scheduling</span>
+                <input type="number" min={1} max={720} value={sla.interviewHours} onChange={(event) => setSla({ ...sla, interviewHours: Number(event.target.value) })} />
+              </label>
+            </div>
+            <button className="btn btn-primary btn-sm" type="submit">Save SLA</button>
+          </form>
+        </>
+      )}
     </div>
   );
 }

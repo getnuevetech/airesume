@@ -45,6 +45,12 @@ import {
   markPresence,
   summarizeRoom,
 } from "./interview-rooms.mjs";
+import {
+  buildEmployerAnalytics,
+  buildEmployerInsights,
+  findSlaBreaches,
+  normalizeSlaSettings,
+} from "./employer-analytics.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -522,6 +528,50 @@ test("interview rooms track multi-party presence and shared turns", () => {
   assert.equal(summary.present, 1);
 });
 
+test("employer analytics funnel and SLA breaches use live hiring data", () => {
+  const now = Date.now();
+  const hour = 60 * 60 * 1000;
+  const analytics = buildEmployerAnalytics({
+    now,
+    pipeline: [
+      { id: "p1", status: "Saved", created_at: now - 10 * hour, updated_at: now - 10 * hour, candidate_user_id: "c1" },
+      { id: "p2", status: "Hired", created_at: now - 20 * hour, updated_at: now - 2 * hour, candidate_user_id: "c2" },
+      { id: "p3", status: "Interviewing", created_at: now - 200 * hour, updated_at: now - 200 * hour, candidate_user_id: "c3" },
+    ],
+    invites: [
+      { id: "i1", status: "pending", created_at: now - 80 * hour, updated_at: now - 80 * hour, candidate_user_id: "c1" },
+      { id: "i2", status: "accepted", created_at: now - 5 * hour, updated_at: now - 1 * hour, candidate_user_id: "c2" },
+    ],
+    postings: [{ status: "open" }, { status: "draft" }],
+    rooms: [],
+    voiceSessions: [],
+  });
+  assert.equal(analytics.funnel.saved, 1);
+  assert.equal(analytics.funnel.hired, 1);
+  assert.equal(analytics.postings.open, 1);
+  assert.equal(analytics.invites.open, 1);
+  assert.equal(analytics.rates.hireRate, 100);
+  const sla = normalizeSlaSettings({ reviewHours: 48, inviteHours: 72, interviewHours: 168 });
+  const breaches = findSlaBreaches({
+    now,
+    sla,
+    pipeline: [
+      { id: "p1", status: "Saved", created_at: now - 10 * hour, updated_at: now - 10 * hour, candidate_user_id: "c1" },
+      { id: "p3", status: "Interviewing", created_at: now - 200 * hour, updated_at: now - 200 * hour, candidate_user_id: "c3" },
+    ],
+    invites: [
+      { id: "i1", status: "pending", created_at: now - 80 * hour, updated_at: now - 80 * hour, candidate_user_id: "c1" },
+    ],
+    rooms: [],
+    voiceSessions: [],
+  });
+  assert.ok(breaches.some((item) => item.kind === "invite"));
+  assert.ok(breaches.some((item) => item.kind === "interview"));
+  assert.ok(!breaches.some((item) => item.kind === "review"));
+  const tips = buildEmployerInsights(analytics, breaches);
+  assert.ok(tips.some((item) => item.id === "schedule-interviews" || item.id === "clear-invites"));
+});
+
 test("fresh data dir migrates and seeds schema version", () => {
   const dir = mkdtempSync(join(tmpdir(), "jobpilot-test-"));
   const script = `
@@ -554,6 +604,7 @@ test("fresh data dir migrates and seeds schema version", () => {
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_postings'").get()) process.exit(15);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_invites'").get()) process.exit(16);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='interview_rooms'").get()) process.exit(17);
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_sla_settings'").get()) process.exit(18);
   `;
   try {
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
