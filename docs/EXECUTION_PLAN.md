@@ -45,10 +45,10 @@ Browser (+ optional extension)
 2. Activation screen: profile summary + strong-match teaser + missing prefs only — **shipped**
 
 ### Slice H — Launch legal & consent
-1. Cookie Settings control
-2. Billing disclosure versioning
-3. Auto-Apply authorization audit surface
-4. Internal retention / AI governance / consent checklists
+1. Cookie Settings control — **shipped**
+2. Billing disclosure versioning — **shipped**
+3. Auto-Apply authorization audit surface — **shipped**
+4. Internal retention / AI governance / consent checklists — **shipped**
 
 ### Slice I — Fact provenance & match depth
 1. Confidence + source fact ids on claims

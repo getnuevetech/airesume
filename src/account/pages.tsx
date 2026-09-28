@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { openCookieSettings } from "../components/CookieSettings";
 import { useApp } from "../context/AppContext";
 import { useAccount } from "./AccountContext";
 import { ResumeSheet } from "./ResumeSheet";
@@ -1717,7 +1718,7 @@ function AutoApply({
         Autopilot queues Ready or Review required rows for your review — it never silently submits.
         Used {capUsed} of {cap} today.
         {authorization?.authorized
-          ? ` Authorization accepted ${authorization.authorizedAt ? new Date(authorization.authorizedAt).toLocaleDateString() : ""}.`
+          ? ` Authorization accepted ${authorization.authorizedAt ? new Date(authorization.authorizedAt).toLocaleDateString() : ""} (v${authorization.version}).`
           : " Separate authorization is required before enabling."}
       </p>
       <label className="check-row">
@@ -1845,10 +1846,15 @@ export function PlanPage() {
   const [params, setParams] = useSearchParams();
   const [cycle, setCycle] = useState<"monthly" | "yearly">("monthly");
   const [gatewayId, setGatewayId] = useState("");
+  const [acceptDisclosure, setAcceptDisclosure] = useState(false);
 
   useEffect(() => {
     if (data?.gateways[0] && !gatewayId) setGatewayId(data.gateways[0].id);
   }, [data, gatewayId]);
+
+  useEffect(() => {
+    if (data?.billingDisclosure?.accepted) setAcceptDisclosure(true);
+  }, [data?.billingDisclosure?.accepted]);
 
   useEffect(() => {
     const checkoutId = params.get("checkout_id");
@@ -1863,6 +1869,26 @@ export function PlanPage() {
   }, [params, refresh, reload, setMessage, setError, setParams]);
 
   if (!data) return null;
+  const disclosure = data.billingDisclosure;
+  const needsDisclosure = !disclosure?.accepted;
+
+  async function choosePlan(planId: string) {
+    try {
+      const result = await api<{ url?: string }>("/api/billing/checkout", {
+        method: "POST",
+        body: JSON.stringify({ planId, gatewayId, cycle, acceptDisclosure }),
+      });
+      if (result.url) window.location.href = result.url;
+      else {
+        setMessage("Plan updated.");
+        void refresh();
+        await reload();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Checkout failed.");
+    }
+  }
+
   return (
     <div className="account-page">
       <header className="account-head">
@@ -1881,13 +1907,40 @@ export function PlanPage() {
           {data.gateways.map((gateway) => <option key={gateway.id} value={gateway.id}>{gateway.name}</option>)}
         </select>
       </label>
+      <section className="account-card billing-disclosure">
+        <h2>Subscription &amp; billing terms</h2>
+        <p className="role">Version {disclosure?.version || "current"}. Cancel anytime in Account → Plan.</p>
+        <p className="lede">{disclosure?.text}</p>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={acceptDisclosure}
+            disabled={Boolean(disclosure?.accepted)}
+            onChange={(event) => setAcceptDisclosure(event.target.checked)}
+          />
+          <span>
+            {disclosure?.accepted
+              ? `Accepted ${disclosure.acceptedAt ? new Date(disclosure.acceptedAt).toLocaleString() : ""} (v${disclosure.version})`
+              : "I understand the price, billing frequency, automatic renewal, and how to cancel"}
+          </span>
+        </label>
+      </section>
       <div className="price-grid">
         {data.plans.map((plan) => (
           <article className="price-card" key={plan.id}>
             <h2>{plan.name}</h2>
             <p className="price"><strong>${((cycle === "yearly" ? plan.yearlyCents : plan.monthlyCents) / 100).toFixed(0)}</strong><span>{cycle === "yearly" ? "/yr" : "/mo"}</span></p>
             <p className="role">{plan.blurb}</p>
-            <button className="btn btn-primary btn-block" type="button" disabled={plan.id === data.plan.id} onClick={() => void api<{ url?: string }>("/api/billing/checkout", { method: "POST", body: JSON.stringify({ planId: plan.id, gatewayId, cycle }) }).then((result) => { if (result.url) window.location.href = result.url; else { setMessage("Plan updated."); void refresh(); return reload(); } }).catch((err: Error) => setError(err.message))}>
+            <p className="role">
+              {cycle === "yearly" ? "Billed yearly in USD" : "Billed monthly in USD"}
+              {plan.monthlyCents > 0 ? " · renews until canceled" : ""}
+            </p>
+            <button
+              className="btn btn-primary btn-block"
+              type="button"
+              disabled={plan.id === data.plan.id || (needsDisclosure && plan.monthlyCents > 0 && !acceptDisclosure)}
+              onClick={() => void choosePlan(plan.id)}
+            >
               {plan.id === data.plan.id ? "Current plan" : `Choose ${plan.name}`}
             </button>
           </article>
@@ -1953,10 +2006,28 @@ export function SettingsPage() {
         </form>
       ) : null}
       {data?.features?.manual_apply ? <ExtensionSettings onMessage={setMessage} onError={setError} /> : null}
-      <section className="account-card">
+      {data?.autoApplyAuthorization ? (
+        <section className="account-card">
+          <h2>Auto-Apply authorization</h2>
+          <p className="role">
+            Version {data.autoApplyAuthorization.version}
+            {data.autoApplyAuthorization.authorized
+              ? ` · accepted ${data.autoApplyAuthorization.authorizedAt ? new Date(data.autoApplyAuthorization.authorizedAt).toLocaleString() : ""}`
+              : " · not accepted yet"}
+          </p>
+          <p className="lede">{data.autoApplyAuthorization.text}</p>
+          <p className="role">
+            Manage enablement and rules on <Link to="/account/applications">Applications</Link>. Disabling there revokes future Auto-Apply queueing.
+          </p>
+        </section>
+      ) : null}
+      <section className="account-card" id="privacy">
         <h2>Privacy</h2>
-        <p className="role">Download a copy of your account data, or permanently delete your account and profile.</p>
+        <p className="role">Correct your profile, export a copy of your data, manage cookies, or permanently delete your account.</p>
         <div className="admin-actions">
+          <Link className="btn btn-ghost btn-sm" to="/account/profile">
+            Correct my data
+          </Link>
           <button
             className="btn btn-ghost btn-sm"
             type="button"
@@ -1976,6 +2047,9 @@ export function SettingsPage() {
             }}
           >
             Export my data
+          </button>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => openCookieSettings()}>
+            Cookie Settings
           </button>
         </div>
         <form

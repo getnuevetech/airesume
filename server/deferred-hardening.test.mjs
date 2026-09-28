@@ -7,11 +7,13 @@ import { applySecurityHeaders, rateLimit, pruneRateLimitBuckets } from "./securi
 import { migrate, SCHEMA_VERSION } from "./schema.mjs";
 import { db } from "./db.mjs";
 
-test("schema version is 20 for conversion homepage", () => {
-  assert.equal(SCHEMA_VERSION, 20);
+test("schema version is 21 for billing disclosure columns", () => {
+  assert.equal(SCHEMA_VERSION, 21);
   migrate();
   assert.ok(db.prepare("PRAGMA table_info(extension_tokens)").all().some((column) => column.name === "token_hash"));
   assert.ok(db.prepare("PRAGMA table_info(users)").all().some((column) => column.name === "auto_apply_authorized_at"));
+  assert.ok(db.prepare("PRAGMA table_info(users)").all().some((column) => column.name === "billing_disclosure_accepted_at"));
+  assert.ok(db.prepare("PRAGMA table_info(checkouts)").all().some((column) => column.name === "disclosure_version"));
 });
 
 test("auto-apply enable requires separate authorization acceptance", () => {

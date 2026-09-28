@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 
-export const SCHEMA_VERSION = 20;
+export const SCHEMA_VERSION = 21;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -81,6 +81,8 @@ export function migrate() {
   addColumn("users", "auto_daily_cap", "INTEGER DEFAULT 5");
   addColumn("users", "auto_apply_authorized_at", "INTEGER");
   addColumn("users", "auto_apply_auth_version", "TEXT DEFAULT ''");
+  addColumn("users", "billing_disclosure_accepted_at", "INTEGER");
+  addColumn("users", "billing_disclosure_version", "TEXT DEFAULT ''");
   addColumn("users", "password_must_change", "INTEGER DEFAULT 0");
   addColumn("profiles", "headline", "TEXT DEFAULT ''");
   addColumn("profiles", "photo_url", "TEXT DEFAULT ''");
@@ -419,6 +421,7 @@ export function migrate() {
       created_at INTEGER NOT NULL
     );
   `);
+  addColumn("checkouts", "disclosure_version", "TEXT DEFAULT ''");
 
   const provider = db.prepare("SELECT id FROM ai_providers LIMIT 1").get();
   if (!provider) {

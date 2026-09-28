@@ -8,6 +8,7 @@ import { publicPlan, resolveTemplate, templateLimitOf, RESUME_TEMPLATES } from "
 import { applyKitMetrics } from "./apply-kit-metrics.mjs";
 import { followUpMetrics, syncFollowUpsForUser } from "./follow-ups.mjs";
 import { autoApplyAuthorizationPayload } from "./auto-apply-auth.mjs";
+import { billingDisclosurePayload } from "./billing-disclosure.mjs";
 import { iceConfigSummary, resolveIceServers } from "./webrtc-signaling.mjs";
 
 function publicVersion(row) {
@@ -124,6 +125,7 @@ export function registerDashboard(app, ctx) {
       autoDailyCap: user.auto_daily_cap ?? 5,
       autoCapUsed: autoCapUsed(user.id),
       autoApplyAuthorization: autoApplyAuthorizationPayload(user),
+      billingDisclosure: billingDisclosurePayload(user),
       media: iceConfigSummary(resolveIceServers()),
       matchQuota: {
         limit: quota.limit,

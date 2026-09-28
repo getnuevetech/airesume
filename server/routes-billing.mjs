@@ -1,6 +1,12 @@
 /** Billing checkout and payment-gateway admin routes. */
 
 import { db, id } from "./db.mjs";
+import {
+  BILLING_DISCLOSURE_VERSION,
+  billingDisclosurePayload,
+  recordBillingDisclosure,
+  validateBillingDisclosure,
+} from "./billing-disclosure.mjs";
 
 export function registerBilling(app, ctx) {
   const {
@@ -43,9 +49,22 @@ export function registerBilling(app, ctx) {
     const cycle = req.body.cycle === "yearly" ? "yearly" : "monthly";
     const credit = creditFor(user);
     const amount = Math.max(0, priceFor(plan, cycle) - (rules.allowProration ? credit : 0));
+    const disclosure = validateBillingDisclosure({
+      acceptDisclosure: Boolean(req.body.acceptDisclosure),
+      user,
+      amountCents: amount,
+      planMonthlyCents: plan.monthly_cents || plan.price_cents || 0,
+    });
+    if (!disclosure.ok) {
+      res.status(400).json({ error: disclosure.error });
+      return;
+    }
+    if (disclosure.record) {
+      recordBillingDisclosure(db, user.id);
+    }
     if (gateway.kind === "manual" || amount === 0) {
       applyPlan(user, plan, gateway, cycle, "", amount, rules.allowProration ? credit : 0);
-      res.json({ applied: true, amount, credit });
+      res.json({ applied: true, amount, credit, disclosure: billingDisclosurePayload(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id)) });
       return;
     }
     const checkoutId = id("chk");
@@ -71,8 +90,8 @@ export function registerBilling(app, ctx) {
         return;
       }
       db.prepare(
-        "INSERT INTO checkouts (id, user_id, plan_id, gateway_id, cycle, amount_cents, credit_cents, status, external_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
-      ).run(checkoutId, user.id, plan.id, gateway.id, cycle, amount, credit, session.id, Date.now());
+        "INSERT INTO checkouts (id, user_id, plan_id, gateway_id, cycle, amount_cents, credit_cents, status, external_id, disclosure_version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)",
+      ).run(checkoutId, user.id, plan.id, gateway.id, cycle, amount, credit, session.id, BILLING_DISCLOSURE_VERSION, Date.now());
       res.json({ url: session.url, checkoutId });
       return;
     }
@@ -110,8 +129,8 @@ export function registerBilling(app, ctx) {
         return;
       }
       db.prepare(
-        "INSERT INTO checkouts (id, user_id, plan_id, gateway_id, cycle, amount_cents, credit_cents, status, external_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
-      ).run(checkoutId, user.id, plan.id, gateway.id, cycle, amount, credit, order.id, Date.now());
+        "INSERT INTO checkouts (id, user_id, plan_id, gateway_id, cycle, amount_cents, credit_cents, status, external_id, disclosure_version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)",
+      ).run(checkoutId, user.id, plan.id, gateway.id, cycle, amount, credit, order.id, BILLING_DISCLOSURE_VERSION, Date.now());
       res.json({ url: approve, checkoutId });
       return;
     }

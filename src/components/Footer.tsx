@@ -1,23 +1,30 @@
 import { NavLink } from "react-router-dom";
-import { useSiteContent } from "../content/siteContent";
+import { openCookieSettings } from "./CookieSettings";
 import { Brand } from "./Icons";
 
+const LEGAL_LINKS = [
+  { label: "Terms", to: "/terms" },
+  { label: "Privacy", to: "/privacy" },
+];
+
 export function Footer() {
-  const { content } = useSiteContent();
   return (
     <footer className="site-footer">
       <div className="container">
         <div className="footer-top">
           <Brand />
-          <nav className="footer-links" aria-label="Footer">
-            {content.footer.links.map((link) => (
-              <NavLink key={link.to + link.label} to={link.to}>
+          <nav className="footer-links" aria-label="Legal">
+            {LEGAL_LINKS.map((link) => (
+              <NavLink key={link.to} to={link.to}>
                 {link.label}
               </NavLink>
             ))}
+            <button className="footer-cookie-btn" type="button" onClick={() => openCookieSettings()}>
+              Cookie Settings
+            </button>
           </nav>
         </div>
-        <p className="copyright">{content.footer.copyright}</p>
+        <p className="copyright">© 2026 JobPilot. All rights reserved.</p>
       </div>
     </footer>
   );

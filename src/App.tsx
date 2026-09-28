@@ -1,4 +1,5 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { CookieSettingsHost } from "./components/CookieSettings";
 import { Layout } from "./components/Layout";
 import { SiteContentProvider } from "./content/siteContent";
 import { AppProvider } from "./context/AppContext";
@@ -28,6 +29,7 @@ export default function App() {
     <BrowserRouter>
       <AppProvider>
         <SiteContentProvider>
+        <CookieSettingsHost />
         <Routes>
           <Route path="admin" element={<AdminPage />} />
           <Route path="resume/:slug" element={<PublicResumePage />} />

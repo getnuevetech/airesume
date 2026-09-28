@@ -806,9 +806,37 @@ button { cursor: pointer; }
   padding-top: 18px;
   border-top: 1px solid #f0f3f6;
 }
-.footer-links { display: flex; flex-wrap: wrap; gap: 22px; }
+.footer-links { display: flex; flex-wrap: wrap; gap: 22px; align-items: center; }
 .footer-links a { text-decoration: none; color: #52627a; font-weight: 600; font-size: 14.5px; }
 .footer-links a:hover, .footer-links a.active { color: var(--ink); }
+.footer-cookie-btn {
+  border: 0;
+  background: none;
+  color: #52627a;
+  font-weight: 600;
+  font-size: 14.5px;
+  padding: 0;
+  cursor: pointer;
+}
+.footer-cookie-btn:hover { color: var(--ink); }
+.cookie-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(12, 24, 48, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.cookie-dialog {
+  width: min(520px, 100%);
+  background: #fff;
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 24px 48px rgba(12, 24, 48, 0.2);
+}
+.cookie-dialog h2 { margin: 8px 0 10px; font-size: 24px; letter-spacing: -0.03em; }
+.billing-disclosure .lede { font-size: 14.5px; }
 .copyright { text-align: center; color: #8b98ab; font-size: 13.5px; margin-top: 22px; }
 
 .page-hero { padding: 42px 0 12px; max-width: 720px; }

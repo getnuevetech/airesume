@@ -71,6 +71,13 @@ export type AccountData = {
     authorizedAt: number | null;
     currentVersion?: string | null;
   };
+  billingDisclosure?: {
+    version: string;
+    text: string;
+    accepted: boolean;
+    acceptedAt: number | null;
+    currentVersion?: string | null;
+  };
   media?: {
     serverCount: number;
     hasTurn: boolean;
