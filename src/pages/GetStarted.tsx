@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { TermsAgreement } from "../components/TermsAgreement";
 import { UploadPanel } from "../components/UploadPanel";
 import { useApp } from "../context/AppContext";
 
@@ -19,9 +20,7 @@ type Draft = {
   };
   facts: { fact_id: string; statement: string; confidence: number }[];
   questions: string[];
-  warnings: string[];
-  provider: string;
-  model: string;
+  warnings?: string[];
 };
 
 export function GetStartedPage() {
@@ -40,7 +39,18 @@ export function GetStartedPage() {
   const [locations, setLocations] = useState("");
   const [workAuthorization, setWorkAuthorization] = useState("");
   const [consent, setConsent] = useState(false);
+  const [directConsent, setDirectConsent] = useState(false);
+  const [directName, setDirectName] = useState("");
+  const [directEmail, setDirectEmail] = useState("");
+  const [directPassword, setDirectPassword] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "terms") {
+      setError("Agree to the terms before creating an account.");
+    }
+  }, []);
 
   useEffect(() => {
     const apply = () => {
@@ -92,17 +102,68 @@ export function GetStartedPage() {
     }
   }
 
+  async function onDirect(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    try {
+      await api("/api/auth/register", {
+        method: "POST",
+        body: JSON.stringify({
+          name: directName,
+          email: directEmail,
+          password: directPassword,
+          consent: directConsent,
+        }),
+      });
+      await refresh();
+      notify("Account created.");
+      navigate("/account");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create the account.");
+    }
+  }
+
   if (!draft) {
     return (
       <div className="container start-grid">
         <div className="page-hero">
           <p className="eyebrow">Get started</p>
-          <h1>Upload your resume to create your account.</h1>
+          <h1>Create your account.</h1>
           <p className="lede">
-            The career extractor reads your name, email, phone, location, experience, and skills, then asks you to confirm them before the account is activated.
+            Upload a resume and confirm the details, or enter your name and email directly. Either way, agree to the terms before the account is created.
           </p>
+          {error ? (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          ) : null}
         </div>
-        <UploadPanel showSample />
+        <div className="start-stack">
+          <UploadPanel showSample />
+          <form className="auth-card direct-card" onSubmit={onDirect}>
+            <h2>Create an account directly</h2>
+            <p className="lede">Use this if you do not have a resume to upload yet.</p>
+            <label className="field">
+              <span>Full name</span>
+              <input value={directName} onChange={(event) => setDirectName(event.target.value)} required />
+            </label>
+            <label className="field">
+              <span>Email</span>
+              <input type="email" value={directEmail} onChange={(event) => setDirectEmail(event.target.value)} required />
+            </label>
+            <label className="field">
+              <span>Password</span>
+              <input type="password" value={directPassword} onChange={(event) => setDirectPassword(event.target.value)} minLength={8} required />
+            </label>
+            <TermsAgreement checked={directConsent} onChange={setDirectConsent} />
+            <button className="btn btn-primary btn-block" type="submit">
+              Create account
+            </button>
+            <p className="fine-print">
+              Already have an account? <Link to="/signin">Sign in</Link>
+            </p>
+          </form>
+        </div>
       </div>
     );
   }
@@ -112,14 +173,7 @@ export function GetStartedPage() {
       <div className="page-hero">
         <p className="eyebrow">Confirm your profile</p>
         <h1>We drafted your account from the resume.</h1>
-        <p className="lede">
-          Extracted with {draft.provider} ({draft.model}). Nothing here is invented. Correct anything that is outdated, then activate the account.
-        </p>
-        {draft.warnings.map((warning) => (
-          <p className="form-error" key={warning}>
-            {warning}
-          </p>
-        ))}
+        <p className="lede">Check the details from your resume. Correct anything that is outdated, then activate the account.</p>
         <div className="chips">
           {draft.profile.skills.map((skill) => (
             <span className="chip" key={skill}>
@@ -188,10 +242,7 @@ export function GetStartedPage() {
           <span>Password</span>
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required />
         </label>
-        <label className="check-row">
-          <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required />
-          I confirm these details and agree to the terms, privacy policy, and AI processing of this resume.
-        </label>
+        <TermsAgreement checked={consent} onChange={setConsent} includeResume />
         {draft.questions.length ? <p className="role">{draft.questions.join(" ")}</p> : null}
         <button className="btn btn-primary btn-block" type="submit" disabled={Boolean(user)}>
           Create account
