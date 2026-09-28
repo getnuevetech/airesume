@@ -6,7 +6,7 @@ import { AdminPage } from "./pages/Admin";
 import { BlogPage, BlogPostPage } from "./pages/Blog";
 import { ContactPage } from "./pages/Contact";
 import { AccountShell } from "./account/Shell";
-import { ApplicationsPage, JobsPage, OverviewPage, PlanPage, ProfilePage, ResumePage, SettingsPage, TemplatesPage } from "./account/pages";
+import { ApplicationsPage, InsightsPage, JobsPage, OverviewPage, PlanPage, ProfilePage, ResumePage, SettingsPage, TemplatesPage } from "./account/pages";
 import { DashboardPage } from "./pages/Dashboard";
 import { FeaturesPage } from "./pages/Features";
 import { ForgotPasswordPage } from "./pages/ForgotPassword";
@@ -33,6 +33,7 @@ export default function App() {
             <Route path="profile" element={<ProfilePage />} />
             <Route path="resume" element={<ResumePage />} />
             <Route path="templates" element={<TemplatesPage />} />
+            <Route path="insights" element={<InsightsPage />} />
             <Route path="jobs" element={<JobsPage />} />
             <Route path="applications" element={<ApplicationsPage />} />
             <Route path="plan" element={<PlanPage />} />

@@ -15,6 +15,7 @@ import { registerDashboard } from "./routes-dashboard.mjs";
 import { registerProfile } from "./routes-profile.mjs";
 import { registerAdminAi } from "./routes-admin-ai.mjs";
 import { registerAdminPlans } from "./routes-admin-plans.mjs";
+import { registerCareer } from "./routes-career.mjs";
 
 migrate();
 
@@ -615,6 +616,14 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     requireAdmin,
     parse,
     policy,
+  });
+  registerCareer(app, {
+    requireUser,
+    requireFeature,
+    featuresOf,
+    syncProfileVersion,
+    activeVersion,
+    parse,
   });
 }
 

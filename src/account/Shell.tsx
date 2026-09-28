@@ -7,6 +7,7 @@ const ITEMS = [
   { to: "/account/profile", label: "Profile", icon: "user" },
   { to: "/account/resume", label: "Resume", icon: "file" },
   { to: "/account/templates", label: "Templates", icon: "layout" },
+  { to: "/account/insights", label: "Insights", icon: "chart" },
   { to: "/account/jobs", label: "Jobs", icon: "briefcase" },
   { to: "/account/applications", label: "Applications", icon: "send" },
   { to: "/account/plan", label: "Plan", icon: "card" },
@@ -87,6 +88,7 @@ function NavIcon({ name }: { name: string }) {
   if (name === "file") return <svg {...props}><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /></svg>;
   if (name === "layout") return <svg {...props}><rect x="4" y="4" width="7" height="7" rx="1" /><rect x="13" y="4" width="7" height="7" rx="1" /><rect x="4" y="13" width="16" height="7" rx="1" /></svg>;
   if (name === "briefcase") return <svg {...props}><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5h8v2" /></svg>;
+  if (name === "chart") return <svg {...props}><path d="M4 19V5" /><path d="M4 19h16" /><path d="M8 16v-5" /><path d="M12 16V8" /><path d="M16 16v-3" /></svg>;
   if (name === "send") return <svg {...props}><path d="M4 12h10" /><path d="m11 6 7 6-7 6" /></svg>;
   if (name === "card") return <svg {...props}><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M3 10h18" /></svg>;
   if (name === "out") return <svg {...props}><path d="M10 7V5H5v14h5v-2" /><path d="M10 12h9" /><path d="m16 8 4 4-4 4" /></svg>;
