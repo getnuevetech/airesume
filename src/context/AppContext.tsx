@@ -102,8 +102,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           notify(`Welcome back, ${data.user.name.split(" ")[0]}.`);
           if (data.user.mustChangePassword) {
             navigate("/account/settings");
+          } else if (data.user.role === "admin") {
+            navigate("/admin");
+          } else if (data.user.role === "employer") {
+            navigate("/employer");
           } else {
-            navigate(data.user.role === "admin" ? "/admin" : "/account");
+            navigate("/account");
           }
           return null;
         } catch (error) {

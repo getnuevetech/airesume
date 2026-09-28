@@ -8,7 +8,7 @@ export function SignInPage() {
   const navigate = useNavigate();
   useEffect(() => {
     if (!user) return;
-    navigate(user.role === "admin" ? "/admin" : "/account", { replace: true });
+    navigate(user.role === "admin" ? "/admin" : user.role === "employer" ? "/employer" : "/account", { replace: true });
   }, [user, navigate]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -80,6 +80,8 @@ export function SignInPage() {
           <Link to="/forgot-password">Forgot password?</Link>
           <br />
           New to JobPilot? <Link to="/get-started">Upload a resume</Link>
+          <br />
+          Hiring? <Link to="/employers">Employer accounts</Link>
         </p>
       </form>
     </div>

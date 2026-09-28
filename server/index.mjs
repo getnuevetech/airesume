@@ -18,6 +18,7 @@ import { extractCareerProfile, readResumeFile } from "./extract.mjs";
 import { registerPlatform, syncProfileVersion } from "./platform.mjs";
 import { deliverMail, publicMailSettings, saveMailSettings } from "./mail.mjs";
 import { auditCostSummary, moneyFromMicros } from "./ai-cost.mjs";
+import { registerEmployer } from "./routes-employer.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const homepageFile = join(here, "..", "shared", "homepage.json");
@@ -682,6 +683,7 @@ app.post("/api/account/password", (req, res) => {
   res.json({ ok: true, user: publicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id)) });
 });
 
+registerEmployer(app, { requireUser, setSession });
 registerPlatform(app, { requireUser, requireAdmin, audit, upload, originOf });
 
 app.use("/uploads", express.static(uploadsDir));

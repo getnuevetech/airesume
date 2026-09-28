@@ -14,6 +14,7 @@ import { estimateCostMicros, moneyFromMicros } from "./ai-cost.mjs";
 import { buildApplyKit } from "./apply-kit.mjs";
 import { buildCareerInsights } from "./career-intel.mjs";
 import { buildInterviewPrep } from "./interview-prep.mjs";
+import { searchCandidates } from "./employer-search.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -296,6 +297,46 @@ test("buildInterviewPrep uses resume bullets and does not invent metrics", () =>
   assert.equal(prep.askEmployer.length, 3);
 });
 
+test("searchCandidates only returns public profiles matching skills", () => {
+  const rows = [
+    {
+      user_id: "u1",
+      slug: "alex",
+      headline: "Product Manager",
+      summary: "Activation and SQL",
+      skills: JSON.stringify(["SQL", "Product management"]),
+      photo_url: "",
+      preferences: JSON.stringify({ shareContact: true }),
+      name: "Alex Rivera",
+      email: "alex@example.com",
+      phone: "555",
+      city: "Austin",
+      status: "active",
+      plan_features: JSON.stringify({ public_profile: true }),
+    },
+    {
+      user_id: "u2",
+      slug: "hidden",
+      headline: "Engineer",
+      summary: "React",
+      skills: JSON.stringify(["React"]),
+      photo_url: "",
+      preferences: "{}",
+      name: "Sam Hidden",
+      email: "sam@example.com",
+      phone: "",
+      city: "Dallas",
+      status: "active",
+      plan_features: JSON.stringify({ public_profile: false }),
+    },
+  ];
+  const found = searchCandidates(rows, { skill: "SQL" });
+  assert.equal(found.length, 1);
+  assert.equal(found[0].slug, "alex");
+  assert.equal(found[0].email, "alex@example.com");
+  assert.equal(searchCandidates(rows, { skill: "React" }).length, 0);
+});
+
 test("fresh data dir migrates and seeds schema version", () => {
   const dir = mkdtempSync(join(tmpdir(), "jobpilot-test-"));
   const script = `
@@ -321,6 +362,7 @@ test("fresh data dir migrates and seeds schema version", () => {
     if (free.match_explain_limit !== 5) process.exit(8);
     if (free.resume_review_limit !== 3) process.exit(9);
     if (!db.prepare("PRAGMA table_info(ai_audit)").all().some((row) => row.name === "cost_micros")) process.exit(10);
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_profiles'").get()) process.exit(11);
   `;
   try {
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {

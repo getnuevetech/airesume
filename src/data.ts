@@ -4,7 +4,7 @@ export type User = {
   email: string;
   phone?: string;
   provider: "email" | "google";
-  role?: "user" | "admin";
+  role?: "user" | "admin" | "employer";
   status?: string;
   planId?: string;
   mustChangePassword?: boolean;
