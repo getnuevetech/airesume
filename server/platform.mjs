@@ -4,6 +4,9 @@ import { migrate, publicPlan } from "./schema.mjs";
 import { deliverMail } from "./mail.mjs";
 import { fetchFeedListings, normalizeFeedUrl, publicFeedConfig, resolvePrimary } from "./feeds.mjs";
 import { extractRequirements, matchJob } from "./match.mjs";
+import { authenticitySignals, normalizeJobListing } from "./job-schema.mjs";
+import { extractJobRequirements } from "./job-requirements.mjs";
+import { computeApplicationReadiness } from "./readiness.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 import { TRACKER_STATUSES, startOfUtcDay } from "./apply-rules.mjs";
 import { draftQuestions } from "./questions.mjs";
@@ -253,12 +256,20 @@ function categorizeText(title, description) {
 }
 
 function verifyJob(job, siblings) {
-  const duplicate = siblings.some((other) => other.id !== job.id && other.company.toLowerCase() === job.company.toLowerCase() && other.title.toLowerCase() === job.title.toLowerCase());
-  if (!job.company || !job.title) return { verification: "Needs review", note: "Missing a title or company." };
-  if (/staffing|recruit/i.test(job.company)) return { verification: "Third-party recruiter", note: "Company name looks like a staffing firm." };
-  if (duplicate) return { verification: "Possible duplicate", note: "Another listing has the same company and title." };
-  if (job.salary_max && job.salary_max > 400000) return { verification: "Needs review", note: "Salary is unusually high." };
-  return { verification: "Active", note: "Passed the listing checks." };
+  return authenticitySignals(
+    {
+      id: job.id,
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      description: job.description,
+      source_url: job.sourceUrl || job.source_url,
+      apply_url: job.applyUrl || job.primaryUrl,
+      salary_min: job.salaryMin ?? job.salary_min,
+      salary_max: job.salaryMax ?? job.salary_max,
+    },
+    siblings,
+  );
 }
 
 async function categorizeAndVerify(job, siblings) {
@@ -273,16 +284,20 @@ async function categorizeAndVerify(job, siblings) {
   const role = String(ai.json?.role || job.role || job.title).slice(0, 80);
   const check = await completeJson(
     "job_verify",
-    'Return JSON {"verification","note"}. verification must be one of: Active, Possible duplicate, Needs review, Third-party recruiter.',
-    JSON.stringify({ title: job.title, company: job.company, local: local.verification, note: local.note }),
+    'Return JSON {"verification","note"}. verification must be one of: Active, Possible duplicate, Needs review, Third-party recruiter, Listing may be expired, Review recommended.',
+    JSON.stringify({ title: job.title, company: job.company, local: local.verification, note: local.note, flags: local.flags || [] }),
   );
-  const allowed = ["Active", "Possible duplicate", "Needs review", "Third-party recruiter"];
+  const allowed = ["Active", "Possible duplicate", "Needs review", "Third-party recruiter", "Listing may be expired", "Review recommended"];
   const verification = allowed.includes(check.json?.verification) ? check.json.verification : local.verification;
   return {
     category,
     role,
     verification,
     note: String(check.json?.note || local.note),
+    authenticity: {
+      flags: local.flags || [],
+      duplicates: local.duplicates || [],
+    },
     costMicros: (ai.costMicros || 0) + (check.costMicros || 0),
   };
 }
@@ -291,35 +306,88 @@ function jobKey(raw) {
   return String(raw.externalKey || `${raw.company}-${raw.title}`).slice(0, 180);
 }
 
-function saveJob(sourceId, raw) {
-  const key = jobKey(raw);
+async function saveJob(sourceId, raw) {
+  const normalized = normalizeJobListing(raw, { company: raw.company, employer: raw.employer, source_type: raw.source_type });
+  const key = jobKey({ ...raw, ...normalized, externalKey: raw.externalKey || normalized.externalKey });
   const existing = db.prepare("SELECT * FROM jobs WHERE source_id = ? AND external_key = ?").get(sourceId, key);
-  const skills = Array.isArray(raw.skills) ? raw.skills.map(String).slice(0, 12) : [];
-  const requirements = raw.requirements && typeof raw.requirements === "object"
+  const skills = Array.isArray(raw.skills) ? raw.skills.map(String).slice(0, 12) : normalized.skills.slice(0, 12);
+  let requirements = raw.requirements && typeof raw.requirements === "object"
     ? raw.requirements
-    : extractRequirements({
-      title: raw.title,
-      description: raw.description,
+    : null;
+  let reqMeta = { costMicros: 0, source: "deterministic" };
+  if (!requirements || !Array.isArray(requirements.mandatory)) {
+    const extracted = await extractJobRequirements({
+      title: normalized.title || raw.title,
+      company: normalized.company || raw.company,
+      description: normalized.description || raw.description,
       skills,
-      role: raw.role,
-      category: raw.category,
+      role: normalized.role || raw.role,
+      category: raw.category || normalized.category,
     });
-  const primaryCompany = String(raw.primaryCompany || raw.company || "");
-  const primaryUrl = String(raw.primaryUrl || "");
-  const primaryEmail = String(raw.primaryEmail || "");
+    requirements = extracted.requirements;
+    reqMeta = extracted;
+  }
+  const primaryCompany = String(raw.primaryCompany || normalized.primaryCompany || normalized.company || "");
+  const primaryUrl = String(raw.primaryUrl || normalized.primaryUrl || "");
+  const primaryEmail = String(raw.primaryEmail || normalized.primaryEmail || "");
+  const authenticity = JSON.stringify(raw.authenticity || { flags: [], duplicates: [] });
   if (existing) {
     db.prepare(
-      `UPDATE jobs SET title = ?, company = ?, location = ?, remote_type = ?, salary_min = ?, salary_max = ?, description = ?, skills = ?, requirements = ?, category = ?, role = ?, source_url = ?, verification = ?, verification_note = ?, primary_company = ?, primary_url = ?, primary_email = ?, active = 1
+      `UPDATE jobs SET title = ?, company = ?, location = ?, remote_type = ?, salary_min = ?, salary_max = ?, description = ?, skills = ?, requirements = ?, category = ?, role = ?, source_url = ?, verification = ?, verification_note = ?, primary_company = ?, primary_url = ?, primary_email = ?, authenticity = ?, active = 1
        WHERE id = ?`,
-    ).run(raw.title, raw.company, raw.location || "", raw.remoteType || "", raw.salaryMin || null, raw.salaryMax || null, raw.description || "", JSON.stringify(skills), JSON.stringify(requirements), raw.category || "", raw.role || "", raw.sourceUrl || "", raw.verification, raw.note, primaryCompany, primaryUrl, primaryEmail, existing.id);
-    return existing.id;
+    ).run(
+      normalized.title || raw.title,
+      normalized.company || raw.company,
+      normalized.location || raw.location || "",
+      normalized.remote_type || raw.remoteType || "",
+      normalized.salary_min ?? raw.salaryMin ?? null,
+      normalized.salary_max ?? raw.salaryMax ?? null,
+      normalized.description || raw.description || "",
+      JSON.stringify(skills),
+      JSON.stringify(requirements),
+      raw.category || normalized.category || "",
+      raw.role || normalized.role || "",
+      normalized.source_url || raw.sourceUrl || "",
+      raw.verification,
+      raw.note,
+      primaryCompany,
+      primaryUrl,
+      primaryEmail,
+      authenticity,
+      existing.id,
+    );
+    return { id: existing.id, requirementsCostMicros: reqMeta.costMicros || 0 };
   }
   const jobId = id("job");
   db.prepare(
-    `INSERT INTO jobs (id, source_id, external_key, title, company, location, remote_type, employment_type, salary_min, salary_max, description, skills, requirements, category, role, source_url, verification, verification_note, primary_company, primary_url, primary_email, active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'full-time', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-  ).run(jobId, sourceId, key, raw.title, raw.company, raw.location || "", raw.remoteType || "", raw.salaryMin || null, raw.salaryMax || null, raw.description || "", JSON.stringify(skills), JSON.stringify(requirements), raw.category || "", raw.role || "", raw.sourceUrl || "", raw.verification, raw.note, primaryCompany, primaryUrl, primaryEmail, Date.now());
-  return jobId;
+    `INSERT INTO jobs (id, source_id, external_key, title, company, location, remote_type, employment_type, salary_min, salary_max, description, skills, requirements, category, role, source_url, verification, verification_note, primary_company, primary_url, primary_email, authenticity, active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+  ).run(
+    jobId,
+    sourceId,
+    key,
+    normalized.title || raw.title,
+    normalized.company || raw.company,
+    normalized.location || raw.location || "",
+    normalized.remote_type || raw.remoteType || "",
+    normalized.employment_type || "full-time",
+    normalized.salary_min ?? raw.salaryMin ?? null,
+    normalized.salary_max ?? raw.salaryMax ?? null,
+    normalized.description || raw.description || "",
+    JSON.stringify(skills),
+    JSON.stringify(requirements),
+    raw.category || normalized.category || "",
+    raw.role || normalized.role || "",
+    normalized.source_url || raw.sourceUrl || "",
+    raw.verification,
+    raw.note,
+    primaryCompany,
+    primaryUrl,
+    primaryEmail,
+    authenticity,
+    Date.now(),
+  );
+  return { id: jobId, requirementsCostMicros: reqMeta.costMicros || 0 };
 }
 
 async function pullSource(source) {
@@ -357,7 +425,13 @@ async function pullSource(source) {
       checked.note = `Apply to ${primary.primaryCompany}. ${checked.note}`;
     }
     seen.add(jobKey(row));
-    saveJob(source.id, { ...row, ...checked, ...primary, note: checked.note });
+    await saveJob(source.id, {
+      ...row,
+      ...checked,
+      ...primary,
+      note: checked.note,
+      authenticity: checked.authenticity,
+    });
   }
   if (source.kind !== "catalog") {
     const existing = db.prepare("SELECT id, external_key FROM jobs WHERE source_id = ? AND active = 1").all(source.id);
@@ -466,7 +540,7 @@ function applyPlan(user, plan, gateway, cycle, externalId, amount, credit) {
 
 async function createApplication(user, job, mode, doc, preferences, facts = [], options = {}) {
   const match = matchJob(doc, preferences, job);
-  const status = TRACKER_STATUSES.includes(options.status) ? options.status : "Ready";
+  let status = TRACKER_STATUSES.includes(options.status) ? options.status : "Ready";
   const shouldDeliver = Boolean(options.deliver) || status === "Applied";
   const needsVersion = !["Found", "Skipped"].includes(status);
   let versionId = null;
@@ -483,12 +557,23 @@ async function createApplication(user, job, mode, doc, preferences, facts = [], 
        VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
     ).run(versionId, user.id, `For ${targetCompany} — ${job.title}`, kind, JSON.stringify(versionDoc), rendered, activeVersion(user.id)?.id || null, Date.now());
   }
+  const questions = draftQuestions(job, doc, preferences, match);
+  const readiness = computeApplicationReadiness({
+    match,
+    application: { questions, match_score: match.score, status },
+    version: versionId ? { rendered, document: "{}" } : null,
+    preferences,
+    verification: job.verification || "",
+  });
+  if (status === "Ready" && readiness.state === "USER_ACTION_REQUIRED" && !options.forceReady) {
+    status = "Review required";
+  }
   if (shouldDeliver && rendered) {
     delivery = await employerDelivery(user, job, rendered);
   } else if (status === "Ready") {
     delivery = "Tailored resume ready for your review. Submit when you want it sent.";
   } else if (status === "Review required") {
-    delivery = options.reason || "Needs your review before submit.";
+    delivery = options.reason || readiness.blockers[0] || "Needs your review before submit.";
   } else if (status === "Found") {
     delivery = "Saved to your tracker.";
   } else if (status === "Skipped") {
@@ -497,7 +582,6 @@ async function createApplication(user, job, mode, doc, preferences, facts = [], 
   if (options.reason && status === "Review required") {
     delivery = options.reason;
   }
-  const questions = draftQuestions(job, doc, preferences, match);
   const now = Date.now();
   db.prepare(
     `INSERT INTO applications (id, user_id, job_id, version_id, mode, status, match_score, target_company, target_url, target_email, delivery, questions, created_at, updated_at)
@@ -519,7 +603,7 @@ async function createApplication(user, job, mode, doc, preferences, facts = [], 
     now,
     now,
   );
-  return { score: match.score, status, match, questions };
+  return { score: match.score, status, match, questions, readiness };
 }
 
 function canAutoApply(job) {

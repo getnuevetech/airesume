@@ -181,8 +181,18 @@ export function registerJobsAdmin(app, ctx) {
       category: String(req.body.category || ""),
       role: String(req.body.role || ""),
     };
-    const checked = await categorizeAndVerify(draft, db.prepare("SELECT id, title, company FROM jobs").all());
-    const jobId = saveJob(source.id, { ...draft, remoteType: String(req.body.remoteType || ""), salaryMin: Number(req.body.salaryMin) || null, salaryMax: Number(req.body.salaryMax) || null, sourceUrl: String(req.body.sourceUrl || ""), externalKey: `${company}-${title}-${Date.now()}`, ...checked, note: checked.note });
-    res.json({ id: jobId });
+    const checked = await categorizeAndVerify(draft, db.prepare("SELECT id, title, company, location, source_url FROM jobs").all());
+    const saved = await saveJob(source.id, {
+      ...draft,
+      remoteType: String(req.body.remoteType || ""),
+      salaryMin: Number(req.body.salaryMin) || null,
+      salaryMax: Number(req.body.salaryMax) || null,
+      sourceUrl: String(req.body.sourceUrl || ""),
+      externalKey: `${company}-${title}-${Date.now()}`,
+      ...checked,
+      note: checked.note,
+      authenticity: checked.authenticity,
+    });
+    res.json({ id: saved.id || saved });
   });
 }

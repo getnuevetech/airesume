@@ -33,12 +33,13 @@ This plan is candidate-product focused. Employer-side work is Phase 3 in the spe
 - Draft retention: delete unactivated drafts within ~30 days
 - Account > Privacy controls: correct, export, delete resume/account
 
-### Slice C — Job intelligence
+### Slice C — Job intelligence — shipping
 
 - Normalize all ingested jobs to the shared schema
 - Dedicated requirement-extraction AI before matching
 - Match labels from thresholds (Strong / Good / Possible / Weak)
 - Job authenticity / duplicate flags on ingest
+- Application readiness engine gates
 
 ### Slice D — Application quality loop
 

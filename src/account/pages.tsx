@@ -1264,6 +1264,14 @@ type ApplyKit = {
   blankCount: number;
   steps: { id: string; title: string; detail: string; ready: boolean }[];
   canComplete: boolean;
+  readiness?: {
+    state: string;
+    matchScore: number;
+    resumeAlignment: number;
+    questionsComplete: number;
+    documentsComplete: number;
+    blockers: string[];
+  };
 };
 
 function BrowserApplyAssistant({
@@ -1317,6 +1325,13 @@ function BrowserApplyAssistant({
                 Keep this open beside the employer form. Copy contact, resume, and answers — JobPilot never invents values.
                 {kit.blankCount ? ` ${kit.blankCount} answer${kit.blankCount === 1 ? "" : "s"} still need you.` : ""}
               </p>
+              {kit.readiness ? (
+                <p className={kit.readiness.state === "APPLICATION_READY" ? "role" : "form-error"} role="status">
+                  {kit.readiness.state === "APPLICATION_READY"
+                    ? `Application ready · match ${kit.readiness.matchScore}% · resume alignment ${kit.readiness.resumeAlignment}%`
+                    : `User action required · ${(kit.readiness.blockers || []).slice(0, 2).join(" ")}`}
+                </p>
+              ) : null}
               <ol className="apply-kit-steps">
                 {kit.steps.map((step) => (
                   <li key={step.id} className={step.ready ? "ready" : "pending"}>

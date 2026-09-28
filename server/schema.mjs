@@ -1,7 +1,7 @@
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -10,6 +10,7 @@ export const AI_FUNCTIONS = [
   { key: "resume_upscale", label: "Resume upscale", detail: "Rewrites accepted recommendations into a new version." },
   { key: "resume_verify", label: "Fact check", detail: "Rejects resume claims that are not in the profile." },
   { key: "job_categorize", label: "Job categorization", detail: "Assigns a category and role to each job." },
+  { key: "job_requirements", label: "Job requirements", detail: "Extracts mandatory and preferred requirements before matching." },
   { key: "job_verify", label: "Job verification", detail: "Checks whether a listing looks active, duplicate, or unclear." },
   { key: "job_primary", label: "Primary recruiter", detail: "Finds the hiring company in a feed listing when the poster is an aggregator." },
   { key: "job_match", label: "Job match", detail: "Explains how a job fits the career profile." },
@@ -354,6 +355,7 @@ export function migrate() {
   addColumn("jobs", "primary_url", "TEXT DEFAULT ''");
   addColumn("jobs", "primary_email", "TEXT DEFAULT ''");
   addColumn("jobs", "requirements", "TEXT DEFAULT '{}'");
+  addColumn("jobs", "authenticity", "TEXT DEFAULT '{}'");
   addColumn("applications", "target_company", "TEXT DEFAULT ''");
   addColumn("applications", "target_url", "TEXT DEFAULT ''");
   addColumn("applications", "target_email", "TEXT DEFAULT ''");

@@ -5,6 +5,7 @@ import { matchJob } from "./match.mjs";
 import { TRACKER_STATUSES, autoDecision } from "./apply-rules.mjs";
 import { fetchJobUrl, parseJobPaste } from "./job-import.mjs";
 import { buildApplyKit } from "./apply-kit.mjs";
+import { computeApplicationReadiness } from "./readiness.mjs";
 
 export function registerApplications(app, ctx) {
   const {
@@ -76,16 +77,18 @@ export function registerApplications(app, ctx) {
       }
       const siblings = db.prepare("SELECT id, title, company FROM jobs").all();
       const checked = await categorizeAndVerify(draft, siblings);
-      const jobId = saveJob(source.id, {
+      const saved = await saveJob(source.id, {
         ...draft,
         externalKey: `paste-${user.id}-${Date.now()}`,
         category: checked.category,
         role: checked.role || draft.role,
         verification: checked.verification,
         note: checked.note,
+        authenticity: checked.authenticity,
         primaryCompany: draft.company,
         primaryUrl: draft.sourceUrl || "",
       });
+      const jobId = saved.id || saved;
       const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
       const version = profile ? activeVersion(user.id) : null;
       const doc = version ? parse(version.document, {}) : { skills: [], employment: [], education: [] };
@@ -159,6 +162,34 @@ export function registerApplications(app, ctx) {
     res.json({ questions: next });
   });
 
+  app.get("/api/applications/:id/readiness", (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    if (!requireFeature(user, "manual_apply", res)) return;
+    const row = db.prepare("SELECT * FROM applications WHERE id = ? AND user_id = ?").get(req.params.id, user.id);
+    if (!row) {
+      res.status(404).json({ error: "Application not found." });
+      return;
+    }
+    const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(row.job_id);
+    const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
+    const version = row.version_id
+      ? db.prepare("SELECT * FROM resume_versions WHERE id = ? AND user_id = ?").get(row.version_id, user.id)
+      : null;
+    const doc = version ? parse(version.document, {}) : { skills: [], employment: [], education: [] };
+    const preferences = profile ? parse(profile.preferences, {}) : {};
+    const match = job ? matchJob(doc, preferences, job) : { score: row.match_score || 0, missing: [], matched: [], requirements: { mandatory: [] } };
+    res.json({
+      readiness: computeApplicationReadiness({
+        match,
+        application: { ...row, questions: parse(row.questions, []) },
+        version,
+        preferences,
+        verification: job?.verification || "",
+      }),
+    });
+  });
+
   app.get("/api/applications/:id/apply-kit", (req, res) => {
     const user = requireUser(req, res);
     if (!user) return;
@@ -181,7 +212,17 @@ export function registerApplications(app, ctx) {
       version,
       preferences: profile ? parse(profile.preferences, {}) : {},
     });
-    res.json({ kit });
+    const doc = version ? parse(version.document, {}) : { skills: [], employment: [], education: [] };
+    const preferences = profile ? parse(profile.preferences, {}) : {};
+    const match = job ? matchJob(doc, preferences, job) : { score: row.match_score || 0, missing: [], matched: [], requirements: { mandatory: [] } };
+    const readiness = computeApplicationReadiness({
+      match,
+      application: { ...row, questions: parse(row.questions, []) },
+      version,
+      preferences,
+      verification: job?.verification || "",
+    });
+    res.json({ kit: { ...kit, readiness }, readiness });
   });
 
   app.post("/api/applications/:id/apply-kit/complete", (req, res) => {
