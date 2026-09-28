@@ -8,6 +8,7 @@ import { buildApplyKit } from "./apply-kit.mjs";
 import { applyKitMetrics, recordApplyKitEvent } from "./apply-kit-metrics.mjs";
 import { computeApplicationReadiness } from "./readiness.mjs";
 import { ensureFollowUpReminder } from "./follow-ups.mjs";
+import { AUTO_APPLY_AUTH_VERSION, autoApplyAuthorizationPayload, validateAutoApplyEnable } from "./auto-apply-auth.mjs";
 
 export function registerApplications(app, ctx) {
   const {
@@ -473,15 +474,35 @@ export function registerApplications(app, ctx) {
   app.put("/api/account/auto-apply", (req, res) => {
     const user = requireUser(req, res);
     if (!user) return;
-    if (req.body.enabled && !requireFeature(user, "auto_apply", res)) return;
+    const enabled = Boolean(req.body.enabled);
+    if (enabled && !requireFeature(user, "auto_apply", res)) return;
+    const decision = validateAutoApplyEnable({
+      enabled,
+      acceptAuthorization: Boolean(req.body.acceptAuthorization),
+      user,
+    });
+    if (!decision.ok) {
+      res.status(400).json({ error: decision.error, authorization: autoApplyAuthorizationPayload(user) });
+      return;
+    }
     const minMatch = Math.max(50, Math.min(99, Number(req.body.minMatch) || 85));
     const dailyCap = Math.max(1, Math.min(25, Number(req.body.dailyCap) || user.auto_daily_cap || 5));
-    db.prepare("UPDATE users SET auto_apply = ?, auto_min = ?, auto_daily_cap = ? WHERE id = ?").run(
-      req.body.enabled ? 1 : 0,
-      minMatch,
-      dailyCap,
-      user.id,
-    );
+    const now = Date.now();
+    if (enabled && decision.renew) {
+      db.prepare(
+        "UPDATE users SET auto_apply = 1, auto_min = ?, auto_daily_cap = ?, auto_apply_authorized_at = ?, auto_apply_auth_version = ? WHERE id = ?",
+      ).run(minMatch, dailyCap, now, AUTO_APPLY_AUTH_VERSION, user.id);
+    } else if (enabled) {
+      db.prepare("UPDATE users SET auto_apply = 1, auto_min = ?, auto_daily_cap = ? WHERE id = ?").run(
+        minMatch,
+        dailyCap,
+        user.id,
+      );
+    } else {
+      db.prepare(
+        "UPDATE users SET auto_apply = 0, auto_min = ?, auto_daily_cap = ? WHERE id = ?",
+      ).run(minMatch, dailyCap, user.id);
+    }
     const profile = db.prepare("SELECT preferences FROM profiles WHERE user_id = ?").get(user.id);
     if (profile) {
       const preferences = {
@@ -495,6 +516,7 @@ export function registerApplications(app, ctx) {
         user.id,
       );
     }
-    res.json({ ok: true });
+    const fresh = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id);
+    res.json({ ok: true, authorization: autoApplyAuthorizationPayload(fresh) });
   });
 }

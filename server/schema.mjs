@@ -1,7 +1,7 @@
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 
-export const SCHEMA_VERSION = 18;
+export const SCHEMA_VERSION = 19;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -76,6 +76,8 @@ export function migrate() {
   addColumn("users", "auto_apply", "INTEGER DEFAULT 0");
   addColumn("users", "auto_min", "INTEGER DEFAULT 85");
   addColumn("users", "auto_daily_cap", "INTEGER DEFAULT 5");
+  addColumn("users", "auto_apply_authorized_at", "INTEGER");
+  addColumn("users", "auto_apply_auth_version", "TEXT DEFAULT ''");
   addColumn("users", "password_must_change", "INTEGER DEFAULT 0");
   addColumn("profiles", "headline", "TEXT DEFAULT ''");
   addColumn("profiles", "photo_url", "TEXT DEFAULT ''");
@@ -390,6 +392,28 @@ export function migrate() {
       due_at INTEGER NOT NULL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS extension_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      token_prefix TEXT NOT NULL,
+      label TEXT DEFAULT 'Browser extension',
+      created_at INTEGER NOT NULL,
+      last_used_at INTEGER,
+      revoked_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS extension_captures (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      source_url TEXT DEFAULT '',
+      title TEXT DEFAULT '',
+      company TEXT DEFAULT '',
+      location TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      job_id TEXT DEFAULT '',
+      application_id TEXT DEFAULT '',
+      created_at INTEGER NOT NULL
     );
   `);
 

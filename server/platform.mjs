@@ -22,6 +22,8 @@ import { registerCareer } from "./routes-career.mjs";
 import { registerInterview } from "./routes-interview.mjs";
 import { registerVoice } from "./routes-voice.mjs";
 import { registerFollowUps } from "./routes-follow-ups.mjs";
+import { registerExtension } from "./routes-extension.mjs";
+import { autoApplyAuthorizationPayload } from "./auto-apply-auth.mjs";
 
 migrate();
 
@@ -763,6 +765,16 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
   registerFollowUps(app, {
     requireUser,
     requireFeature,
+  });
+  registerExtension(app, {
+    requireUser,
+    requireFeature,
+    featuresOf,
+    createApplication,
+    activeVersion,
+    parse,
+    categorizeAndVerify,
+    saveJob,
   });
 }
 

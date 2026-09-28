@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>JobPilot Capture</title>
+    <style>
+      body {
+        font: 13px/1.4 system-ui, sans-serif;
+        margin: 0;
+        padding: 12px;
+        width: 320px;
+        color: #10233f;
+        background: #f7f9fb;
+      }
+      h1 {
+        font-size: 15px;
+        margin: 0 0 8px;
+      }
+      label {
+        display: grid;
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+      input,
+      textarea,
+      select,
+      button {
+        font: inherit;
+      }
+      input,
+      textarea,
+      select {
+        padding: 6px 8px;
+        border: 1px solid #c9d4e2;
+        border-radius: 8px;
+      }
+      button {
+        border: 0;
+        border-radius: 8px;
+        padding: 8px 10px;
+        background: #0f8b5c;
+        color: #fff;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #dfe7f0;
+        color: #10233f;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      .row button {
+        flex: 1;
+      }
+      .status {
+        margin-top: 8px;
+        color: #5b6b7c;
+      }
+      .error {
+        color: #b42318;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Capture to JobPilot</h1>
+    <label>
+      API base
+      <input id="apiBase" placeholder="http://localhost:3000" />
+    </label>
+    <label>
+      Extension token
+      <input id="token" type="password" placeholder="jpxt_…" autocomplete="off" />
+    </label>
+    <label>
+      Title
+      <input id="title" />
+    </label>
+    <label>
+      Company
+      <input id="company" />
+    </label>
+    <label>
+      Location
+      <input id="location" />
+    </label>
+    <label>
+      Description
+      <textarea id="description" rows="5"></textarea>
+    </label>
+    <div class="row">
+      <button id="refresh" class="secondary" type="button">Re-scan page</button>
+      <button id="track" type="button">Track</button>
+    </div>
+    <div class="row" style="margin-top: 8px">
+      <button id="prepare" type="button">Assisted Apply</button>
+      <button id="save" class="secondary" type="button">Save settings</button>
+    </div>
+    <p id="status" class="status">Open a job listing, then capture.</p>
+    <script src="popup.js"></script>
+  </body>
+</html>

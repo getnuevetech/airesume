@@ -55,11 +55,18 @@ This plan is candidate-product focused. Employer-side work is Phase 3 in the spe
 - Follow-up reminders
 - Browser extension capture (later)
 
+### Slice F — Extension, Auto-Apply auth, media & security — shipping
+
+- Browser extension capture (MV3 unpacked)
+- Controlled Auto Apply authorization UX
+- WebRTC TURN/STUN configuration for interview rooms
+- Security headers, auth/extract rate limits, extension token hashing
+
 ### Explicitly deferred
 
-- Controlled Auto Apply (needs separate authorization UX)
-- Employer accounts, candidate search, employer postings
-- Voice interview rooms / WebRTC production hardening beyond current experiments
+- Store distribution of the browser extension
+- Managed TURN hosting beyond environment configuration
+- Voice interview rooms / WebRTC production hardening beyond TURN env + signaling already shipped
 
 ## Acceptance checks for Slice A
 

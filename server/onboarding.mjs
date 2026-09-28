@@ -223,6 +223,8 @@ export function deleteAccountData(userId) {
     ["employer_profiles", "user_id = ?"],
     ["voice_practice_sessions", "user_id = ?"],
     ["follow_up_reminders", "user_id = ?"],
+    ["extension_captures", "user_id = ?"],
+    ["extension_tokens", "user_id = ?"],
     ["match_explanation_views", "user_id = ?"],
     ["apply_kit_events", "user_id = ?"],
     ["applications", "user_id = ?"],

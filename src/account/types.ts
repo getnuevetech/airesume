@@ -64,6 +64,19 @@ export type AccountData = {
   autoMin: number;
   autoDailyCap: number;
   autoCapUsed: number;
+  autoApplyAuthorization?: {
+    version: string;
+    text: string;
+    authorized: boolean;
+    authorizedAt: number | null;
+    currentVersion?: string | null;
+  };
+  media?: {
+    serverCount: number;
+    hasTurn: boolean;
+    hasStun: boolean;
+    productionReady: boolean;
+  };
   matchQuota?: {
     limit: number;
     used: number;

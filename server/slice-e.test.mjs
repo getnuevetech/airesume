@@ -12,8 +12,8 @@ import {
 import { migrate, SCHEMA_VERSION } from "./schema.mjs";
 import { db, id } from "./db.mjs";
 
-test("schema version is 18 for follow-up reminders", () => {
-  assert.equal(SCHEMA_VERSION, 18);
+test("schema includes follow-up reminders table", () => {
+  assert.ok(SCHEMA_VERSION >= 18);
   migrate();
   const columns = db.prepare("PRAGMA table_info(follow_up_reminders)").all();
   assert.ok(columns.some((column) => column.name === "due_at"));
