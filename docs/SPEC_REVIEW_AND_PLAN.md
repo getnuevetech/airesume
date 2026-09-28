@@ -25,7 +25,7 @@ This plan is candidate-product focused. Employer-side work is Phase 3 in the spe
 - Admin public HTML/JSON/RSS job sources without requiring login
 - Confirm-screen warnings synced to cleaned profile fields
 
-### Slice B — Spec Phase 1 completion (candidate)
+### Slice B — Spec Phase 1 completion (candidate) — in progress / shipping
 
 - Email OTP / magic-link activation (reduce password-first friction)
 - Dynamic missing-data interview only for absent preferences

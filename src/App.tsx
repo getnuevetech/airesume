@@ -21,6 +21,7 @@ import { ResetPasswordPage } from "./pages/ResetPassword";
 import { SignInPage } from "./pages/SignIn";
 import { StoriesPage } from "./pages/Stories";
 import { InterviewRoomPage } from "./pages/InterviewRoom";
+import { VerifyPage } from "./pages/Verify";
 
 export default function App() {
   return (
@@ -68,6 +69,7 @@ export default function App() {
             <Route path="forgot-password" element={<ForgotPasswordPage />} />
             <Route path="reset-password" element={<ResetPasswordPage />} />
             <Route path="get-started" element={<GetStartedPage />} />
+            <Route path="verify" element={<VerifyPage />} />
             <Route path="employers" element={<EmployerLandingPage />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="contact" element={<ContactPage />} />

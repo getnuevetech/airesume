@@ -119,5 +119,6 @@ export function publicUser(row) {
     status: row.status,
     planId: row.plan_id || "free",
     mustChangePassword: Boolean(row.password_must_change),
+    hasPassword: Boolean(row.password_hash),
   };
 }

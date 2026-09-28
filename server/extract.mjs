@@ -518,6 +518,57 @@ export async function extractCareerProfile(text) {
       "The assigned model was unavailable, so a rules-based extraction was used.",
     ];
   }
+
+  const reviewAi = await completeJson(
+    "career_review",
+    prompts.CAREER_REVIEW_V1,
+    JSON.stringify({
+      resume: source.slice(0, 10000),
+      profile: {
+        name: reviewed.name,
+        email: reviewed.email,
+        phone: reviewed.phone,
+        address: reviewed.address,
+        city: reviewed.city,
+        summary: reviewed.summary,
+        skills: reviewed.skills,
+        employment: reviewed.employment,
+        education: reviewed.education,
+      },
+    }),
+  );
+  reviewed.costMicros = (reviewed.costMicros || 0) + (reviewAi.costMicros || 0);
+  reviewed.reviewer = { provider: reviewAi.provider, model: reviewAi.model };
+  if (reviewAi.json) {
+    const unsupported = Array.isArray(reviewAi.json.unsupported)
+      ? reviewAi.json.unsupported.map(String).filter(Boolean)
+      : [];
+    const notes = Array.isArray(reviewAi.json.notes) ? reviewAi.json.notes.map(String).filter(Boolean) : [];
+    if (unsupported.length) {
+      reviewed.warnings = [
+        ...(reviewed.warnings || []),
+        "A second review flagged some extracted details for your confirmation.",
+      ];
+      reviewed.review = {
+        ...(reviewed.review || {}),
+        status: "adjusted",
+        unsupported: [...new Set([...(reviewed.review?.unsupported || []), ...unsupported])],
+        reviewerPrompt: "CAREER_REVIEW_V1",
+      };
+    }
+    for (const note of notes.slice(0, 4)) {
+      if (!reviewed.questions.includes(note)) reviewed.questions.push(note);
+    }
+    if (String(reviewAi.json.status || "").toLowerCase() === "fail" && !unsupported.length) {
+      reviewed.warnings = [
+        ...(reviewed.warnings || []),
+        "A second review asked for confirmation before using every extracted detail.",
+      ];
+    }
+  } else if (reviewAi.error) {
+    reviewed.warnings = [...(reviewed.warnings || []), "Secondary fact review was unavailable; deterministic checks were used."];
+  }
+
   return reviewed;
 }
 

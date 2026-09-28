@@ -18,6 +18,15 @@ import { cleanResumeText, extractCareerProfile, readResumeFile } from "./extract
 import { registerPlatform, syncProfileVersion } from "./platform.mjs";
 import { deliverMail, publicMailSettings, saveMailSettings } from "./mail.mjs";
 import { auditCostSummary, moneyFromMicros } from "./ai-cost.mjs";
+import {
+  activateFromRow,
+  createEmailActivation,
+  deleteAccountData,
+  exportAccountBundle,
+  findActivation,
+  missingPreferenceFields,
+  purgeExpiredDrafts,
+} from "./onboarding.mjs";
 import { registerEmployer } from "./routes-employer.mjs";
 import { registerEmployerVoice } from "./routes-employer-voice.mjs";
 import { registerEmployerPostings } from "./routes-employer-postings.mjs";
@@ -29,6 +38,7 @@ const homepageFile = join(here, "..", "shared", "homepage.json");
 const defaultHomepage = JSON.parse(readFileSync(homepageFile, "utf8"));
 
 function seed() {
+  purgeExpiredDrafts();
   const existing = db.prepare("SELECT value FROM settings WHERE key = 'homepage'").get();
   if (!existing) {
     db.prepare("INSERT INTO settings (key, value) VALUES ('homepage', ?)").run(JSON.stringify(defaultHomepage));
@@ -192,6 +202,10 @@ app.post("/api/auth/login", (req, res) => {
   }
   if (user.provider === "google") {
     res.status(401).json({ error: "That email uses Continue with Google." });
+    return;
+  }
+  if (!user.password_hash) {
+    res.status(401).json({ error: "That account signs in with an email activation link. Use Forgot password after setting one in Settings, or Continue with Google if linked." });
     return;
   }
   if (!verifyPassword(password, user.password_hash)) {
@@ -410,6 +424,7 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
     });
     return;
   }
+  purgeExpiredDrafts();
   const extracted = await extractCareerProfile(text);
   const draftId = id("draft");
   const payload = { ...extracted, resumeName: filename, rawText: text };
@@ -425,6 +440,20 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
     status: extracted.review?.status || "pass",
     detail: filename,
     costMicros: extracted.costMicros || 0,
+  });
+  if (extracted.reviewer) {
+    audit({
+      functionName: "career_fact_review",
+      provider: extracted.reviewer.provider,
+      model: extracted.reviewer.model,
+      status: extracted.review?.status || "pass",
+      detail: filename,
+      costMicros: 0,
+    });
+  }
+  const missingPreferences = missingPreferenceFields({}, {
+    city: extracted.city,
+    address: extracted.address,
   });
   res.json({
     draftId,
@@ -442,12 +471,13 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
     facts: extracted.facts,
     questions: extracted.questions,
     warnings: extracted.warnings || [],
+    missingPreferences,
     provider: extracted.provider,
     model: extracted.model,
   });
 });
 
-app.post("/api/onboarding/activate", (req, res) => {
+app.post("/api/onboarding/activate", async (req, res) => {
   const draft = db.prepare("SELECT * FROM drafts WHERE id = ?").get(String(req.body.draftId || ""));
   if (!draft) {
     res.status(400).json({ error: "That resume draft expired. Upload the file again." });
@@ -457,17 +487,14 @@ app.post("/api/onboarding/activate", (req, res) => {
     res.status(400).json({ error: "Agree to the terms to create the account." });
     return;
   }
-  const password = String(req.body.password || "");
-  if (password.length < 8) {
-    res.status(400).json({ error: "Use at least 8 characters for your password." });
-    return;
-  }
   const payload = JSON.parse(draft.payload);
   const name = String(req.body.name || payload.name || "").trim();
   const email = String(req.body.email || payload.email || "").trim().toLowerCase();
   const phone = String(req.body.phone || payload.phone || "").trim();
   const address = String(req.body.address || payload.address || "").trim();
   const city = String(req.body.city || payload.city || "").trim();
+  const password = String(req.body.password || "");
+  const mode = String(req.body.mode || (password ? "password" : "magic")).toLowerCase();
   if (name.length < 2) {
     res.status(400).json({ error: "Enter the name for this account." });
     return;
@@ -480,37 +507,91 @@ app.post("/api/onboarding/activate", (req, res) => {
     res.status(409).json({ error: "An account with this email already exists. Sign in instead." });
     return;
   }
-  const userId = id("usr");
-  db.prepare(
-    `INSERT INTO users (id, name, email, phone, address, city, password_hash, provider, role, status, consent_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'email', 'user', 'active', ?, ?)`,
-  ).run(userId, name, email, phone, address, city, hashPassword(password), Date.now(), Date.now());
-  const facts = (payload.facts || []).map((fact) => ({ ...fact, verified_by_user: true }));
-  db.prepare(
-    `INSERT INTO profiles (user_id, summary, skills, employment, education, facts, preferences, raw_text, resume_name, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    userId,
-    String(req.body.summary || payload.summary || ""),
-    JSON.stringify(payload.skills || []),
-    JSON.stringify(payload.employment || []),
-    JSON.stringify(payload.education || []),
-    JSON.stringify(facts),
-    JSON.stringify({
-      salary: String(req.body.salary || ""),
-      workArrangement: String(req.body.workArrangement || ""),
-      locations: String(req.body.locations || ""),
-      workAuthorization: String(req.body.workAuthorization || ""),
-    }),
-    payload.rawText || "",
-    payload.resumeName || "",
-    Date.now(),
-  );
-  db.prepare("DELETE FROM drafts WHERE id = ?").run(draft.id);
-  syncProfileVersion(userId);
-  setSession(res, userId, req);
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
-  res.json({ user: publicUser(user) });
+  const preferences = {
+    salary: String(req.body.salary || ""),
+    workArrangement: String(req.body.workArrangement || ""),
+    locations: String(req.body.locations || ""),
+    workAuthorization: String(req.body.workAuthorization || ""),
+  };
+  const activationPayload = {
+    draftId: draft.id,
+    name,
+    email,
+    phone,
+    address,
+    city,
+    summary: String(req.body.summary || payload.summary || ""),
+    skills: payload.skills || [],
+    employment: payload.employment || [],
+    education: payload.education || [],
+    facts: payload.facts || [],
+    preferences,
+    rawText: payload.rawText || "",
+    resumeName: payload.resumeName || "",
+    consentAt: Date.now(),
+    password: mode === "password" ? password : "",
+  };
+
+  if (mode === "password") {
+    if (password.length < 8) {
+      res.status(400).json({ error: "Use at least 8 characters for your password, or activate with an email link instead." });
+      return;
+    }
+    try {
+      const fakeRow = {
+        id: id("act"),
+        payload: JSON.stringify(activationPayload),
+        email,
+      };
+      const userId = activateFromRow(fakeRow);
+      syncProfileVersion(userId);
+      setSession(res, userId, req);
+      const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+      res.json({ user: publicUser(user), pending: false });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Could not create the account." });
+    }
+    return;
+  }
+
+  try {
+    const activation = await createEmailActivation({
+      origin: originOf(req),
+      payload: activationPayload,
+    });
+    res.json({
+      pending: true,
+      email: activation.email,
+      message: activation.sent
+        ? "Check your email for an activation link or code."
+        : "Email delivery is not configured on this server. Use the link or code below to activate.",
+      devLink: activation.devLink,
+      devCode: activation.devCode,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Could not start email activation." });
+  }
+});
+
+app.post("/api/onboarding/verify", (req, res) => {
+  try {
+    const row = findActivation({
+      token: String(req.body.token || ""),
+      code: String(req.body.code || ""),
+      email: String(req.body.email || ""),
+    });
+    if (!row) {
+      res.status(400).json({ error: "This activation link or code is invalid or expired." });
+      return;
+    }
+    const userId = activateFromRow(row);
+    syncProfileVersion(userId);
+    setSession(res, userId, req);
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+    res.json({ user: publicUser(user), pending: false });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Could not activate the account." });
+  }
 });
 
 app.get("/api/profile", (req, res) => {
@@ -715,15 +796,19 @@ app.post("/api/account/password", (req, res) => {
     return;
   }
   const next = String(req.body.password || "");
-  if (!verifyPassword(String(req.body.current || ""), user.password_hash)) {
+  if (user.password_hash && !verifyPassword(String(req.body.current || ""), user.password_hash)) {
     res.status(400).json({ error: "The current password does not match." });
+    return;
+  }
+  if (!user.password_hash && String(req.body.current || "")) {
+    res.status(400).json({ error: "This account does not have a password yet. Leave current password blank." });
     return;
   }
   if (next.length < 8) {
     res.status(400).json({ error: "Use at least 8 characters." });
     return;
   }
-  if (next === String(req.body.current || "")) {
+  if (user.password_hash && next === String(req.body.current || "")) {
     res.status(400).json({ error: "Choose a new password that is different from the current one." });
     return;
   }
@@ -737,6 +822,44 @@ app.post("/api/account/password", (req, res) => {
     // Best-effort wipe of the bootstrap password copy.
   }
   res.json({ ok: true, user: publicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id)) });
+});
+
+app.get("/api/account/export", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const bundle = exportAccountBundle(user.id);
+  if (!bundle) {
+    res.status(404).json({ error: "Account not found." });
+    return;
+  }
+  res.json(bundle);
+});
+
+app.post("/api/account/delete", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user) return;
+  if (user.role === "admin") {
+    const admins = db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND status = 'active'").get();
+    if (Number(admins?.count || 0) <= 1) {
+      res.status(400).json({ error: "Create another admin before deleting the last admin account." });
+      return;
+    }
+  }
+  const confirm = String(req.body.confirm || "").trim().toLowerCase();
+  if (confirm !== user.email.toLowerCase()) {
+    res.status(400).json({ error: "Type your email address to confirm account deletion." });
+    return;
+  }
+  if (user.provider === "email" && user.password_hash) {
+    if (!verifyPassword(String(req.body.password || ""), user.password_hash)) {
+      res.status(400).json({ error: "The password does not match." });
+      return;
+    }
+  }
+  const token = cookie(req, "jp_session");
+  deleteAccountData(user.id);
+  if (token) clearSession(res, req);
+  res.json({ ok: true });
 });
 
 registerEmployer(app, { requireUser, setSession });

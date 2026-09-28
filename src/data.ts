@@ -8,6 +8,7 @@ export type User = {
   status?: string;
   planId?: string;
   mustChangePassword?: boolean;
+  hasPassword?: boolean;
 };
 
 export type ResumeFile = {

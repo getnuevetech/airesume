@@ -71,11 +71,17 @@ Browser
 
 ### Active next (candidate product — see `docs/SPEC_REVIEW_AND_PLAN.md`)
 
-1. Email OTP / magic-link activation
-2. Missing-preference interview after resume confirm
-3. Draft retention / deletion for unactivated uploads
-4. Account privacy controls (export / delete)
-5. Stronger second-model career fact review
+1. ~~Email OTP / magic-link activation~~ (done on `cursor/onboarding-otp-privacy-b068`)
+2. ~~Missing-preference interview after resume confirm~~
+3. ~~Draft retention / deletion for unactivated uploads~~
+4. ~~Account privacy controls (export / delete)~~
+5. ~~Stronger second-model career fact review~~
+
+Next after Slice B:
+1. Shared job schema hardening + authenticity/duplicate flags
+2. Requirement-extraction AI before matching
+3. Threshold match labels polish
+4. Application readiness engine gates
 
 ### Deferred unless explicitly requested
 

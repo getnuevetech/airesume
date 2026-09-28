@@ -1,9 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { TermsAgreement } from "../components/TermsAgreement";
 import { UploadPanel } from "../components/UploadPanel";
 import { useApp } from "../context/AppContext";
+
+type PrefField = { key: string; label: string; placeholder: string; question: string };
 
 type Draft = {
   draftId: string;
@@ -21,6 +23,7 @@ type Draft = {
   facts: { fact_id: string; statement: string; confidence: number }[];
   questions: string[];
   warnings?: string[];
+  missingPreferences?: PrefField[];
   provider?: string;
   model?: string;
 };
@@ -36,6 +39,7 @@ export function GetStartedPage() {
   const [city, setCity] = useState("");
   const [summary, setSummary] = useState("");
   const [password, setPassword] = useState("");
+  const [usePassword, setUsePassword] = useState(false);
   const [salary, setSalary] = useState("");
   const [workArrangement, setWorkArrangement] = useState("");
   const [locations, setLocations] = useState("");
@@ -45,6 +49,9 @@ export function GetStartedPage() {
   const [directName, setDirectName] = useState("");
   const [directEmail, setDirectEmail] = useState("");
   const [directPassword, setDirectPassword] = useState("");
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [devLink, setDevLink] = useState("");
+  const [devCode, setDevCode] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -72,12 +79,41 @@ export function GetStartedPage() {
     return () => window.removeEventListener("jp-draft", apply);
   }, []);
 
+  const prefValues = useMemo(
+    () => ({ salary, workArrangement, locations, workAuthorization }),
+    [salary, workArrangement, locations, workAuthorization],
+  );
+
+  const missingPrefs = useMemo(() => {
+    const listed = draft?.missingPreferences;
+    if (listed?.length) {
+      return listed.filter((field) => !String(prefValues[field.key as keyof typeof prefValues] || "").trim());
+    }
+    const fields: PrefField[] = [
+      { key: "salary", label: "Target salary", placeholder: "Optional", question: "What minimum salary are you targeting?" },
+      { key: "workArrangement", label: "Work arrangement", placeholder: "Remote, hybrid, or on-site", question: "Are you open to remote, hybrid, or on-site work?" },
+      { key: "locations", label: "Locations", placeholder: "Optional", question: "Which locations are acceptable?" },
+      { key: "workAuthorization", label: "Work authorization", placeholder: "You confirm this. We do not guess it.", question: "Are you authorized to work in the target country?" },
+    ];
+    return fields.filter((field) => {
+      if (field.key === "locations" && city.trim()) return false;
+      return !String(prefValues[field.key as keyof typeof prefValues] || "").trim();
+    });
+  }, [draft, prefValues, city]);
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (!draft) return;
     setError("");
     try {
-      await api("/api/onboarding/activate", {
+      const result = await api<{
+        pending?: boolean;
+        email?: string;
+        message?: string;
+        devLink?: string;
+        devCode?: string;
+        user?: unknown;
+      }>("/api/onboarding/activate", {
         method: "POST",
         body: JSON.stringify({
           draftId: draft.draftId,
@@ -87,7 +123,8 @@ export function GetStartedPage() {
           address,
           city,
           summary,
-          password,
+          password: usePassword ? password : "",
+          mode: usePassword ? "password" : "magic",
           salary,
           workArrangement,
           locations,
@@ -95,6 +132,13 @@ export function GetStartedPage() {
           consent,
         }),
       });
+      if (result.pending) {
+        setPendingEmail(result.email || email);
+        setDevLink(result.devLink || "");
+        setDevCode(result.devCode || "");
+        notify(result.message || "Check your email to activate.");
+        return;
+      }
       sessionStorage.removeItem("jp-draft");
       await refresh();
       notify("Account created from your resume.");
@@ -123,6 +167,32 @@ export function GetStartedPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create the account.");
     }
+  }
+
+  if (pendingEmail) {
+    return (
+      <div className="container auth-wrap">
+        <div className="auth-card">
+          <p className="eyebrow">Check your email</p>
+          <h1>Confirm {pendingEmail}</h1>
+          <p className="lede">
+            We sent an activation link and a one-time code. Open the link, or enter the code on the verify page, to finish your account.
+          </p>
+          {devLink ? (
+            <p className="role">
+              Dev activation link: <Link to={devLink.replace(/^https?:\/\/[^/]+/, "")}>{devLink}</Link>
+            </p>
+          ) : null}
+          {devCode ? <p className="role">Dev code: {devCode}</p> : null}
+          <Link className="btn btn-primary btn-block" to={`/verify?email=${encodeURIComponent(pendingEmail)}`}>
+            Enter activation code
+          </Link>
+          <p className="fine-print">
+            Wrong email? <button className="text-btn" type="button" onClick={() => setPendingEmail("")}>Go back</button>
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (!draft) {
@@ -170,16 +240,21 @@ export function GetStartedPage() {
     );
   }
 
+  const setters: Record<string, (value: string) => void> = {
+    salary: setSalary,
+    workArrangement: setWorkArrangement,
+    locations: setLocations,
+    workAuthorization: setWorkAuthorization,
+  };
+
   return (
     <div className="container start-grid">
       <div className="page-hero">
         <p className="eyebrow">Confirm your profile</p>
         <h1>We drafted your account from the resume.</h1>
         <p className="lede">
-          {draft.provider && draft.model
-            ? `Extracted with ${draft.provider} (${draft.model}). `
-            : ""}
-          Nothing here is invented. Correct anything that is outdated, then activate the account.
+          {draft.provider && draft.model ? `Extracted with ${draft.provider} (${draft.model}). ` : ""}
+          Nothing here is invented. Correct anything that is outdated, then activate with your email.
         </p>
         {(draft.warnings || []).map((warning) => (
           <p className="form-error" role="alert" key={warning}>
@@ -191,6 +266,18 @@ export function GetStartedPage() {
             {draft.questions.join(" ")}
           </p>
         ) : null}
+        {missingPrefs.length ? (
+          <div className="pref-questions">
+            <p className="role">Only these preferences are still needed:</p>
+            <ul className="fact-list">
+              {missingPrefs.map((field) => (
+                <li key={field.key}>{field.question}</li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="role">Preferences look complete enough to start matching after activation.</p>
+        )}
         <div className="chips">
           {draft.profile.skills.map((skill) => (
             <span className="chip" key={skill}>
@@ -242,29 +329,31 @@ export function GetStartedPage() {
           <span>Summary</span>
           <textarea rows={4} value={summary} onChange={(event) => setSummary(event.target.value)} />
         </label>
-        <label className="field">
-          <span>Target salary</span>
-          <input value={salary} onChange={(event) => setSalary(event.target.value)} placeholder="Optional" />
+        {missingPrefs.map((field) => (
+          <label className="field" key={field.key}>
+            <span>{field.label}</span>
+            <input
+              value={prefValues[field.key as keyof typeof prefValues]}
+              onChange={(event) => setters[field.key]?.(event.target.value)}
+              placeholder={field.placeholder}
+            />
+          </label>
+        ))}
+        <label className="check-row">
+          <input type="checkbox" checked={usePassword} onChange={(event) => setUsePassword(event.target.checked)} />
+          <span>Set a password now instead of email activation</span>
         </label>
-        <label className="field">
-          <span>Work arrangement</span>
-          <input value={workArrangement} onChange={(event) => setWorkArrangement(event.target.value)} placeholder="Remote, hybrid, or on-site" />
-        </label>
-        <label className="field">
-          <span>Locations</span>
-          <input value={locations} onChange={(event) => setLocations(event.target.value)} placeholder="Optional" />
-        </label>
-        <label className="field">
-          <span>Work authorization</span>
-          <input value={workAuthorization} onChange={(event) => setWorkAuthorization(event.target.value)} placeholder="You confirm this. We do not guess it." />
-        </label>
-        <label className="field">
-          <span>Password</span>
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required />
-        </label>
+        {usePassword ? (
+          <label className="field">
+            <span>Password</span>
+            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required />
+          </label>
+        ) : (
+          <p className="role">We will email a one-time activation link and code to confirm this address.</p>
+        )}
         <TermsAgreement checked={consent} onChange={setConsent} includeResume />
         <button className="btn btn-primary btn-block" type="submit" disabled={Boolean(user)}>
-          Create account
+          {usePassword ? "Create account" : "Email me an activation link"}
         </button>
         <p className="fine-print">
           Already have an account? <Link to="/signin">Sign in</Link>

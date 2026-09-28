@@ -712,6 +712,8 @@ button { cursor: pointer; }
 }
 .ticks { margin: 18px 0 0; padding-left: 18px; color: #24324a; display: grid; gap: 6px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.fact-list { margin: 8px 0 0; padding-left: 18px; color: #3d4d66; }
+.fact-list li { margin: 6px 0; }
 .chip {
   background: var(--green-soft);
   color: #067a52;
@@ -837,6 +839,16 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
 }
 .legal-section li {
   margin: 6px 0;
+}
+.pref-questions { margin-top: 12px; }
+.danger-zone {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e6ebf2;
+}
+.danger-zone h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
 }
 
 .admin-shell {

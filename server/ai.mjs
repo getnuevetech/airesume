@@ -8,8 +8,16 @@ Rules:
 - confidence is a number from 0 to 1.
 - source is always "uploaded_resume".`;
 
+const REVIEW_V1 = `You review an extracted career profile against the original resume text.
+Return strict JSON with keys: status ("pass" or "fail"), unsupported (string array of field names or short claim labels that are not clearly supported), notes (string array of short clarification questions).
+Rules:
+- Mark any invented employer, date, skill, metric, or contact detail as unsupported.
+- Do not rewrite the profile. Only report problems.
+- If everything is supported, status is "pass" and unsupported is [].`;
+
 export const prompts = {
   CAREER_EXTRACTION_V1: EXTRACTION_V1,
+  CAREER_REVIEW_V1: REVIEW_V1,
 };
 
 export function routing() {

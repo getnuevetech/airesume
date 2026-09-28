@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
 import { useAccount } from "./AccountContext";
@@ -1556,10 +1556,14 @@ export function PlanPage() {
 export function SettingsPage() {
   const { user, refresh, notify } = useApp();
   const { data, reload, setMessage, setError } = useAccount();
+  const navigate = useNavigate();
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
   if (!data && !user?.mustChangePassword) return null;
   const link = data?.profile?.slug ? `${window.location.origin}/resume/${data.profile.slug}` : "";
+  const needsCurrentPassword = Boolean(user?.provider === "email" && user?.hasPassword);
   return (
     <div className="account-page">
       <header className="account-head">
@@ -1595,11 +1599,71 @@ export function SettingsPage() {
             .catch((err: Error) => setError(err.message));
         }}>
           <h2>{user?.mustChangePassword ? "Choose a new password" : "Password"}</h2>
-          <label className="field"><span>Current password</span><input type="password" value={current} onChange={(event) => setCurrent(event.target.value)} required /></label>
+          {needsCurrentPassword || user?.mustChangePassword ? (
+            <label className="field"><span>Current password</span><input type="password" value={current} onChange={(event) => setCurrent(event.target.value)} required /></label>
+          ) : (
+            <p className="role">This account was activated by email. Set a password to sign in with email next time.</p>
+          )}
           <label className="field"><span>New password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required /></label>
           <button className="btn btn-primary btn-sm" type="submit">Update password</button>
         </form>
       ) : null}
+      <section className="account-card">
+        <h2>Privacy</h2>
+        <p className="role">Download a copy of your account data, or permanently delete your account and profile.</p>
+        <div className="admin-actions">
+          <button
+            className="btn btn-ghost btn-sm"
+            type="button"
+            onClick={() => {
+              void api("/api/account/export")
+                .then((bundle) => {
+                  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const anchor = document.createElement("a");
+                  anchor.href = url;
+                  anchor.download = `jobpilot-export-${user?.id || "account"}.json`;
+                  anchor.click();
+                  URL.revokeObjectURL(url);
+                  setMessage("Export downloaded.");
+                })
+                .catch((err: Error) => setError(err.message));
+            }}
+          >
+            Export my data
+          </button>
+        </div>
+        <form
+          className="danger-zone"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!window.confirm("Delete this account permanently? This cannot be undone.")) return;
+            void api("/api/account/delete", {
+              method: "POST",
+              body: JSON.stringify({ confirm: deleteConfirm, password: deletePassword }),
+            })
+              .then(async () => {
+                notify("Account deleted.");
+                await refresh();
+                navigate("/");
+              })
+              .catch((err: Error) => setError(err.message));
+          }}
+        >
+          <h3>Delete account</h3>
+          <label className="field">
+            <span>Type your email to confirm</span>
+            <input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} required />
+          </label>
+          {user?.provider === "email" ? (
+            <label className="field">
+              <span>Password</span>
+              <input type="password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} />
+            </label>
+          ) : null}
+          <button className="btn btn-ghost btn-sm" type="submit">Delete my account</button>
+        </form>
+      </section>
       <section className="account-card">
         <h2>Session</h2>
         <p className="role">Signed in as {user?.email}. Plan changes and template access refresh when you save them.</p>

@@ -1,10 +1,11 @@
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
+  { key: "career_review", label: "Career fact review", detail: "Second-pass review of extracted career facts against the resume text." },
   { key: "resume_diagnostic", label: "Resume review", detail: "Rates the resume and writes recommendations." },
   { key: "resume_upscale", label: "Resume upscale", detail: "Rewrites accepted recommendations into a new version." },
   { key: "resume_verify", label: "Fact check", detail: "Rejects resume claims that are not in the profile." },
@@ -83,6 +84,17 @@ export function migrate() {
   addColumn("mail_outbox", "error", "TEXT DEFAULT ''");
   addColumn("ai_audit", "cost_micros", "INTEGER DEFAULT 0");
   db.exec(`
+    CREATE TABLE IF NOT EXISTS email_activations (
+      id TEXT PRIMARY KEY,
+      draft_id TEXT,
+      email TEXT NOT NULL COLLATE NOCASE,
+      token_hash TEXT NOT NULL,
+      code_hash TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER,
+      created_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS employer_profiles (
       user_id TEXT PRIMARY KEY,
       company_name TEXT NOT NULL,
