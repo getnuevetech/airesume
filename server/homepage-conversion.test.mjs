@@ -11,7 +11,7 @@ test("homepage conversion content covers Spec §53 sections", () => {
   assert.ok(homepage.hero.titleLines.length >= 2);
   assert.match(homepage.hero.titleLines.join(" "), /Better applications/i);
   assert.equal(homepage.hero.uploadLabel, "Upload Resume");
-  assert.equal(homepage.hero.continueLabel, "Select a resume to continue");
+  assert.equal(homepage.hero.continueLabel, "Submit Resume");
   assert.ok(homepage.hero.image);
   assert.ok(homepage.trust.items.length >= 4);
   assert.equal(homepage.how.steps.length, 4);

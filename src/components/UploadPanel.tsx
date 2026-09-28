@@ -144,7 +144,7 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
           {selected ? hero.changeFileLabel || "Choose a different file" : hero.uploadLabel}
         </button>
         <button className="btn btn-primary" type="button" disabled={busy || !selected || !consent} onClick={() => void uploadSelected()}>
-          {busy ? "Reading..." : selected ? hero.continueSelectedLabel || "Continue with this resume" : hero.continueLabel || "Select a resume to continue"}
+          {busy ? "Reading..." : selected ? hero.continueSelectedLabel || "Continue with this resume" : hero.continueLabel || "Submit Resume"}
         </button>
       </div>
       <p className="or-text">{hero.orLabel}</p>

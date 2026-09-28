@@ -11,8 +11,8 @@ import { iceConfigSummary, resolveIceServers } from "./webrtc-signaling.mjs";
 import { migrate, SCHEMA_VERSION } from "./schema.mjs";
 import { db } from "./db.mjs";
 
-test("schema version is 22 for admin MFA columns", () => {
-  assert.equal(SCHEMA_VERSION, 22);
+test("schema version includes admin MFA and homepage CTA patches", () => {
+  assert.equal(SCHEMA_VERSION, 23);
   migrate();
   assert.ok(db.prepare("PRAGMA table_info(users)").all().some((column) => column.name === "totp_secret"));
   assert.ok(db.prepare("PRAGMA table_info(sessions)").all().some((column) => column.name === "mfa_at"));

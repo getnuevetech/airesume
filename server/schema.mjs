@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 
-export const SCHEMA_VERSION = 22;
+export const SCHEMA_VERSION = 23;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -580,6 +580,23 @@ export function migrate() {
       }
     } catch {
       // Shared homepage file is optional in isolated unit tests.
+    }
+  }
+
+  // Rename default hero continue CTA to "Submit Resume" without wiping custom CMS.
+  if (previous < 23) {
+    try {
+      const existing = db.prepare("SELECT value FROM settings WHERE key = 'homepage'").get();
+      if (existing?.value) {
+        const homepage = JSON.parse(existing.value);
+        const current = homepage?.hero?.continueLabel;
+        if (!current || current === "Select a resume to continue") {
+          homepage.hero = { ...(homepage.hero || {}), continueLabel: "Submit Resume" };
+          db.prepare("UPDATE settings SET value = ? WHERE key = 'homepage'").run(JSON.stringify(homepage));
+        }
+      }
+    } catch {
+      // Ignore malformed homepage rows in isolated tests.
     }
   }
 }
