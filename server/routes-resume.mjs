@@ -56,7 +56,13 @@ export function registerResume(app, ctx) {
     });
     const nextQuota = reviewQuota(user.id, access.features);
     res.json({
-      review,
+      review: {
+        id: review.id,
+        rating: review.rating,
+        feedback: review.feedback,
+        recommendations: review.recommendations,
+        versionId: review.versionId,
+      },
       reviewQuota: {
         limit: nextQuota.limit,
         used: nextQuota.used,

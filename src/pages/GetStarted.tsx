@@ -24,8 +24,6 @@ type Draft = {
   questions: string[];
   warnings?: string[];
   missingPreferences?: PrefField[];
-  provider?: string;
-  model?: string;
 };
 
 export function GetStartedPage() {
@@ -253,8 +251,7 @@ export function GetStartedPage() {
         <p className="eyebrow">Confirm your profile</p>
         <h1>We drafted your account from the resume.</h1>
         <p className="lede">
-          {draft.provider && draft.model ? `Extracted with ${draft.provider} (${draft.model}). ` : ""}
-          Nothing here is invented. Correct anything that is outdated, then activate with your email.
+          Review the details we found in your resume. Correct anything that is outdated, then activate with your email.
         </p>
         {(draft.warnings || []).map((warning) => (
           <p className="form-error" role="alert" key={warning}>
