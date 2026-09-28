@@ -6,7 +6,7 @@ import { db, id, uploadsDir } from "./db.mjs";
 import { completeJson } from "./ai-run.mjs";
 import { AI_FUNCTIONS, FEATURES, RESUME_TEMPLATES, migrate, publicPlan, resolveTemplate, templateLimitOf } from "./schema.mjs";
 import { deliverMail } from "./mail.mjs";
-import { feedConfig, fetchFeedListings, normalizeFeedUrl, publicFeedConfig, resolvePrimary } from "./feeds.mjs";
+import { fetchFeedListings, normalizeFeedUrl, publicFeedConfig, resolvePrimary } from "./feeds.mjs";
 import { extractRequirements, matchJob } from "./match.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 import { TRACKER_STATUSES, startOfUtcDay } from "./apply-rules.mjs";
