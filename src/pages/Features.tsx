@@ -53,6 +53,11 @@ const features = [
     text: "Share a join code, capture spoken or typed answers, and score them only against the candidate’s public resume facts.",
   },
   {
+    icon: <Plane size={22} />,
+    title: "Postings and invites",
+    text: "Employers publish open roles to the catalog and invite public candidates. Accepting an invite adds the role to your tracker.",
+  },
+  {
     icon: <Shield />,
     title: "Private by design",
     text: "Your file is read in this browser. It is not uploaded to a server.",

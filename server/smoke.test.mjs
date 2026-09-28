@@ -29,6 +29,15 @@ import {
   publicCandidateFacts,
   scoreLiveAnswer,
 } from "./employer-voice.mjs";
+import {
+  canChangeInviteStatus,
+  canChangePostingStatus,
+  normalizePostingInput,
+  scoreCandidateForPosting,
+  summarizeInvites,
+  summarizePostings,
+  validatePosting,
+} from "./employer-postings.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -456,6 +465,29 @@ test("employer live voice builds questions and scores against public facts", () 
   assert.ok(invented.unverifiedNumbers.length >= 1);
 });
 
+test("employer postings validate open roles and score invite overlap", () => {
+  const draft = normalizePostingInput({
+    title: "Product Manager",
+    company: "Northstar",
+    description: "Own activation and partner with design on experiments.",
+    skills: "SQL, Product management, Roadmapping",
+    status: "open",
+  });
+  assert.equal(validatePosting(draft), "");
+  assert.equal(validatePosting({ ...draft, description: "Too short", status: "open" }).length > 0, true);
+  assert.equal(canChangePostingStatus("draft", "open"), true);
+  assert.equal(canChangeInviteStatus("pending", "accepted"), true);
+  assert.equal(canChangeInviteStatus("declined", "accepted"), false);
+  const overlap = scoreCandidateForPosting(
+    { skills: ["SQL", "Product management"] },
+    { skills: ["SQL", "Product management", "Roadmapping"] },
+  );
+  assert.equal(overlap.matched.length, 2);
+  assert.deepEqual(overlap.missing, ["Roadmapping"]);
+  assert.equal(summarizePostings([{ status: "open" }, { status: "draft" }]).open, 1);
+  assert.equal(summarizeInvites([{ status: "pending" }, { status: "accepted" }]).open, 1);
+});
+
 test("fresh data dir migrates and seeds schema version", () => {
   const dir = mkdtempSync(join(tmpdir(), "jobpilot-test-"));
   const script = `
@@ -485,6 +517,8 @@ test("fresh data dir migrates and seeds schema version", () => {
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='voice_practice_sessions'").get()) process.exit(12);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_pipeline'").get()) process.exit(13);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_voice_sessions'").get()) process.exit(14);
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_postings'").get()) process.exit(15);
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_invites'").get()) process.exit(16);
   `;
   try {
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {

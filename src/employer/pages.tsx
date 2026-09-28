@@ -87,6 +87,7 @@ export function EmployerShell() {
         <nav>
           <NavLink to="/employer" end className={({ isActive }) => (isActive ? "on" : "")}>Candidates</NavLink>
           <NavLink to="/employer/pipeline" className={({ isActive }) => (isActive ? "on" : "")}>Pipeline</NavLink>
+          <NavLink to="/employer/postings" className={({ isActive }) => (isActive ? "on" : "")}>Postings</NavLink>
           <NavLink to="/employer/interviews" className={({ isActive }) => (isActive ? "on" : "")}>Interviews</NavLink>
           <NavLink to="/employer/company" className={({ isActive }) => (isActive ? "on" : "")}>Company</NavLink>
         </nav>
@@ -146,7 +147,7 @@ export function EmployerLandingPage() {
       {mode === "intro" ? (
         <section className="account-card">
           <h2>Employer workspace</h2>
-          <p className="lede">Create a company account, search the public pool, run a hiring pipeline, and host live voice interviews with a join code.</p>
+          <p className="lede">Create a company account, post open roles, invite public candidates, and run live voice interviews.</p>
           <div className="job-actions" style={{ justifyContent: "flex-start" }}>
             <button className="btn btn-primary" type="button" onClick={() => setMode("register")}>Create employer account</button>
             <Link className="btn btn-ghost" to="/signin">Sign in</Link>
@@ -277,8 +278,12 @@ export function EmployerPipelinePage() {
   const [summary, setSummary] = useState<{ total: number; active: number; counts: Record<string, number> } | null>(null);
   const [filter, setFilter] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [startingId, setStartingId] = useState("");
+  const [postings, setPostings] = useState<{ id: string; title: string; status: string }[]>([]);
+  const [inviteFor, setInviteFor] = useState("");
+  const [invitePostingId, setInvitePostingId] = useState("");
 
   async function load(status = filter) {
     setError("");
@@ -299,6 +304,13 @@ export function EmployerPipelinePage() {
 
   useEffect(() => {
     void load();
+    void api<{ postings: { id: string; title: string; status: string }[] }>("/api/employer/postings")
+      .then((data) => {
+        const open = data.postings.filter((item) => item.status === "open");
+        setPostings(open);
+        if (open[0]) setInvitePostingId(open[0].id);
+      })
+      .catch(() => undefined);
   }, []);
 
   async function updateEntry(entry: PipelineEntry, patch: Partial<Pick<PipelineEntry, "status" | "roleTitle" | "notes">>) {
@@ -341,6 +353,32 @@ export function EmployerPipelinePage() {
     }
   }
 
+  async function sendInvite(entry: PipelineEntry) {
+    if (!invitePostingId) {
+      setError("Create an open posting before inviting candidates.");
+      return;
+    }
+    setInviteFor(entry.id);
+    setError("");
+    setMessage("");
+    try {
+      await api("/api/employer/invites", {
+        method: "POST",
+        body: JSON.stringify({
+          postingId: invitePostingId,
+          candidateUserId: entry.candidateUserId,
+          pipelineId: entry.id,
+        }),
+      });
+      setMessage(`Invite sent to ${entry.candidate.name}.`);
+      await load(filter);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send invite.");
+    } finally {
+      setInviteFor("");
+    }
+  }
+
   return (
     <div className="account-page">
       <header className="account-head">
@@ -367,9 +405,20 @@ export function EmployerPipelinePage() {
               </button>
             ))}
           </div>
+          {postings.length ? (
+            <label className="field" style={{ marginTop: 12 }}>
+              <span>Invite to posting</span>
+              <select value={invitePostingId} onChange={(event) => setInvitePostingId(event.target.value)}>
+                {postings.map((posting) => <option key={posting.id} value={posting.id}>{posting.title}</option>)}
+              </select>
+            </label>
+          ) : (
+            <p className="role" style={{ marginTop: 12 }}>Open a posting to invite pipeline candidates. <Link to="/employer/postings">Create posting</Link></p>
+          )}
         </section>
       ) : null}
       {error ? <p className="form-error">{error}</p> : null}
+      {message ? <p className="role">{message}</p> : null}
       {!loaded ? <p className="lede">Loading pipeline…</p> : null}
       {loaded && !entries.length ? (
         <section className="account-card">
@@ -433,6 +482,14 @@ export function EmployerPipelinePage() {
               <button
                 className="btn btn-ghost btn-sm"
                 type="button"
+                disabled={!postings.length || inviteFor === entry.id || ["Hired", "Passed"].includes(entry.status)}
+                onClick={() => void sendInvite(entry)}
+              >
+                {inviteFor === entry.id ? "Inviting…" : "Invite"}
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                type="button"
                 disabled={startingId === entry.id || ["Hired", "Passed"].includes(entry.status)}
                 onClick={() => void startVoice(entry)}
               >
@@ -443,6 +500,184 @@ export function EmployerPipelinePage() {
           </div>
         </article>
       ))}
+    </div>
+  );
+}
+
+export function EmployerPostingsPage() {
+  const { user } = useApp();
+  const empty = {
+    title: "",
+    company: "",
+    location: "",
+    remoteType: "remote",
+    employmentType: "full-time",
+    salaryMin: "",
+    salaryMax: "",
+    description: "",
+    skills: "",
+    category: "",
+    role: "",
+    applyUrl: "",
+    status: "draft",
+  };
+  const [form, setForm] = useState(empty);
+  const [postings, setPostings] = useState<{
+    id: string;
+    title: string;
+    company: string;
+    location: string;
+    remoteType: string;
+    status: string;
+    skills: string[];
+    description: string;
+    jobId: string;
+  }[]>([]);
+  const [summary, setSummary] = useState<{ total: number; open: number } | null>(null);
+  const [editingId, setEditingId] = useState("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [invites, setInvites] = useState<{ id: string; status: string; candidate?: Candidate; posting?: { title: string } }[]>([]);
+
+  async function load() {
+    const data = await api<{
+      postings: typeof postings;
+      summary: { total: number; open: number };
+    }>("/api/employer/postings");
+    setPostings(data.postings);
+    setSummary(data.summary);
+    const inviteData = await api<{ invites: typeof invites }>("/api/employer/invites");
+    setInvites(inviteData.invites);
+  }
+
+  useEffect(() => {
+    void load().catch((err: Error) => setError(err.message));
+    void api<{ employer: EmployerProfile }>("/api/employer/me")
+      .then((data) => setForm((current) => ({ ...current, company: data.employer.companyName || current.company })))
+      .catch(() => undefined);
+  }, []);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    const payload = {
+      ...form,
+      salaryMin: form.salaryMin ? Number(form.salaryMin) : null,
+      salaryMax: form.salaryMax ? Number(form.salaryMax) : null,
+      skills: form.skills,
+    };
+    try {
+      if (editingId) {
+        await api(`/api/employer/postings/${editingId}`, { method: "PUT", body: JSON.stringify(payload) });
+        setMessage("Posting updated.");
+      } else {
+        await api("/api/employer/postings", { method: "POST", body: JSON.stringify(payload) });
+        setMessage("Posting created.");
+      }
+      setEditingId("");
+      setForm({ ...empty, company: form.company });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save posting.");
+    }
+  }
+
+  function edit(posting: (typeof postings)[number]) {
+    setEditingId(posting.id);
+    setForm({
+      title: posting.title,
+      company: posting.company,
+      location: posting.location || "",
+      remoteType: posting.remoteType || "remote",
+      employmentType: "full-time",
+      salaryMin: "",
+      salaryMax: "",
+      description: posting.description || "",
+      skills: (posting.skills || []).join(", "),
+      category: "",
+      role: posting.title,
+      applyUrl: "",
+      status: posting.status,
+    });
+  }
+
+  return (
+    <div className="account-page">
+      <header className="account-head">
+        <div>
+          <p className="eyebrow">Roles</p>
+          <h1>Postings</h1>
+          <p className="lede">Publish open roles into the JobPilot catalog, then invite shortlisted public candidates.</p>
+        </div>
+        {summary ? <p className="role">{summary.open} open · {summary.total} total</p> : null}
+      </header>
+      {error ? <p className="form-error">{error}</p> : null}
+      {message ? <p className="role">{message}</p> : null}
+      <form className="account-card" onSubmit={save}>
+        <h2>{editingId ? "Edit posting" : "New posting"}</h2>
+        <div className="admin-grid">
+          <label className="field"><span>Title</span><input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
+          <label className="field"><span>Company</span><input value={form.company} onChange={(event) => setForm({ ...form, company: event.target.value })} required /></label>
+          <label className="field"><span>Location</span><input value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} /></label>
+          <label className="field">
+            <span>Remote</span>
+            <select value={form.remoteType} onChange={(event) => setForm({ ...form, remoteType: event.target.value })}>
+              <option value="remote">Remote</option>
+              <option value="hybrid">Hybrid</option>
+              <option value="onsite">Onsite</option>
+            </select>
+          </label>
+          <label className="field"><span>Skills (comma separated)</span><input value={form.skills} onChange={(event) => setForm({ ...form, skills: event.target.value })} placeholder="SQL, Product management" /></label>
+          <label className="field">
+            <span>Status</span>
+            <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
+              <option value="draft">draft</option>
+              <option value="open">open</option>
+              <option value="closed">closed</option>
+            </select>
+          </label>
+        </div>
+        <label className="field"><span>Description</span><textarea rows={5} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="What the role owns and how success is measured." /></label>
+        <label className="field"><span>Apply URL</span><input value={form.applyUrl} onChange={(event) => setForm({ ...form, applyUrl: event.target.value })} placeholder="https://" /></label>
+        <div className="job-actions" style={{ justifyContent: "flex-start" }}>
+          <button className="btn btn-primary btn-sm" type="submit">{editingId ? "Save changes" : "Create posting"}</button>
+          {editingId ? <button className="btn btn-ghost btn-sm" type="button" onClick={() => { setEditingId(""); setForm({ ...empty, company: form.company || user?.name || "" }); }}>Cancel</button> : null}
+        </div>
+      </form>
+      {postings.map((posting) => (
+        <article className="account-card" key={posting.id}>
+          <div className="job-card" style={{ padding: 0, boxShadow: "none", background: "transparent" }}>
+            <div>
+              <h2>{posting.title}</h2>
+              <p className="role">{posting.company} · {posting.status}{posting.location ? ` · ${posting.location}` : ""}</p>
+              <div className="chips">{(posting.skills || []).map((skill) => <span className="chip" key={skill}>{skill}</span>)}</div>
+              {posting.description ? <p className="role">{posting.description.slice(0, 220)}</p> : null}
+            </div>
+            <div className="job-side">
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => edit(posting)}>Edit</button>
+              {posting.status !== "open" ? (
+                <button className="btn btn-primary btn-sm" type="button" onClick={() => void api(`/api/employer/postings/${posting.id}`, { method: "PUT", body: JSON.stringify({ status: "open" }) }).then(() => load()).catch((err: Error) => setError(err.message))}>Open</button>
+              ) : (
+                <button className="btn btn-ghost btn-sm" type="button" onClick={() => void api(`/api/employer/postings/${posting.id}`, { method: "PUT", body: JSON.stringify({ status: "closed" }) }).then(() => load()).catch((err: Error) => setError(err.message))}>Close</button>
+              )}
+            </div>
+          </div>
+        </article>
+      ))}
+      <section className="account-card">
+        <h2>Outbound invites</h2>
+        {!invites.length ? <p className="role">Invites you send from the pipeline appear here.</p> : null}
+        {invites.map((invite) => (
+          <div className="quiet-row" key={invite.id}>
+            <div>
+              <strong>{invite.candidate?.name || "Candidate"}</strong>
+              <p className="role">{invite.posting?.title || "Role"} · {invite.status}</p>
+            </div>
+            <span className="match-badge">{invite.status}</span>
+          </div>
+        ))}
+      </section>
     </div>
   );
 }

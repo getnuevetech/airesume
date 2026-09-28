@@ -9,6 +9,7 @@ const ITEMS = [
   { to: "/account/templates", label: "Templates", icon: "layout" },
   { to: "/account/insights", label: "Insights", icon: "chart" },
   { to: "/account/interview", label: "Interview", icon: "mic" },
+  { to: "/account/invites", label: "Invites", icon: "send" },
   { to: "/account/jobs", label: "Jobs", icon: "briefcase" },
   { to: "/account/applications", label: "Applications", icon: "send" },
   { to: "/account/plan", label: "Plan", icon: "card" },
