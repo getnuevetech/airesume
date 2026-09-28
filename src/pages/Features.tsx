@@ -43,6 +43,11 @@ const features = [
     text: "Hiring teams can search members who published a public resume link — contact stays private unless shared.",
   },
   {
+    icon: <Plane size={22} />,
+    title: "Hiring pipeline",
+    text: "Save public candidates, tag a role, add notes, and move them through Saved → Interviewing → Offer → Hired.",
+  },
+  {
     icon: <Shield />,
     title: "Private by design",
     text: "Your file is read in this browser. It is not uploaded to a server.",

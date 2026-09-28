@@ -25,6 +25,7 @@ Already live beyond early Phase 1:
 - Interview prep: STAR drafts and talking points from resume bullets for tracked applications
 - Voice practice: speak or type answers to prep prompts with fact-safe coaching
 - Employer accounts with public-candidate search
+- Employer hiring pipeline: save public candidates and move Saved → Hired/Passed
 - Billing, resume, applications, jobs-admin, dashboard, profile, admin AI, and admin plans routes extracted from `platform.mjs`
 - Plans, Stripe/PayPal/manual billing hooks, AI provider admin, public `/resume/:slug`
 
@@ -60,11 +61,12 @@ Browser
 11. Interview prep packs for tracked applications
 12. Employer accounts + public candidate search
 13. Voice practice sessions with fact-safe answer coaching
+14. Employer hiring pipeline (shortlist stages + notes)
 
 ### Later
 
-- Deeper employer hiring workflows
 - Live employer-led voice interviews
+- Employer job postings and outbound invites
 
 ## Pricing gates (implemented in admin plan matrix)
 

@@ -683,6 +683,8 @@ button { cursor: pointer; }
   font-size: 13px;
   font-weight: 700;
 }
+button.chip { border: 1px solid transparent; cursor: pointer; font: inherit; }
+button.chip.on { border-color: #67c39a; background: #e7f7ef; }
 .chip-gap { background: #fff4e8; color: #9a5b12; }
 .insight-focus { padding: 10px 0; border-top: 1px solid #f0f3f6; }
 .insight-focus:first-of-type { border-top: 0; padding-top: 0; }
