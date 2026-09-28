@@ -472,8 +472,6 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
     questions: extracted.questions,
     warnings: extracted.warnings || [],
     missingPreferences,
-    provider: extracted.provider,
-    model: extracted.model,
   });
 });
 

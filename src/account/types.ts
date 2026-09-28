@@ -109,7 +109,7 @@ export type AccountData = {
     versionLabel?: string;
     questions?: ApplicationQuestion[];
   }[];
-  review: { id: string; rating: number; feedback: string[]; recommendations: Recommendation[]; provider: string; model: string } | null;
+  review: { id: string; rating: number; feedback: string[]; recommendations: Recommendation[] } | null;
   versions: { id: string; label: string; kind: string; active: boolean; rendered: string }[];
   template: string;
   templateLimit: number;

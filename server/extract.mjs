@@ -515,7 +515,7 @@ export async function extractCareerProfile(text) {
   if (!ai.json && ai.error) {
     reviewed.warnings = [
       ...(reviewed.warnings || []),
-      "The assigned model was unavailable, so a rules-based extraction was used.",
+      "We could not use the automatic extraction service, so a simpler rules-based pass was used.",
     ];
   }
 
@@ -566,7 +566,7 @@ export async function extractCareerProfile(text) {
       ];
     }
   } else if (reviewAi.error) {
-    reviewed.warnings = [...(reviewed.warnings || []), "Secondary fact review was unavailable; deterministic checks were used."];
+    reviewed.warnings = [...(reviewed.warnings || []), "A second review pass was unavailable; basic checks were used instead."];
   }
 
   return reviewed;

@@ -169,7 +169,7 @@ export function registerDashboard(app, ctx) {
         };
       }),
       review: review
-        ? { id: review.id, rating: review.rating, feedback: parse(review.feedback, []), recommendations: parse(review.recommendations, []), provider: review.provider, model: review.model }
+        ? { id: review.id, rating: review.rating, feedback: parse(review.feedback, []), recommendations: parse(review.recommendations, []) }
         : null,
       versions,
       template: resolveTemplate(profile?.template, templateLimitOf(access.features)),

@@ -160,7 +160,7 @@ export function registerProfile(app, ctx) {
       detail: `${contrast},${color},${sharpness}`,
       costMicros: ai.costMicros || 0,
     });
-    res.json({ photoUrl: `/uploads/${nextName}`, provider: ai.provider, model: ai.model });
+    res.json({ photoUrl: `/uploads/${nextName}` });
   });
 
   app.get("/api/public/resume/:slug", (req, res) => {

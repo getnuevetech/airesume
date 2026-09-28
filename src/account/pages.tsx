@@ -889,7 +889,6 @@ export function ResumePage() {
             <h2>{data.review ? `Rating ${data.review.rating}` : "No review yet"}</h2>
             {data.review ? (
               <>
-                <p className="role">{data.review.provider}</p>
                 {data.review.feedback.map((line) => <p key={line}>{line}</p>)}
                 {data.review.recommendations.map((item) => (
                   <label className="check-row" key={item.id}>
