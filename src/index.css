@@ -836,7 +836,11 @@ button { cursor: pointer; }
   box-shadow: 0 24px 48px rgba(12, 24, 48, 0.2);
 }
 .cookie-dialog h2 { margin: 8px 0 10px; font-size: 24px; letter-spacing: -0.03em; }
-.billing-disclosure .lede { font-size: 14.5px; }
+.coach-reply {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e7eef4;
+}
 .copyright { text-align: center; color: #8b98ab; font-size: 13.5px; margin-top: 22px; }
 
 .page-hero { padding: 42px 0 12px; max-width: 720px; }

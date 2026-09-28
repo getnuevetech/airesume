@@ -2,6 +2,8 @@
 
 import { db } from "./db.mjs";
 import { buildCareerInsights } from "./career-intel.mjs";
+import { answerJobCoach } from "./job-coach.mjs";
+import { followUpMetrics } from "./follow-ups.mjs";
 
 export function registerCareer(app, ctx) {
   const {
@@ -13,25 +15,21 @@ export function registerCareer(app, ctx) {
     parse,
   } = ctx;
 
-  app.get("/api/career/insights", (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    if (!requireFeature(user, "job_browse", res)) return;
+  function loadInsightContext(user) {
     syncProfileVersion(user.id);
     const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
-    if (!profile) {
-      res.status(400).json({ error: "Upload a resume before opening career insights." });
-      return;
-    }
+    if (!profile) return null;
     const access = featuresOf(user);
     const version = activeVersion(user.id);
-    const doc = version ? parse(version.document, {}) : {
-      skills: parse(profile.skills, []),
-      employment: parse(profile.employment, []),
-      education: parse(profile.education, []),
-      summary: profile.summary || "",
-      headline: profile.headline || "",
-    };
+    const doc = version
+      ? parse(version.document, {})
+      : {
+          skills: parse(profile.skills, []),
+          employment: parse(profile.employment, []),
+          education: parse(profile.education, []),
+          summary: profile.summary || "",
+          headline: profile.headline || "",
+        };
     const preferences = parse(profile.preferences, {});
     const jobs = db.prepare("SELECT * FROM jobs WHERE active = 1").all().map((job) => ({
       ...job,
@@ -50,10 +48,47 @@ export function registerCareer(app, ctx) {
         skillLimit,
       },
     });
-    res.json({
+    return {
+      profile,
+      access,
+      doc,
       insights,
-      plan: access.plan,
-      limited: Boolean(access.features.job_limit),
+      followUps: followUpMetrics(user.id),
+    };
+  }
+
+  app.get("/api/career/insights", (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    if (!requireFeature(user, "job_browse", res)) return;
+    const ctxData = loadInsightContext(user);
+    if (!ctxData) {
+      res.status(400).json({ error: "Upload a resume before opening career insights." });
+      return;
+    }
+    res.json({
+      insights: ctxData.insights,
+      plan: ctxData.access.plan,
+      limited: Boolean(ctxData.access.features.job_limit),
     });
+  });
+
+  app.post("/api/career/coach", (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    if (!requireFeature(user, "job_browse", res)) return;
+    const ctxData = loadInsightContext(user);
+    if (!ctxData) {
+      res.status(400).json({ error: "Upload a resume before asking the Job Coach." });
+      return;
+    }
+    const question = String(req.body.question || "").slice(0, 500);
+    const reply = answerJobCoach({
+      question,
+      insights: ctxData.insights,
+      followUps: ctxData.followUps,
+      profileSkills: ctxData.doc.skills || parse(ctxData.profile.skills, []),
+    });
+    res.json({ question, ...reply });
   });
 }

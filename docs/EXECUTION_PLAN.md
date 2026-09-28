@@ -60,7 +60,7 @@ Browser (+ optional extension)
 2. Mark Applied + metrics (no CAPTCHA bypass) — **shipped**
 
 ### Slice K — AI Job Coach
-1. Outcome-grounded Q&A and next actions (not a generic chatbot)
+1. Outcome-grounded Q&A and next actions (not a generic chatbot) — **shipped**
 
 ### Slice L — Production hardening
 1. Admin MFA, HTTPS/deploy checks, TURN readiness warnings, deletion fan-out, log hygiene

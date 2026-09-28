@@ -122,6 +122,12 @@ export function InsightsPage() {
   const [insights, setInsights] = useState<CareerInsights | null>(null);
   const [limited, setLimited] = useState(false);
   const [planName, setPlanName] = useState("");
+  const [question, setQuestion] = useState("Why am I not getting interviews?");
+  const [coach, setCoach] = useState<{
+    answer: string;
+    actions: { id: string; title: string; detail: string; href?: string }[];
+  } | null>(null);
+  const [coachBusy, setCoachBusy] = useState(false);
 
   useEffect(() => {
     void api<{ insights: CareerInsights; limited: boolean; plan: { name: string } }>("/api/career/insights")
@@ -132,6 +138,22 @@ export function InsightsPage() {
       })
       .catch((err: Error) => setError(err.message));
   }, [setError]);
+
+  async function askCoach(event?: FormEvent) {
+    event?.preventDefault();
+    setCoachBusy(true);
+    try {
+      const data = await api<{ answer: string; actions: { id: string; title: string; detail: string; href?: string }[] }>(
+        "/api/career/coach",
+        { method: "POST", body: JSON.stringify({ question }) },
+      );
+      setCoach({ answer: data.answer, actions: data.actions || [] });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Coach unavailable.");
+    } finally {
+      setCoachBusy(false);
+    }
+  }
 
   return (
     <Gate feature="job_browse">
@@ -146,6 +168,33 @@ export function InsightsPage() {
             </p>
           </div>
         </header>
+        <form className="account-card" onSubmit={(event) => void askCoach(event)}>
+          <h2>AI Job Coach</h2>
+          <p className="role">Ask about interviews, gaps, follow-ups, or next actions. Answers stay grounded in your tracker and Fact Ledger.</p>
+          <label className="field">
+            <span>Question</span>
+            <input value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={500} />
+          </label>
+          <button className="btn btn-primary btn-sm" type="submit" disabled={coachBusy}>
+            {coachBusy ? "Thinking…" : "Ask coach"}
+          </button>
+          {coach ? (
+            <div className="coach-reply">
+              <p className="lede">{coach.answer}</p>
+              {coach.actions.length ? (
+                <ul className="fact-list">
+                  {coach.actions.map((action) => (
+                    <li key={action.id}>
+                      {action.href ? <Link to={action.href}>{action.title}</Link> : <strong>{action.title}</strong>}
+                      {" — "}
+                      {action.detail}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </form>
         {!insights ? <p className="lede">Building insights…</p> : (
           <>
             <div className="stat-grid">
