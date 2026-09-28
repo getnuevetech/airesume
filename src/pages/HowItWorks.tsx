@@ -18,10 +18,10 @@ const steps = [
   },
   {
     icon: <Plane size={22} />,
-    title: "3. AI applies",
-    text: "We tailor your application and apply for you.",
+    title: "3. Review & apply",
+    text: "We prepare a tailored application. You review before anything is sent.",
     detail:
-      "The resume is rewritten for that posting — summary, keywords, and emphasis — and the application is prepared. In this demo the send step is simulated and nothing is delivered to employers.",
+      "The resume is reshaped for that posting using only facts you confirmed. Autopilot can queue Ready or Review required rows — it does not submit without your approval.",
   },
 ];
 

@@ -896,6 +896,7 @@ button { cursor: pointer; }
 .account-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 .job-card { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
 .job-side { display: grid; justify-items: end; gap: 8px; }
+.job-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .version-mini { padding: 10px 0; border-top: 1px solid #f0f3f6; }
 .template-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .template-card { text-align: left; background: #fff; border: 1px solid #e6edf3; border-radius: 16px; padding: 12px; display: grid; gap: 6px; }

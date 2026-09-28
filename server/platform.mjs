@@ -9,6 +9,7 @@ import { deliverMail } from "./mail.mjs";
 import { feedConfig, fetchFeedListings, normalizeFeedUrl, publicFeedConfig, resolvePrimary } from "./feeds.mjs";
 import { extractRequirements, matchJob } from "./match.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
+import { TRACKER_STATUSES, autoDecision, startOfUtcDay } from "./apply-rules.mjs";
 
 migrate();
 
@@ -449,24 +450,73 @@ function applyPlan(user, plan, gateway, cycle, externalId, amount, credit) {
   }
 }
 
-async function createApplication(user, job, mode, doc, preferences, facts = []) {
+async function createApplication(user, job, mode, doc, preferences, facts = [], options = {}) {
   const match = matchJob(doc, preferences, job);
-  const versionDoc = tailoredDocument(doc, job, match, facts);
-  const rendered = renderDocument(versionDoc);
-  const versionId = id("ver");
+  const status = TRACKER_STATUSES.includes(options.status) ? options.status : "Ready";
+  const shouldDeliver = Boolean(options.deliver) || status === "Applied";
+  const needsVersion = !["Found", "Skipped"].includes(status);
+  let versionId = null;
+  let rendered = "";
+  let delivery = "";
   const targetCompany = job.primary_company || job.company;
-  db.prepare(
-    `INSERT INTO resume_versions (id, user_id, label, kind, document, rendered, parent_id, active, created_at)
-     VALUES (?, ?, ?, 'application', ?, ?, ?, 0, ?)`,
-  ).run(versionId, user.id, `For ${targetCompany} — ${job.title}`, JSON.stringify(versionDoc), rendered, activeVersion(user.id)?.id || null, Date.now());
-  const delivery = await employerDelivery(user, job, rendered);
+  if (needsVersion) {
+    const versionDoc = tailoredDocument(doc, job, match, facts);
+    rendered = renderDocument(versionDoc);
+    versionId = id("ver");
+    const kind = status === "Resume preparing" ? "application" : "application";
+    db.prepare(
+      `INSERT INTO resume_versions (id, user_id, label, kind, document, rendered, parent_id, active, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+    ).run(versionId, user.id, `For ${targetCompany} — ${job.title}`, kind, JSON.stringify(versionDoc), rendered, activeVersion(user.id)?.id || null, Date.now());
+  }
+  if (shouldDeliver && rendered) {
+    delivery = await employerDelivery(user, job, rendered);
+  } else if (status === "Ready") {
+    delivery = "Tailored resume ready for your review. Submit when you want it sent.";
+  } else if (status === "Review required") {
+    delivery = options.reason || "Needs your review before submit.";
+  } else if (status === "Found") {
+    delivery = "Saved to your tracker.";
+  } else if (status === "Skipped") {
+    delivery = "Skipped.";
+  }
+  if (options.reason && status === "Review required") {
+    delivery = options.reason;
+  }
   const now = Date.now();
   db.prepare(
     `INSERT INTO applications (id, user_id, job_id, version_id, mode, status, match_score, target_company, target_url, target_email, delivery, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'Applied', ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(user_id, job_id) DO UPDATE SET version_id = excluded.version_id, mode = excluded.mode, status = 'Applied', match_score = excluded.match_score, target_company = excluded.target_company, target_url = excluded.target_url, target_email = excluded.target_email, delivery = excluded.delivery, updated_at = excluded.updated_at`,
-  ).run(id("app"), user.id, job.id, versionId, mode, match.score, targetCompany, job.primary_url || job.source_url || "", job.primary_email || "", delivery, now, now);
-  return match.score;
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, job_id) DO UPDATE SET version_id = COALESCE(excluded.version_id, applications.version_id), mode = excluded.mode, status = excluded.status, match_score = excluded.match_score, target_company = excluded.target_company, target_url = excluded.target_url, target_email = excluded.target_email, delivery = excluded.delivery, updated_at = excluded.updated_at`,
+  ).run(
+    id("app"),
+    user.id,
+    job.id,
+    versionId,
+    mode,
+    status,
+    match.score,
+    targetCompany,
+    job.primary_url || job.source_url || "",
+    job.primary_email || "",
+    delivery,
+    now,
+    now,
+  );
+  return { score: match.score, status, match };
+}
+
+function canAutoApply(job) {
+  if (job.verification === "Active") return true;
+  const primary = String(job.primary_company || "");
+  return job.verification === "Third-party recruiter" && primary && primary.toLowerCase() !== String(job.company).toLowerCase();
+}
+
+function autoCapUsed(userId, now = Date.now()) {
+  const start = startOfUtcDay(now);
+  return db
+    .prepare("SELECT COUNT(*) AS count FROM applications WHERE user_id = ? AND mode = 'auto' AND created_at >= ?")
+    .get(userId, start).count;
 }
 
 function profilePayload(profile, user) {
@@ -490,12 +540,6 @@ function profilePayload(profile, user) {
 
 function money(cents) {
   return `$${(cents / 100).toFixed(2)}`;
-}
-
-function canAutoApply(job) {
-  if (job.verification === "Active") return true;
-  const primary = String(job.primary_company || "");
-  return job.verification === "Third-party recruiter" && primary && primary.toLowerCase() !== String(job.company).toLowerCase();
 }
 
 function jobCard(job, match, sourceNames, applied) {
@@ -577,6 +621,9 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     const review = db.prepare("SELECT * FROM resume_reviews WHERE user_id = ? ORDER BY created_at DESC LIMIT 1").get(user.id);
     const versions = db.prepare("SELECT * FROM resume_versions WHERE user_id = ? ORDER BY created_at DESC").all(user.id).map(publicVersion);
     const responded = applications.filter((item) => ["Responded", "Interview", "Offer"].includes(item.status)).length;
+    const submitted = applications.filter((item) => item.status === "Applied" || ["Responded", "Interview", "Offer", "Rejected", "Withdrawn"].includes(item.status)).length;
+    const readyCount = applications.filter((item) => item.status === "Ready").length;
+    const reviewCount = applications.filter((item) => item.status === "Review required").length;
     res.json({
       profile: profilePayload(profile, user),
       plan: access.plan,
@@ -586,9 +633,15 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       gateways: db.prepare("SELECT id, name, kind, enabled, mode FROM payment_gateways WHERE enabled = 1").all(),
       autoApply: Boolean(user.auto_apply),
       autoMin: user.auto_min || 85,
+      autoDailyCap: user.auto_daily_cap ?? 5,
+      autoCapUsed: autoCapUsed(user.id),
+      statuses: TRACKER_STATUSES,
       stats: {
         resumeRating: review ? review.rating : null,
-        applied: applications.length,
+        applied: submitted,
+        tracked: applications.length,
+        ready: readyCount,
+        reviewRequired: reviewCount,
         responded,
         available: ranked.length,
         recommended: ranked.filter((item) => item.score >= 70 || item.label === "strong" || item.label === "good").length,
@@ -837,8 +890,49 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       res.status(400).json({ error: "That job is not available." });
       return;
     }
-    const score = await createApplication(user, job, "manual", parse(version.document, {}), parse(profile.preferences, {}), parse(profile.facts, []));
-    res.json({ ok: true, score });
+    const action = String(req.body.action || "prepare");
+    const status =
+      action === "track" ? "Found" : action === "skip" ? "Skipped" : action === "apply" ? "Applied" : "Ready";
+    const result = await createApplication(
+      user,
+      job,
+      "manual",
+      parse(version.document, {}),
+      parse(profile.preferences, {}),
+      parse(profile.facts, []),
+      { status, deliver: status === "Applied" },
+    );
+    res.json({ ok: true, score: result.score, status: result.status });
+  });
+
+  app.post("/api/applications/:id/submit", async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const access = featuresOf(user);
+    if (!access.features.manual_apply && !access.features.auto_apply) {
+      res.status(403).json({ error: "Submitting applications is not on your plan." });
+      return;
+    }
+    const row = db.prepare("SELECT * FROM applications WHERE id = ? AND user_id = ?").get(req.params.id, user.id);
+    if (!row) {
+      res.status(404).json({ error: "Application not found." });
+      return;
+    }
+    if (!["Ready", "Review required", "Resume preparing"].includes(row.status)) {
+      res.status(400).json({ error: "Only ready or review-required applications can be submitted." });
+      return;
+    }
+    const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(row.job_id);
+    const version = row.version_id
+      ? db.prepare("SELECT * FROM resume_versions WHERE id = ? AND user_id = ?").get(row.version_id, user.id)
+      : null;
+    if (!job || !version) {
+      res.status(400).json({ error: "Prepare a tailored resume before submitting." });
+      return;
+    }
+    const delivery = await employerDelivery(user, job, version.rendered || "");
+    db.prepare("UPDATE applications SET status = 'Applied', delivery = ?, updated_at = ? WHERE id = ?").run(delivery, Date.now(), row.id);
+    res.json({ ok: true, status: "Applied", delivery });
   });
 
   app.post("/api/applications/auto", async (req, res) => {
@@ -859,23 +953,46 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     const preferences = parse(profile.preferences, {});
     const facts = parse(profile.facts, []);
     const existing = new Set(db.prepare("SELECT job_id FROM applications WHERE user_id = ?").all(user.id).map((item) => item.job_id));
-    const ready = db
+    const dailyCap = Math.max(1, Math.min(25, Number(user.auto_daily_cap ?? 5) || 5));
+    let used = autoCapUsed(user.id);
+    const summary = { ready: 0, reviewRequired: 0, skipped: 0, capped: false };
+    const candidates = db
       .prepare("SELECT * FROM jobs WHERE active = 1")
       .all()
-      .filter(canAutoApply)
+      .filter((job) => !existing.has(job.id))
       .map((job) => ({ job, ...matchJob(doc, preferences, job) }))
-      .filter((item) => item.score >= (user.auto_min || 85) && !existing.has(item.job.id))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 10);
-    for (const item of ready) await createApplication(user, item.job, "auto", doc, preferences, facts);
-    res.json({ applied: ready.length });
+      .sort((a, b) => b.score - a.score);
+
+    for (const item of candidates) {
+      if (used >= dailyCap) {
+        summary.capped = true;
+        break;
+      }
+      let decision = autoDecision(item.job, item, preferences, user);
+      if (decision.action === "skip") {
+        summary.skipped += 1;
+        continue;
+      }
+      if (decision.action === "ready" && !canAutoApply(item.job)) {
+        decision = { action: "review", reason: "Listing is not cleared for autopilot submit." };
+      }
+      const status = decision.action === "ready" ? "Ready" : "Review required";
+      await createApplication(user, item.job, "auto", doc, preferences, facts, {
+        status,
+        deliver: false,
+        reason: decision.reason,
+      });
+      used += 1;
+      if (status === "Ready") summary.ready += 1;
+      else summary.reviewRequired += 1;
+    }
+    res.json({ ...summary, applied: 0, queued: summary.ready + summary.reviewRequired });
   });
 
   app.patch("/api/applications/:id", (req, res) => {
     const user = requireUser(req, res);
     if (!user) return;
-    const allowed = ["Applied", "Responded", "Interview", "Offer", "Rejected", "Withdrawn"];
-    const status = allowed.includes(req.body.status) ? req.body.status : "";
+    const status = TRACKER_STATUSES.includes(req.body.status) ? req.body.status : "";
     if (!status) {
       res.status(400).json({ error: "Choose a status from the tracker." });
       return;
@@ -893,7 +1010,22 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     if (!user) return;
     if (req.body.enabled && !requireFeature(user, "auto_apply", res)) return;
     const minMatch = Math.max(50, Math.min(99, Number(req.body.minMatch) || 85));
-    db.prepare("UPDATE users SET auto_apply = ?, auto_min = ? WHERE id = ?").run(req.body.enabled ? 1 : 0, minMatch, user.id);
+    const dailyCap = Math.max(1, Math.min(25, Number(req.body.dailyCap) || user.auto_daily_cap || 5));
+    db.prepare("UPDATE users SET auto_apply = ?, auto_min = ?, auto_daily_cap = ? WHERE id = ?").run(
+      req.body.enabled ? 1 : 0,
+      minMatch,
+      dailyCap,
+      user.id,
+    );
+    const profile = db.prepare("SELECT preferences FROM profiles WHERE user_id = ?").get(user.id);
+    if (profile) {
+      const preferences = {
+        ...parse(profile.preferences, {}),
+        excludeCompanies: String(req.body.excludeCompanies || ""),
+        excludeKeywords: String(req.body.excludeKeywords || ""),
+      };
+      db.prepare("UPDATE profiles SET preferences = ?, updated_at = ? WHERE user_id = ?").run(JSON.stringify(preferences), Date.now(), user.id);
+    }
     res.json({ ok: true });
   });
 

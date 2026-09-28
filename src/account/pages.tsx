@@ -6,8 +6,6 @@ import { useAccount } from "./AccountContext";
 import { ResumeSheet } from "./ResumeSheet";
 import type { AccountData, ResumeView } from "./types";
 
-const STATUSES = ["Applied", "Responded", "Interview", "Offer", "Rejected", "Withdrawn"];
-
 function Gate({ feature, children }: { feature?: string; children?: ReactNode }) {
   const { data } = useAccount();
   if (!data?.profile) {
@@ -49,8 +47,8 @@ export function OverviewPage() {
       <div className="stat-grid">
         <Tile label="Resume rating" value={data.stats.resumeRating === null ? "—" : String(data.stats.resumeRating)} />
         <Tile label="Recommended" value={String(data.stats.recommended)} />
-        <Tile label="Applied" value={String(data.stats.applied)} />
-        <Tile label="Responses" value={String(data.stats.responded)} />
+        <Tile label="Ready to submit" value={String(data.stats.ready || 0)} />
+        <Tile label="Submitted" value={String(data.stats.applied)} />
       </div>
       <div className="account-split">
         <section className="account-card">
@@ -402,9 +400,16 @@ export function JobsPage() {
               <span className="match-badge">{job.score}%</span>
               {job.label ? <p className="role">{job.label}</p> : null}
               {job.applied ? <p className="role">In your tracker</p> : (
-                <button className="btn btn-primary btn-sm" type="button" disabled={!data.features.manual_apply} onClick={() => void api("/api/applications", { method: "POST", body: JSON.stringify({ jobId: job.id }) }).then(reload).catch((err: Error) => setError(err.message))}>
-                  {data.features.manual_apply ? (job.viaCompany ? `Apply to ${job.applyCompany}` : "Apply") : "Upgrade to apply"}
-                </button>
+                <div className="job-actions">
+                  <button className="btn btn-primary btn-sm" type="button" disabled={!data.features.manual_apply} onClick={() => void api("/api/applications", { method: "POST", body: JSON.stringify({ jobId: job.id, action: "prepare" }) }).then(reload).catch((err: Error) => setError(err.message))}>
+                    {data.features.manual_apply ? "Prepare" : "Upgrade to apply"}
+                  </button>
+                  {data.features.manual_apply ? (
+                    <button className="btn btn-ghost btn-sm" type="button" onClick={() => void api("/api/applications", { method: "POST", body: JSON.stringify({ jobId: job.id, action: "track" }) }).then(reload).catch((err: Error) => setError(err.message))}>
+                      Track
+                    </button>
+                  ) : null}
+                </div>
               )}
             </div>
           </article>
@@ -415,8 +420,9 @@ export function JobsPage() {
 }
 
 export function ApplicationsPage() {
-  const { data, reload, setMessage } = useAccount();
+  const { data, reload, setMessage, setError } = useAccount();
   if (!data) return null;
+  const statuses = data.statuses?.length ? data.statuses : ["Found", "Reviewed", "Skipped", "Resume preparing", "Ready", "Review required", "Applied", "Responded", "Interview", "Offer", "Rejected", "Withdrawn"];
   return (
     <Gate>
       <div className="account-page">
@@ -424,27 +430,48 @@ export function ApplicationsPage() {
           <div>
             <p className="eyebrow">Applications</p>
             <h1>Tracker</h1>
-            <p className="lede">{data.stats.applied} saved. {data.stats.responded} have a response, interview, or offer.</p>
+            <p className="lede">{data.stats.tracked ?? data.stats.applied} in your tracker. {data.stats.ready || 0} ready to submit. {data.stats.reviewRequired || 0} need review. {data.stats.responded} have a response, interview, or offer.</p>
           </div>
         </header>
-        {data.features.auto_apply ? <AutoApply enabled={data.autoApply} minMatch={data.autoMin} onDone={() => { setMessage("Auto apply updated."); void reload(); }} /> : (
+        {data.features.auto_apply ? (
+          <AutoApply
+            enabled={data.autoApply}
+            minMatch={data.autoMin}
+            dailyCap={data.autoDailyCap || 5}
+            capUsed={data.autoCapUsed || 0}
+            excludeCompanies={data.profile?.preferences?.excludeCompanies || ""}
+            excludeKeywords={data.profile?.preferences?.excludeKeywords || ""}
+            onDone={() => { setMessage("Auto apply updated."); void reload(); }}
+          />
+        ) : (
           <section className="account-card">
-            <h2>Manual applications</h2>
-            <p>Auto apply is not on the {data.plan.name} plan. You can still apply from Jobs when that feature is included.</p>
+            <h2>Review-first applications</h2>
+            <p>Prepare a tailored resume from Jobs, then submit when you are ready. Autopilot queueing is not on the {data.plan.name} plan.</p>
           </section>
         )}
         {data.applications.map((item) => (
           <article className="account-card job-card" key={item.id}>
             <div>
               <h2>{item.title}</h2>
-              <p className="role">{item.company} · {item.mode} · {item.match}% match</p>
+              <p className="role">{item.company} · {item.mode} · {item.match}% match · {item.status}</p>
               {item.viaCompany ? <p className="role">Found through {item.viaCompany}{item.sourceName ? ` on ${item.sourceName}` : ""}</p> : null}
               {item.delivery ? <p className="role">{item.delivery}</p> : null}
               {item.targetUrl ? <a href={item.targetUrl} target="_blank" rel="noreferrer">Open employer listing</a> : null}
             </div>
-            <select value={item.status} onChange={(event) => void api(`/api/applications/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: event.target.value }) }).then(reload)}>
-              {STATUSES.map((status) => <option key={status}>{status}</option>)}
-            </select>
+            <div className="job-side">
+              {["Ready", "Review required", "Resume preparing"].includes(item.status) ? (
+                <button
+                  className="btn btn-primary btn-sm"
+                  type="button"
+                  onClick={() => void api(`/api/applications/${item.id}/submit`, { method: "POST" }).then(() => { setMessage("Application submitted."); return reload(); }).catch((err: Error) => setError(err.message))}
+                >
+                  Submit
+                </button>
+              ) : null}
+              <select value={item.status} onChange={(event) => void api(`/api/applications/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: event.target.value }) }).then(reload)}>
+                {statuses.map((status) => <option key={status}>{status}</option>)}
+              </select>
+            </div>
           </article>
         ))}
       </div>
@@ -452,15 +479,55 @@ export function ApplicationsPage() {
   );
 }
 
-function AutoApply({ enabled, minMatch, onDone }: { enabled: boolean; minMatch: number; onDone: () => void }) {
+function AutoApply({
+  enabled,
+  minMatch,
+  dailyCap,
+  capUsed,
+  excludeCompanies,
+  excludeKeywords,
+  onDone,
+}: {
+  enabled: boolean;
+  minMatch: number;
+  dailyCap: number;
+  capUsed: number;
+  excludeCompanies: string;
+  excludeKeywords: string;
+  onDone: () => void;
+}) {
   const [on, setOn] = useState(enabled);
   const [min, setMin] = useState(minMatch);
+  const [cap, setCap] = useState(dailyCap);
+  const [companies, setCompanies] = useState(excludeCompanies);
+  const [keywords, setKeywords] = useState(excludeKeywords);
   return (
-    <form className="account-card" onSubmit={(event) => { event.preventDefault(); void api("/api/account/auto-apply", { method: "PUT", body: JSON.stringify({ enabled: on, minMatch: min }) }).then(() => on ? api("/api/applications/auto", { method: "POST" }) : undefined).then(onDone); }}>
-      <h2>Auto apply</h2>
-      <label className="check-row"><input type="checkbox" checked={on} onChange={(event) => setOn(event.target.checked)} /> Apply to active jobs at or above this match</label>
+    <form
+      className="account-card"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void api("/api/account/auto-apply", {
+          method: "PUT",
+          body: JSON.stringify({
+            enabled: on,
+            minMatch: min,
+            dailyCap: cap,
+            excludeCompanies: companies,
+            excludeKeywords: keywords,
+          }),
+        })
+          .then(() => (on ? api("/api/applications/auto", { method: "POST" }) : undefined))
+          .then(onDone);
+      }}
+    >
+      <h2>Autopilot queue</h2>
+      <p className="lede">Autopilot never submits on a guess. It queues Ready or Review required rows for you to submit. Used {capUsed} of {cap} today.</p>
+      <label className="check-row"><input type="checkbox" checked={on} onChange={(event) => setOn(event.target.checked)} /> Queue matching jobs for review</label>
       <label className="field"><span>Minimum match</span><input type="number" min={50} max={99} value={min} onChange={(event) => setMin(Number(event.target.value))} /></label>
-      <button className="btn btn-primary btn-sm" type="submit">{on ? "Save and run" : "Use manual apply"}</button>
+      <label className="field"><span>Daily cap</span><input type="number" min={1} max={25} value={cap} onChange={(event) => setCap(Number(event.target.value))} /></label>
+      <label className="field"><span>Exclude companies</span><input value={companies} onChange={(event) => setCompanies(event.target.value)} placeholder="Acme, Staffing Hub" /></label>
+      <label className="field"><span>Exclude keywords</span><input value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder="unpaid, clearance" /></label>
+      <button className="btn btn-primary btn-sm" type="submit">{on ? "Save and queue" : "Save manual-only"}</button>
     </form>
   );
 }

@@ -1,7 +1,7 @@
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -73,6 +73,7 @@ export function migrate() {
   addColumn("users", "plan_id", "TEXT DEFAULT 'free'");
   addColumn("users", "auto_apply", "INTEGER DEFAULT 0");
   addColumn("users", "auto_min", "INTEGER DEFAULT 85");
+  addColumn("users", "auto_daily_cap", "INTEGER DEFAULT 5");
   addColumn("users", "password_must_change", "INTEGER DEFAULT 0");
   addColumn("profiles", "headline", "TEXT DEFAULT ''");
   addColumn("profiles", "photo_url", "TEXT DEFAULT ''");

@@ -30,7 +30,14 @@ export type AccountData = {
     skills: string[];
     employment: Employment[];
     education: string[];
-    preferences: { salary?: string; workArrangement?: string; locations?: string; workAuthorization?: string };
+    preferences: {
+      salary?: string;
+      workArrangement?: string;
+      locations?: string;
+      workAuthorization?: string;
+      excludeCompanies?: string;
+      excludeKeywords?: string;
+    };
     resumeName: string;
     photoUrl: string;
     slug: string;
@@ -45,9 +52,34 @@ export type AccountData = {
   gateways: { id: string; name: string; kind: string }[];
   autoApply: boolean;
   autoMin: number;
-  stats: { resumeRating: number | null; applied: number; responded: number; available: number; recommended: number; versions: number };
+  autoDailyCap: number;
+  autoCapUsed: number;
+  statuses: string[];
+  stats: {
+    resumeRating: number | null;
+    applied: number;
+    tracked: number;
+    ready: number;
+    reviewRequired: number;
+    responded: number;
+    available: number;
+    recommended: number;
+    versions: number;
+  };
   jobs: AccountJob[];
-  applications: { id: string; title: string; company: string; viaCompany: string; sourceName: string; targetUrl: string; delivery: string; status: string; mode: string; match: number }[];
+  applications: {
+    id: string;
+    title: string;
+    company: string;
+    viaCompany: string;
+    sourceName: string;
+    targetUrl: string;
+    delivery: string;
+    status: string;
+    mode: string;
+    match: number;
+    versionId?: string;
+  }[];
   review: { id: string; rating: number; feedback: string[]; recommendations: Recommendation[]; provider: string; model: string } | null;
   versions: { id: string; label: string; kind: string; active: boolean; rendered: string }[];
   template: string;

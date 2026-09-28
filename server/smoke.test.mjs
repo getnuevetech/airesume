@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { autoDecision, TRACKER_STATUSES } from "./apply-rules.mjs";
 import { extractRequirements, matchJob, matchLabel } from "./match.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
@@ -85,6 +86,41 @@ test("tailoredDocument only reorders existing content", () => {
   );
 });
 
+test("autoDecision never chooses silent submit", () => {
+  assert.ok(TRACKER_STATUSES.includes("Ready"));
+  assert.ok(TRACKER_STATUSES.includes("Review required"));
+  const job = {
+    title: "Product Manager",
+    company: "Northstar",
+    verification: "Active",
+    location: "Remote",
+    remote_type: "remote",
+    salary_min: 140000,
+    salary_max: 180000,
+  };
+  const strong = {
+    score: 92,
+    label: "strong",
+    missing: [],
+  };
+  const ready = autoDecision(job, strong, { locations: "Remote", salary: "150000" }, { auto_min: 85 });
+  assert.equal(ready.action, "ready");
+
+  const review = autoDecision(
+    { ...job, verification: "Needs review" },
+    strong,
+    { locations: "Remote" },
+    { auto_min: 85 },
+  );
+  assert.equal(review.action, "review");
+
+  const skipped = autoDecision(job, strong, { excludeCompanies: "Northstar" }, { auto_min: 85 });
+  assert.equal(skipped.action, "skip");
+
+  const missing = autoDecision(job, { score: 90, label: "strong", missing: ["SQL"] }, {}, { auto_min: 85 });
+  assert.equal(missing.action, "review");
+});
+
 test("fresh data dir migrates and seeds schema version", () => {
   const dir = mkdtempSync(join(tmpdir(), "jobpilot-test-"));
   const script = `
@@ -101,6 +137,8 @@ test("fresh data dir migrates and seeds schema version", () => {
     const sample = db.prepare("SELECT requirements FROM jobs LIMIT 1").get();
     const requirements = JSON.parse(sample.requirements || "{}");
     if (!Array.isArray(requirements.mandatory)) process.exit(4);
+    const columns = db.prepare("PRAGMA table_info(users)").all().map((row) => row.name);
+    if (!columns.includes("auto_daily_cap")) process.exit(5);
   `;
   try {
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {

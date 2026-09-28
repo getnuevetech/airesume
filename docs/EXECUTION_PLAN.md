@@ -12,8 +12,10 @@ Already live beyond early Phase 1:
 - Job catalog + JSON/RSS feeds, verification labels, hybrid match score with explanations
 - Requirements JSON on jobs (mandatory/preferred skills, education, years)
 - Job-specific resume shaping that reorders existing facts only
+- Review-first application tracker: Found → Reviewed → Skipped → Resume preparing → Ready → Review required → Applied…
+- Manual Prepare/Track from Jobs; Submit only from Ready / Review required
+- Autopilot queues Ready or Review required with daily cap, exclusions, and preference checks — never submits blindly
 - Plans, Stripe/PayPal/manual billing hooks, AI provider admin, public `/resume/:slug`
-- Early auto-apply (plan-gated) — still needs stricter caps/exclusions before marketing it as Autopilot
 
 Default admin on first boot uses `ADMIN_EMAIL` / `ADMIN_PASSWORD` when set. Without `ADMIN_PASSWORD`, bootstrap credentials force a password change on first sign-in. Session cookies set `Secure` when the request is HTTPS (`x-forwarded-proto`) or `COOKIE_SECURE=1`.
 
@@ -32,20 +34,19 @@ Browser
 
 ## Next build sequence
 
-### Foundation (in progress)
+### Done in recent slices
 
 1. Schema migrate order + `schema_version` + smoke tests
 2. Force bootstrap password change + Secure cookies
 3. Hybrid match + requirements + fact-safe tailor
+4. Review-first tracker + autopilot safety rules
 
 ### Finish the review-first apply loop
 
-1. Application tracker states: found → reviewed → skipped → resume preparing → ready → applied
-2. Application question drafts (leave legal/salary blank for the user)
-3. Paste-a-job URL / stronger requirement extraction from listing text
-4. Weekly match explanation quotas on Free
-5. Constrain auto-apply: salary/location/type exclusions, daily cap, never submit on validator uncertainty
-6. Align marketing copy with what Autopilot actually does
+1. Application question drafts (leave legal/salary blank for the user)
+2. Paste-a-job URL / stronger requirement extraction from listing text
+3. Weekly match explanation quotas on Free
+4. Split `platform.mjs` into jobs / resume / billing modules
 
 ### Later
 

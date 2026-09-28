@@ -40,7 +40,7 @@
     "steps": [
       { "icon": "file", "title": "1. Upload resume", "text": "Create your profile in seconds." },
       { "icon": "search", "title": "2. Get matched", "text": "We find the best jobs for your skills." },
-      { "icon": "plane", "title": "3. AI applies", "text": "We tailor your application and apply for you." }
+      { "icon": "plane", "title": "3. Review & apply", "text": "We prepare a tailored application. You review before anything is sent." }
     ]
   },
   "better": {

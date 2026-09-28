@@ -19,8 +19,8 @@ const features = [
   },
   {
     icon: <Plane size={22} />,
-    title: "Autopilot applications",
-    text: "Watch applications move from match to applying to applied. In this demo they stay on your machine.",
+    title: "Autopilot queue",
+    text: "Matching roles land in Ready or Review required. You submit — nothing is sent on a guess.",
   },
   {
     icon: <Star size={22} />,
