@@ -48,8 +48,9 @@ export function AdminPage() {
     if (!user || user.role !== "admin") return;
     void api<{ required: boolean; enrolled: boolean; verified: boolean }>("/api/admin/mfa")
       .then(setMfa)
-      .catch((err: Error & { mfaRequired?: boolean }) => {
-        if (String(err.message || "").includes("MFA") || err) {
+      .catch((err: Error & { mfaRequired?: boolean; status?: number }) => {
+        const message = String(err.message || "");
+        if (err.mfaRequired || /mfa/i.test(message)) {
           setMfa({ required: true, enrolled: Boolean(user.mfaEnrolled), verified: Boolean(user.mfaVerified) });
         }
       });
