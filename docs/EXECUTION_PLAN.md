@@ -20,6 +20,7 @@ Already live beyond early Phase 1:
 - Weekly match explanation quotas (`match_explain_limit`; Free=5/week)
 - Weekly resume review quotas (`resume_review_limit`; Free=3/week)
 - AI audit cost estimates (`cost_micros`) with admin rollups
+- Browser apply assistant: copy-ready apply kit + mark Applied after employer-site submit
 - Billing, resume, applications, jobs-admin, dashboard, profile, admin AI, and admin plans routes extracted from `platform.mjs`
 - Plans, Stripe/PayPal/manual billing hooks, AI provider admin, public `/resume/:slug`
 
@@ -50,10 +51,11 @@ Browser
 6. Weekly match explanation quotas + billing/resume route split
 7. Full `platform.mjs` route modularization (applications, jobs-admin, dashboard, profile, admin AI/plans)
 8. AI cost measurement from `ai_audit` + Free resume-review weekly quota
+9. Browser apply assistant (apply kit + employer-site complete)
 
 ### Later
 
-- Browser apply assistant, career intelligence, interview prep
+- Career intelligence, interview prep
 - Employer accounts, candidate search, voice interviews
 
 ## Pricing gates (implemented in admin plan matrix)

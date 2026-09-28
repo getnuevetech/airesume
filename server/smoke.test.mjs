@@ -11,6 +11,7 @@ import { extractRequirements, matchJob, matchLabel } from "./match.mjs";
 import { draftQuestions } from "./questions.mjs";
 import { matchExplainLimit, redactMatch, resumeReviewLimit, startOfUtcWeek } from "./quota.mjs";
 import { estimateCostMicros, moneyFromMicros } from "./ai-cost.mjs";
+import { buildApplyKit } from "./apply-kit.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -199,6 +200,33 @@ test("estimateCostMicros is zero for deterministic and positive for mini models"
   });
   assert.ok(paid > 0);
   assert.ok(moneyFromMicros(paid).startsWith("$"));
+});
+
+test("buildApplyKit surfaces contact resume and blank answers without inventing", () => {
+  const kit = buildApplyKit({
+    user: { name: "Alex Rivera", email: "alex@example.com", phone: "555-0100", city: "Austin", address: "1 Main" },
+    profile: {},
+    job: { title: "PM", company: "Acme", primary_company: "Acme", primary_url: "https://jobs.example/pm", source_url: "" },
+    application: {
+      id: "app_1",
+      status: "Ready",
+      target_company: "Acme",
+      target_url: "https://jobs.example/pm",
+      questions: [
+        { id: "why-fit", prompt: "Why fit?", kind: "draft", answer: "Because of product work." },
+        { id: "std-salary", prompt: "Salary", kind: "user", answer: "", blankReason: "Left blank" },
+      ],
+    },
+    version: { rendered: "Alex Rivera\nProduct Manager\nOwned activation." },
+    preferences: { shareContact: true },
+  });
+  assert.equal(kit.eligible, true);
+  assert.equal(kit.listingUrl, "https://jobs.example/pm");
+  assert.equal(kit.contact.find((item) => item.key === "email")?.value, "alex@example.com");
+  assert.ok(kit.resumeText.includes("Owned activation"));
+  assert.equal(kit.blankCount, 1);
+  assert.equal(kit.canComplete, true);
+  assert.ok(kit.steps.some((step) => step.id === "mark"));
 });
 
 test("fresh data dir migrates and seeds schema version", () => {

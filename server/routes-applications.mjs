@@ -4,6 +4,7 @@ import { db, id } from "./db.mjs";
 import { matchJob } from "./match.mjs";
 import { TRACKER_STATUSES, autoDecision } from "./apply-rules.mjs";
 import { fetchJobUrl, parseJobPaste } from "./job-import.mjs";
+import { buildApplyKit } from "./apply-kit.mjs";
 
 export function registerApplications(app, ctx) {
   const {
@@ -156,6 +157,49 @@ export function registerApplications(app, ctx) {
     }).filter(Boolean);
     db.prepare("UPDATE applications SET questions = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(next), Date.now(), row.id);
     res.json({ questions: next });
+  });
+
+  app.get("/api/applications/:id/apply-kit", (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    if (!requireFeature(user, "manual_apply", res)) return;
+    const row = db.prepare("SELECT * FROM applications WHERE id = ? AND user_id = ?").get(req.params.id, user.id);
+    if (!row) {
+      res.status(404).json({ error: "Application not found." });
+      return;
+    }
+    const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(row.job_id);
+    const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
+    const version = row.version_id
+      ? db.prepare("SELECT * FROM resume_versions WHERE id = ? AND user_id = ?").get(row.version_id, user.id)
+      : null;
+    const kit = buildApplyKit({
+      user,
+      profile,
+      job,
+      application: { ...row, questions: parse(row.questions, []) },
+      version,
+      preferences: profile ? parse(profile.preferences, {}) : {},
+    });
+    res.json({ kit });
+  });
+
+  app.post("/api/applications/:id/apply-kit/complete", (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    if (!requireFeature(user, "manual_apply", res)) return;
+    const row = db.prepare("SELECT * FROM applications WHERE id = ? AND user_id = ?").get(req.params.id, user.id);
+    if (!row) {
+      res.status(404).json({ error: "Application not found." });
+      return;
+    }
+    if (!["Ready", "Review required", "Resume preparing"].includes(row.status)) {
+      res.status(400).json({ error: "Only ready or review-required applications can be marked Applied from the assistant." });
+      return;
+    }
+    const delivery = "You applied on the employer site with the browser assistant.";
+    db.prepare("UPDATE applications SET status = 'Applied', delivery = ?, updated_at = ? WHERE id = ?").run(delivery, Date.now(), row.id);
+    res.json({ ok: true, status: "Applied", delivery });
   });
 
   app.post("/api/applications/:id/submit", async (req, res) => {

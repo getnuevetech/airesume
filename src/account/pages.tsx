@@ -474,7 +474,7 @@ export function ApplicationsPage() {
           <div>
             <p className="eyebrow">Applications</p>
             <h1>Tracker</h1>
-            <p className="lede">{data.stats.tracked ?? data.stats.applied} in your tracker. {data.stats.ready || 0} ready to submit. {data.stats.reviewRequired || 0} need review. {data.stats.responded} have a response, interview, or offer.</p>
+            <p className="lede">{data.stats.tracked ?? data.stats.applied} in your tracker. {data.stats.ready || 0} ready to submit. {data.stats.reviewRequired || 0} need review. {data.stats.responded} have a response, interview, or offer. Use Apply in browser to copy answers into the employer form.</p>
           </div>
         </header>
         {data.features.auto_apply ? (
@@ -504,20 +504,29 @@ export function ApplicationsPage() {
                 {item.targetUrl ? <a href={item.targetUrl} target="_blank" rel="noreferrer">Open employer listing</a> : null}
               </div>
               <div className="job-side">
-                {["Ready", "Review required", "Resume preparing"].includes(item.status) ? (
-                  <button
-                    className="btn btn-primary btn-sm"
-                    type="button"
-                    onClick={() => void api(`/api/applications/${item.id}/submit`, { method: "POST" }).then(() => { setMessage("Application submitted."); return reload(); }).catch((err: Error) => setError(err.message))}
-                  >
-                    Submit
-                  </button>
+                {["Ready", "Review required", "Resume preparing"].includes(item.status) && data.features.manual_apply ? (
+                  <>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      type="button"
+                      onClick={() => void api(`/api/applications/${item.id}/submit`, { method: "POST" }).then(() => { setMessage("Application submitted."); return reload(); }).catch((err: Error) => setError(err.message))}
+                    >
+                      Email submit
+                    </button>
+                  </>
                 ) : null}
                 <select value={item.status} onChange={(event) => void api(`/api/applications/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: event.target.value }) }).then(reload)}>
                   {statuses.map((status) => <option key={status}>{status}</option>)}
                 </select>
               </div>
             </div>
+            {["Ready", "Review required", "Resume preparing"].includes(item.status) && data.features.manual_apply ? (
+              <BrowserApplyAssistant
+                applicationId={item.id}
+                onDone={() => { setMessage("Marked Applied after browser apply."); void reload(); }}
+                onError={(message) => setError(message)}
+              />
+            ) : null}
             {(item.questions?.length || ["Ready", "Review required", "Resume preparing", "Found"].includes(item.status)) ? (
               <QuestionDrafts
                 applicationId={item.id}
@@ -530,6 +539,142 @@ export function ApplicationsPage() {
         ))}
       </div>
     </Gate>
+  );
+}
+
+type ApplyKit = {
+  applicationId: string;
+  status: string;
+  eligible: boolean;
+  title: string;
+  company: string;
+  viaCompany: string;
+  listingUrl: string;
+  contact: { key: string; label: string; value: string; ready: boolean; note: string }[];
+  resumeText: string;
+  answers: { id: string; prompt: string; answer: string; kind: string; blankReason: string; hint: string; ready: boolean }[];
+  blankCount: number;
+  steps: { id: string; title: string; detail: string; ready: boolean }[];
+  canComplete: boolean;
+};
+
+function BrowserApplyAssistant({
+  applicationId,
+  onDone,
+  onError,
+}: {
+  applicationId: string;
+  onDone: () => void;
+  onError: (message: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [kit, setKit] = useState<ApplyKit | null>(null);
+  const [copied, setCopied] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    const data = await api<{ kit: ApplyKit }>(`/api/applications/${applicationId}/apply-kit`);
+    setKit(data.kit);
+  }
+
+  async function copyText(label: string, value: string) {
+    if (!value.trim()) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      window.setTimeout(() => setCopied((current) => (current === label ? "" : current)), 1600);
+    } catch {
+      onError("Clipboard access was blocked. Select and copy the text manually.");
+    }
+  }
+
+  return (
+    <div className="apply-kit">
+      <button
+        className="text-btn"
+        type="button"
+        onClick={() => {
+          const next = !open;
+          setOpen(next);
+          if (next) void load().catch((err: Error) => onError(err.message));
+        }}
+      >
+        {open ? "Hide browser apply assistant" : "Apply in browser"}
+      </button>
+      {open ? (
+        <div className="apply-kit-panel">
+          {!kit ? <p className="role">Loading apply kit…</p> : (
+            <>
+              <p className="lede">
+                Keep this open beside the employer form. Copy contact, resume, and answers — JobPilot never invents values.
+                {kit.blankCount ? ` ${kit.blankCount} answer${kit.blankCount === 1 ? "" : "s"} still need you.` : ""}
+              </p>
+              <ol className="apply-kit-steps">
+                {kit.steps.map((step) => (
+                  <li key={step.id} className={step.ready ? "ready" : "pending"}>
+                    <strong>{step.title}</strong>
+                    <span>{step.detail}</span>
+                  </li>
+                ))}
+              </ol>
+              <div className="job-actions">
+                {kit.listingUrl ? (
+                  <a className="btn btn-primary btn-sm" href={kit.listingUrl} target="_blank" rel="noreferrer">
+                    Open listing
+                  </a>
+                ) : null}
+                <button
+                  className="btn btn-ghost btn-sm"
+                  type="button"
+                  disabled={busy || !kit.canComplete}
+                  onClick={() => {
+                    setBusy(true);
+                    void api(`/api/applications/${applicationId}/apply-kit/complete`, { method: "POST" })
+                      .then(onDone)
+                      .catch((err: Error) => onError(err.message))
+                      .finally(() => setBusy(false));
+                  }}
+                >
+                  I submitted on their site
+                </button>
+              </div>
+              <h3>Contact</h3>
+              {kit.contact.map((field) => (
+                <div className="apply-kit-row" key={field.key}>
+                  <div>
+                    <strong>{field.label}</strong>
+                    <p className="role">{field.value || field.note || "Empty"}</p>
+                  </div>
+                  <button className="text-btn" type="button" disabled={!field.value} onClick={() => void copyText(field.label, field.value)}>
+                    {copied === field.label ? "Copied" : "Copy"}
+                  </button>
+                </div>
+              ))}
+              <h3>Tailored resume</h3>
+              <div className="apply-kit-row">
+                <p className="role">{kit.resumeText ? `${kit.resumeText.slice(0, 160)}${kit.resumeText.length > 160 ? "…" : ""}` : "No tailored resume yet."}</p>
+                <button className="text-btn" type="button" disabled={!kit.resumeText} onClick={() => void copyText("Resume", kit.resumeText)}>
+                  {copied === "Resume" ? "Copied" : "Copy all"}
+                </button>
+              </div>
+              {kit.resumeText ? <pre className="apply-kit-resume">{kit.resumeText}</pre> : null}
+              <h3>Answers</h3>
+              {kit.answers.length ? kit.answers.map((item) => (
+                <div className="apply-kit-row" key={item.id}>
+                  <div>
+                    <strong>{item.prompt}</strong>
+                    <p className="role">{item.answer || item.blankReason || item.hint || "Fill this yourself."}</p>
+                  </div>
+                  <button className="text-btn" type="button" disabled={!item.answer} onClick={() => void copyText(item.id, item.answer)}>
+                    {copied === item.id ? "Copied" : "Copy"}
+                  </button>
+                </div>
+              )) : <p className="role">No question drafts for this listing.</p>}
+            </>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
