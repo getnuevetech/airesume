@@ -30,6 +30,7 @@ export type AccountJob = {
   matched: string[];
   missing: string[];
   preferredMatched: string[];
+  matchedFacts?: { skill: string; fact_ids: string[]; confidence: number | null; verified: boolean }[];
   explanationLocked?: boolean;
   applied: boolean;
 };
@@ -40,6 +41,15 @@ export type AccountData = {
     skills: string[];
     employment: Employment[];
     education: string[];
+    facts?: {
+      fact_id: string;
+      category?: string;
+      statement: string;
+      confidence?: number;
+      source?: string;
+      verified_by_user?: boolean;
+      source_fact_ids?: string[];
+    }[];
     preferences: {
       salary?: string;
       workArrangement?: string;

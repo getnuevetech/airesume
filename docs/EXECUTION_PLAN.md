@@ -51,9 +51,9 @@ Browser (+ optional extension)
 4. Internal retention / AI governance / consent checklists — **shipped**
 
 ### Slice I — Fact provenance & match depth
-1. Confidence + source fact ids on claims
-2. User correction flows that affect matching
-3. Optional embeddings behind a flag (deterministic gates remain authoritative)
+1. Confidence + source fact ids on claims — **shipped**
+2. User correction flows that affect matching — **shipped**
+3. Optional embeddings behind a flag (deterministic gates remain authoritative) — **shipped** (`MATCH_EMBEDDINGS=1`)
 
 ### Slice J — Extension autofill assist
 1. Field detection + user-triggered fill from apply kit

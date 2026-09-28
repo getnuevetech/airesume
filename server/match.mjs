@@ -1,5 +1,7 @@
 /** Hybrid job match scoring and requirement extraction (deterministic). */
 
+import { citeSkillFact, skillsForMatching } from "./fact-ledger.mjs";
+
 const WEIGHTS = {
   coreExperience: 25,
   requiredSkills: 25,
@@ -233,16 +235,21 @@ export function matchLabelKey(scoreOrLabel) {
 
 /**
  * Score a resume document against a job row.
- * @returns {{ score: number, label: string, matched: string[], missing: string[], preferredMatched: string[], explanation: string, parts: object }}
+ * Optional `options.facts` attaches ledger provenance to matched skills.
+ * Deterministic gates remain authoritative; embeddings (if enabled) are display-only.
+ * @returns {{ score: number, label: string, matched: string[], missing: string[], preferredMatched: string[], matchedFacts: object[], explanation: string, parts: object, semanticHint: number|null }}
  */
-export function matchJob(doc, preferences, job) {
+export function matchJob(doc, preferences, job, options = {}) {
+  const facts = Array.isArray(options.facts) ? options.facts : [];
   const requirements = parseRequirements(job.requirements, job.skills);
-  const owned = (doc.skills || []).map((skill) => lower(skill));
+  const ownedSkills = skillsForMatching(doc.skills || [], facts);
+  const owned = ownedSkills.map((skill) => lower(skill));
   const mandatory = requirements.mandatory;
   const preferred = requirements.preferred;
   const matched = mandatory.filter((skill) => skillHit(owned, skill));
   const missing = mandatory.filter((skill) => !skillHit(owned, skill));
   const preferredMatched = preferred.filter((skill) => skillHit(owned, skill));
+  const matchedFacts = matched.map((skill) => citeSkillFact(skill, facts));
   const requiredSkills = mandatory.length ? matched.length / mandatory.length : 0.45;
   const preferredSkills = preferred.length ? preferredMatched.length / preferred.length : 0.5;
   const core = Math.max(experienceScore(doc, job), yearsScore(doc, requirements) * 0.85);
@@ -256,6 +263,7 @@ export function matchJob(doc, preferences, job) {
     salary: salaryScore(preferences || {}, job),
     preferredSkills,
   };
+  const semanticHint = embeddingsOverlapHint(doc, job, options);
   const score = Math.round(
     parts.coreExperience * WEIGHTS.coreExperience +
       parts.requiredSkills * WEIGHTS.requiredSkills +
@@ -269,10 +277,19 @@ export function matchJob(doc, preferences, job) {
   const clamped = Math.max(1, Math.min(99, score));
   const label = matchLabel(clamped);
   const bits = [];
-  if (matched.length) bits.push(`Overlaps on ${matched.slice(0, 4).join(", ")}`);
+  if (matchedFacts.length) {
+    const cites = matchedFacts.slice(0, 4).map((item) => {
+      const ids = item.fact_ids?.length ? ` [${item.fact_ids.join(", ")}]` : "";
+      return `${item.skill}${ids}`;
+    });
+    bits.push(`Overlaps on ${cites.join(", ")}`);
+  } else if (matched.length) {
+    bits.push(`Overlaps on ${matched.slice(0, 4).join(", ")}`);
+  }
   if (missing.length) bits.push(`Missing ${missing.slice(0, 3).join(", ")}`);
   if (parts.location >= 0.9) bits.push("Location fits your preferences");
   if (parts.location <= 0.4) bits.push("Location is a stretch");
+  if (semanticHint != null && semanticHint >= 0.55) bits.push("Semantic overlap looks supportive (display-only)");
   if (!bits.length) bits.push("Limited overlap with the listing");
   return {
     score: clamped,
@@ -281,10 +298,35 @@ export function matchJob(doc, preferences, job) {
     matched,
     missing,
     preferredMatched,
+    matchedFacts,
     explanation: bits.join(". ") + ".",
     parts,
     requirements,
+    semanticHint,
   };
+}
+
+/** Lightweight bag-of-tokens overlap behind MATCH_EMBEDDINGS=1 — never changes score gates. */
+function embeddingsOverlapHint(doc, job, options = {}) {
+  const enabled = options.embeddings === true || String(process.env.MATCH_EMBEDDINGS || "") === "1";
+  if (!enabled) return null;
+  const docSkills = Array.isArray(doc.skills) ? doc.skills.join(" ") : String(doc.skills || "");
+  const jobSkills = Array.isArray(job.skills) ? job.skills.join(" ") : String(job.skills || "");
+  const left = tokenize(`${doc.summary || ""} ${docSkills} ${JSON.stringify(doc.employment || [])}`);
+  const right = tokenize(`${job.title || ""} ${job.description || ""} ${jobSkills}`);
+  if (!left.size || !right.size) return 0;
+  let hit = 0;
+  for (const token of left) if (right.has(token)) hit += 1;
+  return hit / Math.max(left.size, right.size);
+}
+
+function tokenize(text) {
+  return new Set(
+    String(text || "")
+      .toLowerCase()
+      .split(/[^a-z0-9+#.]+/i)
+      .filter((token) => token.length > 2),
+  );
 }
 
 export const MATCH_WEIGHTS = WEIGHTS;

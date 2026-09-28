@@ -60,6 +60,7 @@ function jobCard(job, match, sourceNames, applied) {
     matched: locked ? [] : match.matched,
     missing: locked ? [] : match.missing,
     preferredMatched: locked ? [] : match.preferredMatched || [],
+    matchedFacts: locked ? [] : match.matchedFacts || [],
     explanationLocked: locked,
     applied,
   };
@@ -90,12 +91,13 @@ export function registerDashboard(app, ctx) {
     const version = profile ? activeVersion(user.id) : null;
     const doc = version ? parse(version.document, {}) : { skills: [], employment: [], education: [] };
     const preferences = profile ? parse(profile.preferences, {}) : {};
+    const facts = profile ? parse(profile.facts, []) : [];
     const jobs = db.prepare("SELECT * FROM jobs WHERE active = 1").all();
     const sourceNames = new Map(db.prepare("SELECT id, name FROM job_sources").all().map((source) => [source.id, source.name]));
     const applications = db.prepare("SELECT * FROM applications WHERE user_id = ?").all(user.id);
     const appliedIds = new Set(applications.map((item) => item.job_id));
     let ranked = jobs
-      .map((job) => ({ job, ...matchJob(doc, preferences, job) }))
+      .map((job) => ({ job, ...matchJob(doc, preferences, job, { facts }) }))
       .sort((a, b) => b.score - a.score);
     if (access.features.job_limit) ranked = ranked.slice(0, access.features.job_limit);
     if (!access.features.job_browse) ranked = [];

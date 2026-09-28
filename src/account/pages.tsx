@@ -876,6 +876,23 @@ function ProfileView({
             <h2>Skills</h2>
             <div className="chips">{profile.skills.map((skill) => <span className="chip" key={skill}>{skill}</span>)}</div>
           </section>
+          {(profile.facts || []).filter((fact) => fact.category === "skill" || /^SKILL-/i.test(fact.fact_id)).length ? (
+            <section className="account-card">
+              <h2>Facts that affect matching</h2>
+              <p className="role">Edit skills above to correct these. Low-confidence unverified skills are ignored in match scores.</p>
+              <ul className="fact-list">
+                {(profile.facts || [])
+                  .filter((fact) => fact.category === "skill" || /^SKILL-/i.test(fact.fact_id))
+                  .map((fact) => (
+                    <li key={fact.fact_id}>
+                      <strong>{fact.fact_id}</strong> · {fact.statement}
+                      {typeof fact.confidence === "number" ? ` · confidence ${Math.round(fact.confidence * 100)}%` : ""}
+                      {fact.verified_by_user ? " · verified" : ""}
+                    </li>
+                  ))}
+              </ul>
+            </section>
+          ) : null}
         </>
       )}
       <section className="account-card">
@@ -1195,7 +1212,14 @@ export function JobsPage() {
               <p className="lede">{job.description}</p>
               {job.explanation ? <p className="role">{job.label ? `${job.label}: ` : ""}{job.explanation}</p> : null}
               {job.explanationLocked ? <p className="role">Explanation locked — weekly Free/Starter quota reached. Upgrade for more.</p> : null}
-              <p className="role">{job.explanationLocked ? "Details hidden until an explanation slot is available" : (job.matched.join(", ") || "Limited skill overlap")}{!job.explanationLocked && job.missing.length ? ` · Gap: ${job.missing.join(", ")}` : ""}</p>
+              <p className="role">
+                {job.explanationLocked
+                  ? "Details hidden until an explanation slot is available"
+                  : (job.matchedFacts?.length
+                      ? job.matchedFacts.map((item) => `${item.skill}${item.fact_ids?.length ? ` (${item.fact_ids.join(", ")})` : ""}`).join(", ")
+                      : job.matched.join(", ")) || "Limited skill overlap"}
+                {!job.explanationLocked && job.missing.length ? ` · Gap: ${job.missing.join(", ")}` : ""}
+              </p>
             </div>
             <div className="job-side">
               <span className="match-badge">{job.score}%</span>

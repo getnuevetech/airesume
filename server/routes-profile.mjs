@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join, extname } from "node:path";
 import { db, id, uploadsDir } from "./db.mjs";
 import { completeJson } from "./ai-run.mjs";
+import { rebuildFactsFromProfile } from "./fact-ledger.mjs";
 import { RESUME_TEMPLATES, resolveTemplate, templateLimitOf } from "./schema.mjs";
 
 function clamp(value, fallback) {
@@ -81,13 +82,19 @@ export function registerProfile(app, ctx) {
       workAuthorization: String(req.body.workAuthorization || ""),
       shareContact: Boolean(req.body.shareContact),
     };
-    const facts = [
-      { fact_id: "ID-001", statement: `Name: ${name}`, verified_by_user: true },
-      phone ? { fact_id: "ID-003", statement: `Phone: ${phone}`, verified_by_user: true } : null,
-      city ? { fact_id: "ID-004", statement: `Location: ${city}`, verified_by_user: true } : null,
-      ...employment.map((job, index) => ({ fact_id: `EXP-${index + 1}`, statement: `${job.title || "Role"}${job.employer ? ` at ${job.employer}` : ""}`, verified_by_user: true })),
-      ...skills.map((skill, index) => ({ fact_id: `SKILL-${index + 1}`, statement: skill, verified_by_user: true })),
-    ].filter(Boolean);
+    const priorFacts = parse(profile.facts, []);
+    const facts = rebuildFactsFromProfile(
+      {
+        name,
+        email: user.email,
+        phone,
+        address,
+        city,
+        skills,
+        employment,
+      },
+      priorFacts,
+    );
     db.prepare("UPDATE users SET name = ?, phone = ?, address = ?, city = ? WHERE id = ?").run(name, phone, address, city, user.id);
     db.prepare(
       "UPDATE profiles SET headline = ?, summary = ?, skills = ?, employment = ?, education = ?, facts = ?, preferences = ?, slug = ?, updated_at = ? WHERE user_id = ?",

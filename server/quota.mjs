@@ -86,6 +86,7 @@ export function redactMatch(match) {
     matched: [],
     missing: [],
     preferredMatched: [],
+    matchedFacts: [],
     explanationLocked: true,
   };
 }
