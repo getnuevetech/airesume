@@ -63,6 +63,11 @@ const features = [
     text: "Host, interviewer, and candidate join the same room with a shared transcript. Candidate answers are scored only against public resume facts.",
   },
   {
+    icon: <Search />,
+    title: "Hiring analytics",
+    text: "Track funnel health, invite and hire rates, and SLA breaches for review, invites, and interviews.",
+  },
+  {
     icon: <Shield />,
     title: "Private by design",
     text: "Your file is read in this browser. It is not uploaded to a server.",

@@ -22,6 +22,7 @@ import { registerEmployer } from "./routes-employer.mjs";
 import { registerEmployerVoice } from "./routes-employer-voice.mjs";
 import { registerEmployerPostings } from "./routes-employer-postings.mjs";
 import { registerInterviewRooms } from "./routes-interview-rooms.mjs";
+import { registerEmployerAnalytics } from "./routes-employer-analytics.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const homepageFile = join(here, "..", "shared", "homepage.json");
@@ -740,6 +741,7 @@ registerEmployer(app, { requireUser, setSession });
 registerEmployerVoice(app, { requireUser });
 registerEmployerPostings(app, { requireUser });
 registerInterviewRooms(app, { requireUser });
+registerEmployerAnalytics(app, { requireUser });
 registerPlatform(app, { requireUser, requireAdmin, audit, upload, originOf });
 
 app.use("/uploads", express.static(uploadsDir));
