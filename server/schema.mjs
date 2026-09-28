@@ -74,13 +74,6 @@ export function migrate() {
   addColumn("profiles", "photo_url", "TEXT DEFAULT ''");
   addColumn("profiles", "slug", "TEXT DEFAULT ''");
   addColumn("profiles", "template", "TEXT DEFAULT 'classic'");
-  addColumn("jobs", "primary_company", "TEXT DEFAULT ''");
-  addColumn("jobs", "primary_url", "TEXT DEFAULT ''");
-  addColumn("jobs", "primary_email", "TEXT DEFAULT ''");
-  addColumn("applications", "target_company", "TEXT DEFAULT ''");
-  addColumn("applications", "target_url", "TEXT DEFAULT ''");
-  addColumn("applications", "target_email", "TEXT DEFAULT ''");
-  addColumn("applications", "delivery", "TEXT DEFAULT ''");
   addColumn("mail_outbox", "status", "TEXT DEFAULT 'stored'");
   addColumn("mail_outbox", "error", "TEXT DEFAULT ''");
   db.exec(`
@@ -217,6 +210,13 @@ export function migrate() {
       UNIQUE(user_id, job_id)
     );
   `);
+  addColumn("jobs", "primary_company", "TEXT DEFAULT ''");
+  addColumn("jobs", "primary_url", "TEXT DEFAULT ''");
+  addColumn("jobs", "primary_email", "TEXT DEFAULT ''");
+  addColumn("applications", "target_company", "TEXT DEFAULT ''");
+  addColumn("applications", "target_url", "TEXT DEFAULT ''");
+  addColumn("applications", "target_email", "TEXT DEFAULT ''");
+  addColumn("applications", "delivery", "TEXT DEFAULT ''");
 
   const provider = db.prepare("SELECT id FROM ai_providers LIMIT 1").get();
   if (!provider) {
