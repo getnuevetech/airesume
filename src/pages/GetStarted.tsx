@@ -245,14 +245,35 @@ export function GetStartedPage() {
     workAuthorization: setWorkAuthorization,
   };
 
+  const topTitle = draft.profile.employment?.[0]?.title || "Professional";
+  const topEmployer = draft.profile.employment?.[0]?.employer;
+  const headlineBits = [topTitle, topEmployer ? `most recently at ${topEmployer}` : null].filter(Boolean).join(" · ");
+  const skillPreview = draft.profile.skills.slice(0, 6);
+
   return (
     <div className="container start-grid">
       <div className="page-hero">
-        <p className="eyebrow">Confirm your profile</p>
-        <h1>We drafted your account from the resume.</h1>
-        <p className="lede">
-          Review the details we found in your resume. Correct anything that is outdated, then activate with your email.
+        <p className="eyebrow">Your career profile is ready</p>
+        <h1>{draft.profile.name ? `${draft.profile.name.split(" ")[0]}, we built your draft profile.` : "We built your draft profile."}</h1>
+        <p className="lede activation-summary">
+          {headlineBits}
+          {draft.profile.city ? ` · ${draft.profile.city}` : ""}
         </p>
+        {skillPreview.length ? (
+          <div className="chips" aria-label="Skills from your resume">
+            {skillPreview.map((skill) => (
+              <span className="chip" key={skill}>
+                {skill}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div className="activation-teaser" role="status">
+          <p className="activation-teaser-title">We found relevant opportunities based on your background.</p>
+          <p className="role">
+            Complete the remaining required details to view your strongest matches. Nothing is sent until you review.
+          </p>
+        </div>
         {(draft.warnings || []).map((warning) => (
           <p className="form-error" role="alert" key={warning}>
             {warning}
@@ -265,7 +286,7 @@ export function GetStartedPage() {
         ) : null}
         {missingPrefs.length ? (
           <div className="pref-questions">
-            <p className="role">Only these preferences are still needed:</p>
+            <p className="role">Only these preferences are still needed for matching:</p>
             <ul className="fact-list">
               {missingPrefs.map((field) => (
                 <li key={field.key}>{field.question}</li>
@@ -273,19 +294,12 @@ export function GetStartedPage() {
             </ul>
           </div>
         ) : (
-          <p className="role">Preferences look complete enough to start matching after activation.</p>
+          <p className="role">Preferences look complete enough to unlock strongest matches after activation.</p>
         )}
-        <div className="chips">
-          {draft.profile.skills.map((skill) => (
-            <span className="chip" key={skill}>
-              {skill}
-            </span>
-          ))}
-        </div>
         <ul className="fact-list">
           {draft.facts
             .filter((fact) => fact.statement && !/[\uE000-\uF8FF≡¼½¾¤¦§☒ØÐÞ]/.test(fact.statement))
-            .slice(0, 8)
+            .slice(0, 6)
             .map((fact) => (
               <li key={fact.fact_id}>{fact.statement}</li>
             ))}

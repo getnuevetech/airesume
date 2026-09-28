@@ -11,80 +11,144 @@
   ],
   "hero": {
     "image": "/images/hero-woman.png",
-    "imageAlt": "Smiling woman in a green sweater working on a laptop in a bright office",
-    "eyebrow": "Quick & easy setup",
-    "titleLines": ["Upload your resume", "to create your account", "and get started."],
-    "lede": "Your resume helps us instantly build your profile and find the right jobs for you.",
+    "imageAlt": "Candidate reviewing tailored job matches on a laptop",
+    "eyebrow": "JobPilot · AI Job Application Manager",
+    "titleLines": ["Better applications.", "Less time.", "Lower cost."],
+    "lede": "Upload your resume. We build your career profile, find the jobs you are best positioned for, tailor each application, and help you apply efficiently — without inventing experience.",
     "dropTitle": "Drag & drop your resume here",
     "dropHint": "PDF, DOCX or TXT (up to 10MB)",
     "uploadLabel": "Upload Resume",
     "orLabel": "or",
     "googleLabel": "Continue with Google",
-    "finePrint": "It's free and takes less than a minute.",
-    "aiCard": "AI is finding and applying to jobs for you...",
+    "finePrint": "Your resume stays under your control. Free to start.",
+    "secondaryCta": "See how it works",
+    "secondaryCtaTo": "#how-it-works",
+    "aiCard": "Preparing strong-fit roles from your verified facts…",
     "jobs": [
-      { "id": "pm", "title": "Product Manager", "company": "Spotify", "logo": "spotify", "status": "applied", "match": 96 },
-      { "id": "se", "title": "Software Engineer", "company": "HubSpot", "logo": "hubspot", "status": "applying", "match": 91 },
-      { "id": "da", "title": "Data Analyst", "company": "Notion", "logo": "notion", "status": "match", "match": 92 }
+      { "id": "pm", "title": "Product Manager", "company": "Northstar", "logo": "spotify", "status": "match", "match": 92 },
+      { "id": "se", "title": "Software Engineer", "company": "Harbor Labs", "logo": "hubspot", "status": "applying", "match": 87 },
+      { "id": "da", "title": "Data Analyst", "company": "Signal Co", "logo": "notion", "status": "applied", "match": 84 }
+    ]
+  },
+  "trust": {
+    "items": [
+      { "icon": "shield", "title": "You stay in control", "text": "Review or delete your profile and resume data anytime." },
+      { "icon": "check", "title": "No invented credentials", "text": "Applications use verified facts from your Fact Ledger." },
+      { "icon": "lock", "title": "Sensitive answers wait", "text": "Salary, sponsorship, and EEO fields stay blank until you confirm." },
+      { "icon": "eye", "title": "Review before send", "text": "Assisted Apply prepares; you approve what goes out." }
     ]
   },
   "stats": [
-    { "icon": "briefcase", "value": "3x", "label": "More interviews" },
-    { "icon": "users", "value": "63K+", "label": "People found jobs" },
-    { "icon": "star", "value": "4.8/5", "label": "User rating" },
-    { "icon": "shield", "value": "Private & secure", "label": "Your data stays safe" }
+    { "icon": "briefcase", "value": "More qualified / hour", "label": "Not more spam applications" },
+    { "icon": "users", "value": "Fact-backed", "label": "Resumes tied to your ledger" },
+    { "icon": "star", "value": "Match first", "label": "Poor fits filtered early" },
+    { "icon": "shield", "value": "Private & secure", "label": "Your data stays yours" }
   ],
   "how": {
     "eyebrow": "How it works",
-    "title": "Find the right job. On autopilot.",
+    "title": "From resume to ready application in four steps.",
     "steps": [
-      { "icon": "file", "title": "1. Upload resume", "text": "Create your profile in seconds." },
-      { "icon": "search", "title": "2. Get matched", "text": "We find the best jobs for your skills." },
-      { "icon": "plane", "title": "3. Review & apply", "text": "We prepare a tailored application. You review before anything is sent." }
+      { "icon": "file", "title": "1. Upload resume", "text": "AI drafts your account, Fact Ledger, and Master Career Profile." },
+      { "icon": "search", "title": "2. Find better fits", "text": "Jobs are scored against verified experience, not keyword stuffing." },
+      { "icon": "spark", "title": "3. Tailor & prepare", "text": "Resume and answers are shaped for the role using only confirmed facts." },
+      { "icon": "plane", "title": "4. Review & apply", "text": "You approve. Assisted fill handles repetition. Every send is tracked." }
     ]
   },
+  "fit": {
+    "eyebrow": "Right job fit",
+    "title": "Spend time on roles worth pursuing.",
+    "lede": "Quality over volume. JobPilot shows why a role fits, what is missing, and when to skip.",
+    "demo": {
+      "title": "Senior Product Manager",
+      "company": "Northstar · Remote",
+      "score": 87,
+      "label": "STRONG MATCH",
+      "why": ["8+ years product ownership", "SQL + experimentation", "Remote preference aligned"],
+      "gaps": ["Marketplace domain is preferred, not required"],
+      "meta": ["$150k–$180k", "Full-time", "Remote"]
+    }
+  },
+  "efficiency": {
+    "eyebrow": "Controlled efficiency",
+    "title": "Automation that stops for review.",
+    "lede": "Matched → resume ready → application prepared → you review → submitted. Sensitive questions never auto-answer.",
+    "stages": ["Matched", "Resume ready", "Prepared", "Your review", "Tracked"]
+  },
   "better": {
-    "eyebrow": "Better applications",
-    "title": "A stronger resume opens more doors.",
-    "lede": "Get AI-powered feedback and a tailored resume that gets you noticed.",
+    "eyebrow": "Resume Upscale",
+    "title": "Stronger wording. Same facts.",
+    "lede": "Upscale improves presentation after clarification — it never invents employers, metrics, or credentials.",
     "button": "Upscale My Resume →",
-    "checks": ["Improved with AI", "Tailored for each job", "Optimized keywords", "Higher match rate"],
-    "scribble": "Turn your resume into more opportunities."
+    "beforeLabel": "Before",
+    "afterLabel": "After",
+    "before": "Worked on activation and partnered with design on experiments.",
+    "after": "Owned activation roadmap; partnered with design and used SQL to judge experiments that raised signup completion.",
+    "checks": [
+      "Weak bullet flagged",
+      "Clarification asked when needed",
+      "Answer stored in Fact Ledger",
+      "Rewritten statement fact-checked"
+    ],
+    "scribble": "Presentation changes. Truth does not."
+  },
+  "results": {
+    "eyebrow": "Weekly efficiency",
+    "title": "More qualified applications per hour.",
+    "lede": "Example dashboard once your search is running — real metrics replace placeholders after you activate.",
+    "metrics": [
+      { "value": "63", "label": "Jobs analyzed" },
+      { "value": "18", "label": "Strong matches" },
+      { "value": "12", "label": "Applications ready" },
+      { "value": "7h", "label": "Estimated time saved" }
+    ]
   },
   "stories": {
-    "eyebrow": "Real people",
-    "title": "Real results.",
+    "eyebrow": "Outcomes",
+    "title": "Less searching. Stronger applications.",
     "linkLabel": "See more stories →",
     "items": [
       {
         "name": "Priya S.",
         "role": "Product Designer",
-        "quote": "JobPilot made my job search so much easier. I got 4 interviews in 3 weeks!",
+        "quote": "I stopped spraying applications. Strong-match labels helped me focus — four interviews in three weeks.",
         "avatar": "/images/avatar-priya.png"
       },
       {
         "name": "Marcus T.",
         "role": "Software Engineer",
-        "quote": "The tailored resumes and auto-applying saved me hours. I landed a great role!",
+        "quote": "Tailored resumes from my real history saved hours. Nothing felt fabricated.",
         "avatar": "/images/avatar-marcus.png"
       },
       {
         "name": "Elena R.",
         "role": "Marketing Specialist",
-        "quote": "Simple to use and actually works. I finally have a job I love.",
+        "quote": "Review-first apply meant I stayed in control. I finally landed a role I wanted.",
         "avatar": "/images/avatar-elena.png"
       }
     ]
   },
+  "pricing": {
+    "eyebrow": "Pricing",
+    "title": "Efficiency first. Affordable plans second.",
+    "lede": "Start free. Upgrade when you want Upscale, fuller lists, or controlled Auto-Apply.",
+    "button": "Compare plans",
+    "buttonTo": "/pricing",
+    "plans": [
+      { "name": "Free", "price": "$0", "blurb": "Profile, review, limited matches" },
+      { "name": "Starter", "price": "$7.99", "blurb": "Upscale + Assisted Apply" },
+      { "name": "Pro", "price": "$14.99", "blurb": "Full list + templates" },
+      { "name": "Autopilot", "price": "$24.99", "blurb": "Controlled Auto-Apply" }
+    ]
+  },
   "cta": {
-    "title": "Your next opportunity is closer than you think.",
-    "lede": "Upload your resume, create your profile, and let AI do the rest.",
-    "button": "Get Started Free →",
-    "scribble": "Less searching. More opportunities.",
+    "title": "Start with your resume.",
+    "lede": "Upload once. Confirm facts. See strong-fit jobs before you spend another afternoon searching.",
+    "button": "Upload Resume",
+    "scribble": "The homepage is step one of the product.",
     "items": [
-      { "icon": "search", "label": "Find matching jobs" },
-      { "icon": "file", "label": "Tailor your resume" },
-      { "icon": "plane", "label": "Apply automatically" }
+      { "icon": "search", "label": "Find strong-fit jobs" },
+      { "icon": "file", "label": "Tailor without inventing" },
+      { "icon": "plane", "label": "Review, then apply" }
     ]
   },
   "footer": {

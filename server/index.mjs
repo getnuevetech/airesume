@@ -43,6 +43,15 @@ function seed() {
   const existing = db.prepare("SELECT value FROM settings WHERE key = 'homepage'").get();
   if (!existing) {
     db.prepare("INSERT INTO settings (key, value) VALUES ('homepage', ?)").run(JSON.stringify(defaultHomepage));
+  } else {
+    try {
+      const parsed = JSON.parse(existing.value);
+      if (!parsed?.trust?.items || !parsed?.fit?.demo || !parsed?.pricing?.plans || !parsed?.results?.metrics) {
+        db.prepare("UPDATE settings SET value = ? WHERE key = 'homepage'").run(JSON.stringify(defaultHomepage));
+      }
+    } catch {
+      db.prepare("UPDATE settings SET value = ? WHERE key = 'homepage'").run(JSON.stringify(defaultHomepage));
+    }
   }
   const admin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
   if (!admin) {

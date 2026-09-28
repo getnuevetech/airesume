@@ -20,17 +20,71 @@ export type HomepageContent = {
     orLabel: string;
     googleLabel: string;
     finePrint: string;
+    secondaryCta?: string;
+    secondaryCtaTo?: string;
     aiCard: string;
     jobs: { id: string; title: string; company: string; logo: JobLogo; status: JobStatus; match: number }[];
   };
+  trust: {
+    items: { icon: "shield" | "check" | "lock" | "eye"; title: string; text: string }[];
+  };
   stats: { icon: "briefcase" | "users" | "star" | "shield"; value: string; label: string }[];
-  how: { eyebrow: string; title: string; steps: { icon: "file" | "search" | "plane"; title: string; text: string }[] };
-  better: { eyebrow: string; title: string; lede: string; button: string; checks: string[]; scribble: string };
+  how: {
+    eyebrow: string;
+    title: string;
+    steps: { icon: "file" | "search" | "plane" | "spark"; title: string; text: string }[];
+  };
+  fit: {
+    eyebrow: string;
+    title: string;
+    lede: string;
+    demo: {
+      title: string;
+      company: string;
+      score: number;
+      label: string;
+      why: string[];
+      gaps: string[];
+      meta: string[];
+    };
+  };
+  efficiency: {
+    eyebrow: string;
+    title: string;
+    lede: string;
+    stages: string[];
+  };
+  better: {
+    eyebrow: string;
+    title: string;
+    lede: string;
+    button: string;
+    beforeLabel?: string;
+    afterLabel?: string;
+    before?: string;
+    after?: string;
+    checks: string[];
+    scribble: string;
+  };
+  results: {
+    eyebrow: string;
+    title: string;
+    lede: string;
+    metrics: { value: string; label: string }[];
+  };
   stories: {
     eyebrow: string;
     title: string;
     linkLabel: string;
     items: { name: string; role: string; quote: string; avatar: string }[];
+  };
+  pricing: {
+    eyebrow: string;
+    title: string;
+    lede: string;
+    button: string;
+    buttonTo: string;
+    plans: { name: string; price: string; blurb: string }[];
   };
   cta: {
     title: string;
@@ -44,6 +98,60 @@ export type HomepageContent = {
 
 export const defaultHomepage = fallback as HomepageContent;
 
+export function mergeHomepage(incoming: Partial<HomepageContent> | null | undefined): HomepageContent {
+  const base = defaultHomepage;
+  if (!incoming || typeof incoming !== "object") return base;
+  return {
+    ...base,
+    ...incoming,
+    hero: { ...base.hero, ...(incoming.hero || {}) },
+    trust: { ...base.trust, ...(incoming.trust || {}), items: incoming.trust?.items?.length ? incoming.trust.items : base.trust.items },
+    stats: incoming.stats?.length ? incoming.stats : base.stats,
+    how: {
+      ...base.how,
+      ...(incoming.how || {}),
+      steps: incoming.how?.steps?.length ? incoming.how.steps : base.how.steps,
+    },
+    fit: {
+      ...base.fit,
+      ...(incoming.fit || {}),
+      demo: { ...base.fit.demo, ...(incoming.fit?.demo || {}) },
+    },
+    efficiency: {
+      ...base.efficiency,
+      ...(incoming.efficiency || {}),
+      stages: incoming.efficiency?.stages?.length ? incoming.efficiency.stages : base.efficiency.stages,
+    },
+    better: { ...base.better, ...(incoming.better || {}) },
+    results: {
+      ...base.results,
+      ...(incoming.results || {}),
+      metrics: incoming.results?.metrics?.length ? incoming.results.metrics : base.results.metrics,
+    },
+    stories: {
+      ...base.stories,
+      ...(incoming.stories || {}),
+      items: incoming.stories?.items?.length ? incoming.stories.items : base.stories.items,
+    },
+    pricing: {
+      ...base.pricing,
+      ...(incoming.pricing || {}),
+      plans: incoming.pricing?.plans?.length ? incoming.pricing.plans : base.pricing.plans,
+    },
+    cta: {
+      ...base.cta,
+      ...(incoming.cta || {}),
+      items: incoming.cta?.items?.length ? incoming.cta.items : base.cta.items,
+    },
+    footer: {
+      ...base.footer,
+      ...(incoming.footer || {}),
+      links: incoming.footer?.links?.length ? incoming.footer.links : base.footer.links,
+    },
+    nav: incoming.nav?.length ? incoming.nav : base.nav,
+  };
+}
+
 const SiteContext = createContext<{ content: HomepageContent; refresh: () => Promise<void> }>({
   content: defaultHomepage,
   refresh: async () => undefined,
@@ -54,7 +162,7 @@ export function SiteContentProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     try {
       const response = await fetch("/api/content/homepage");
-      if (response.ok) setContent((await response.json()) as HomepageContent);
+      if (response.ok) setContent(mergeHomepage((await response.json()) as Partial<HomepageContent>));
     } catch {
       setContent(defaultHomepage);
     }

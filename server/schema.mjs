@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 
-export const SCHEMA_VERSION = 19;
+export const SCHEMA_VERSION = 20;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -551,10 +554,27 @@ export function migrate() {
   }
 
   const versionRow = db.prepare("SELECT version FROM schema_version LIMIT 1").get();
+  const previous = versionRow?.version ?? 0;
   if (!versionRow) {
     db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(SCHEMA_VERSION);
   } else if (versionRow.version < SCHEMA_VERSION) {
     db.prepare("UPDATE schema_version SET version = ?").run(SCHEMA_VERSION);
+  }
+
+  // Slice G: conversion homepage (§53) — refresh stored CMS when upgrading past 19.
+  if (previous < 20) {
+    try {
+      const homepagePath = join(dirname(fileURLToPath(import.meta.url)), "..", "shared", "homepage.json");
+      const nextHomepage = JSON.parse(readFileSync(homepagePath, "utf8"));
+      const existing = db.prepare("SELECT value FROM settings WHERE key = 'homepage'").get();
+      if (!existing) {
+        db.prepare("INSERT INTO settings (key, value) VALUES ('homepage', ?)").run(JSON.stringify(nextHomepage));
+      } else {
+        db.prepare("UPDATE settings SET value = ? WHERE key = 'homepage'").run(JSON.stringify(nextHomepage));
+      }
+    } catch {
+      // Shared homepage file is optional in isolated unit tests.
+    }
   }
 }
 

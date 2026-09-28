@@ -7,8 +7,8 @@ import { applySecurityHeaders, rateLimit, pruneRateLimitBuckets } from "./securi
 import { migrate, SCHEMA_VERSION } from "./schema.mjs";
 import { db } from "./db.mjs";
 
-test("schema version is 19 for extension and auto-apply auth", () => {
-  assert.equal(SCHEMA_VERSION, 19);
+test("schema version is 20 for conversion homepage", () => {
+  assert.equal(SCHEMA_VERSION, 20);
   migrate();
   assert.ok(db.prepare("PRAGMA table_info(extension_tokens)").all().some((column) => column.name === "token_hash"));
   assert.ok(db.prepare("PRAGMA table_info(users)").all().some((column) => column.name === "auto_apply_authorized_at"));

@@ -41,8 +41,8 @@ Browser (+ optional extension)
 ## Next build sequence (post Slice F)
 
 ### Slice G — Conversion landing & activation
-1. Spec §53 homepage structure (hero upload, trust strip, how-it-works, match demo, upscale, pricing, final CTA)
-2. Activation screen: profile summary + strong-match teaser + missing prefs only
+1. Spec §53 homepage structure (hero upload, trust strip, how-it-works, match demo, upscale, pricing, final CTA) — **shipped**
+2. Activation screen: profile summary + strong-match teaser + missing prefs only — **shipped**
 
 ### Slice H — Launch legal & consent
 1. Cookie Settings control
