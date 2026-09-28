@@ -14,6 +14,7 @@ import { estimateCostMicros, moneyFromMicros } from "./ai-cost.mjs";
 import { buildApplyKit } from "./apply-kit.mjs";
 import { buildCareerInsights } from "./career-intel.mjs";
 import { buildInterviewPrep } from "./interview-prep.mjs";
+import { buildVoicePractice, scoreVoiceAnswer, summarizeVoiceSession } from "./voice-interview.mjs";
 import { searchCandidates } from "./employer-search.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
@@ -297,6 +298,57 @@ test("buildInterviewPrep uses resume bullets and does not invent metrics", () =>
   assert.equal(prep.askEmployer.length, 3);
 });
 
+test("voice practice scores fact-safe answers and flags invented metrics", () => {
+  const prep = buildInterviewPrep({
+    job: {
+      title: "Product Manager",
+      company: "Northstar",
+      primary_company: "Northstar",
+      description: "Own activation with SQL.",
+    },
+    doc: {
+      skills: ["SQL", "Product management"],
+      employment: [{ title: "PM", employer: "Acme", dates: "2021-2024", bullets: ["Owned activation with SQL dashboards"] }],
+    },
+    match: { score: 90, matched: ["SQL", "Product management"], missing: ["Roadmapping"] },
+    application: { id: "app_1", status: "Interview", target_company: "Northstar" },
+  });
+  const practice = buildVoicePractice({
+    prep,
+    doc: {
+      skills: ["SQL", "Product management"],
+      employment: [{ title: "PM", employer: "Acme", dates: "2021-2024", bullets: ["Owned activation with SQL dashboards"] }],
+    },
+    match: { matched: ["SQL", "Product management"], missing: ["Roadmapping"] },
+  });
+  assert.ok(practice.prompts.length >= 4);
+  assert.ok(practice.facts.employers.includes("Acme"));
+  const solid = scoreVoiceAnswer({
+    prompt: practice.prompts.find((item) => item.id === "challenge"),
+    answer: "At Acme as a PM I owned activation with SQL dashboards and partnered with design on experiments.",
+    facts: practice.facts,
+    coachAnswer: practice.prompts.find((item) => item.id === "challenge")?.coachAnswer,
+  });
+  assert.ok(solid.score >= 45);
+  assert.ok(solid.usedEmployers.includes("Acme"));
+  assert.ok(solid.usedSkills.includes("SQL"));
+  const invented = scoreVoiceAnswer({
+    prompt: practice.prompts.find((item) => item.id === "impact"),
+    answer: "I doubled revenue by 400% in one quarter using a secret AI model.",
+    facts: practice.facts,
+  });
+  assert.ok(invented.unverifiedNumbers.length >= 1);
+  assert.ok(invented.score < solid.score);
+  const summary = summarizeVoiceSession([
+    { answer: "At Acme", feedback: { score: 60, unverifiedNumbers: [] } },
+    { answer: "400%", feedback: { score: 20, unverifiedNumbers: ["400%"] } },
+    { answer: "", feedback: null },
+  ]);
+  assert.equal(summary.answered, 2);
+  assert.equal(summary.inventedMetricFlags, 1);
+  assert.equal(summary.status, "in_progress");
+});
+
 test("searchCandidates only returns public profiles matching skills", () => {
   const rows = [
     {
@@ -363,6 +415,7 @@ test("fresh data dir migrates and seeds schema version", () => {
     if (free.resume_review_limit !== 3) process.exit(9);
     if (!db.prepare("PRAGMA table_info(ai_audit)").all().some((row) => row.name === "cost_micros")) process.exit(10);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_profiles'").get()) process.exit(11);
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='voice_practice_sessions'").get()) process.exit(12);
   `;
   try {
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {

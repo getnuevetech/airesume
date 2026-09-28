@@ -94,7 +94,7 @@ export function EmployerLandingPage() {
       {mode === "intro" ? (
         <section className="account-card">
           <h2>Employer workspace</h2>
-          <p className="lede">Create a company account, then search the public candidate pool. Voice interviews come later.</p>
+          <p className="lede">Create a company account, then search the public candidate pool. Live employer voice interviews come later.</p>
           <div className="job-actions" style={{ justifyContent: "flex-start" }}>
             <button className="btn btn-primary" type="button" onClick={() => setMode("register")}>Create employer account</button>
             <Link className="btn btn-ghost" to="/signin">Sign in</Link>
