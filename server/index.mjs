@@ -32,6 +32,7 @@ import { registerEmployerVoice } from "./routes-employer-voice.mjs";
 import { registerEmployerPostings } from "./routes-employer-postings.mjs";
 import { registerInterviewRooms } from "./routes-interview-rooms.mjs";
 import { registerEmployerAnalytics } from "./routes-employer-analytics.mjs";
+import { applySecurityHeaders, rateLimit } from "./security.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const homepageFile = join(here, "..", "shared", "homepage.json");
@@ -70,10 +71,21 @@ function seed() {
 seed();
 
 const app = express();
+app.disable("x-powered-by");
+app.use(applySecurityHeaders);
 app.use(express.json({ limit: "1mb" }));
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+app.use("/api", (req, res, next) => {
+  const limited = rateLimit(req, { key: "api", limit: 240, windowMs: 60_000 });
+  if (limited.limited) {
+    res.status(429).json({ error: "Too many requests. Slow down and try again." });
+    return;
+  }
+  next();
 });
 
 function cookie(req, name) {
@@ -193,6 +205,11 @@ app.get("/api/auth/me", (req, res) => {
 });
 
 app.post("/api/auth/login", (req, res) => {
+  const limited = rateLimit(req, { key: "login", limit: 20, windowMs: 60_000 });
+  if (limited.limited) {
+    res.status(429).json({ error: "Too many sign-in attempts. Wait a minute and try again." });
+    return;
+  }
   const email = String(req.body.email || "").trim().toLowerCase();
   const password = String(req.body.password || "");
   const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
@@ -391,6 +408,11 @@ function existsProfile(userId) {
 }
 
 app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) => {
+  const limited = rateLimit(req, { key: "extract", limit: 12, windowMs: 60_000 });
+  if (limited.limited) {
+    res.status(429).json({ error: "Too many resume uploads. Wait a minute and try again." });
+    return;
+  }
   if (!req.file) {
     res.status(400).json({ error: "Choose a resume file." });
     return;

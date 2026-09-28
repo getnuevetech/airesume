@@ -7,6 +7,8 @@ import { allowExplanation, explanationQuota, redactMatch, reviewQuota } from "./
 import { publicPlan, resolveTemplate, templateLimitOf, RESUME_TEMPLATES } from "./schema.mjs";
 import { applyKitMetrics } from "./apply-kit-metrics.mjs";
 import { followUpMetrics, syncFollowUpsForUser } from "./follow-ups.mjs";
+import { autoApplyAuthorizationPayload } from "./auto-apply-auth.mjs";
+import { iceConfigSummary, resolveIceServers } from "./webrtc-signaling.mjs";
 
 function publicVersion(row) {
   return { id: row.id, label: row.label, kind: row.kind, active: Boolean(row.active), rendered: row.rendered, createdAt: row.created_at };
@@ -121,6 +123,8 @@ export function registerDashboard(app, ctx) {
       autoMin: user.auto_min || 85,
       autoDailyCap: user.auto_daily_cap ?? 5,
       autoCapUsed: autoCapUsed(user.id),
+      autoApplyAuthorization: autoApplyAuthorizationPayload(user),
+      media: iceConfigSummary(resolveIceServers()),
       matchQuota: {
         limit: quota.limit,
         used: quota.used,

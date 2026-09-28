@@ -27,7 +27,10 @@ Optional environment:
 - `COOKIE_SECURE=1` to force Secure session cookies (also set automatically when `x-forwarded-proto` is `https`)
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 - `SMTP_*` for password-reset email
+- `STUN_URIS`, `TURN_URIS`, `TURN_USERNAME`, `TURN_CREDENTIAL` for interview-room WebRTC (see `deploy/turn.env.example`)
 - AI providers are configured in Admin → AI Pipelines (not only via `OPENAI_API_KEY`)
+
+Browser extension (unpacked): see `extension/README.md`. Create a token under Account → Settings.
 
 ```bash
 npm test

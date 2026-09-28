@@ -89,3 +89,45 @@ export function shouldCreateOffer(selfId, peerId) {
 }
 
 export const DEFAULT_ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
+
+function splitEnvList(value) {
+  return String(value || "")
+    .split(/[,;\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Resolve ICE servers for production WebRTC.
+ * Set TURN_URIS (comma-separated), TURN_USERNAME, TURN_CREDENTIAL.
+ * Optional STUN_URIS overrides the default public STUN server.
+ */
+export function resolveIceServers(env = process.env) {
+  const stun = splitEnvList(env.STUN_URIS);
+  const turn = splitEnvList(env.TURN_URIS || env.TURN_URLS);
+  const username = String(env.TURN_USERNAME || "").trim();
+  const credential = String(env.TURN_CREDENTIAL || env.TURN_PASSWORD || "").trim();
+  const servers = [];
+  for (const urls of stun.length ? stun : ["stun:stun.l.google.com:19302"]) {
+    servers.push({ urls });
+  }
+  for (const urls of turn) {
+    if (username && credential) {
+      servers.push({ urls, username, credential });
+    } else {
+      servers.push({ urls });
+    }
+  }
+  return servers.length ? servers : DEFAULT_ICE_SERVERS.slice();
+}
+
+export function iceConfigSummary(servers = resolveIceServers()) {
+  const hasTurn = servers.some((item) => /turn:/i.test(String(Array.isArray(item.urls) ? item.urls[0] : item.urls || "")));
+  const hasStun = servers.some((item) => /stun:/i.test(String(Array.isArray(item.urls) ? item.urls[0] : item.urls || "")));
+  return {
+    serverCount: servers.length,
+    hasTurn,
+    hasStun,
+    productionReady: hasTurn,
+  };
+}

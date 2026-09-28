@@ -15,11 +15,11 @@ import {
   summarizeRoom,
 } from "./interview-rooms.mjs";
 import {
-  DEFAULT_ICE_SERVERS,
   buildSignal,
   filterSignalsForPeer,
   normalizeSignalType,
   pruneSignals,
+  resolveIceServers,
   upsertAudioParticipant,
 } from "./webrtc-signaling.mjs";
 
@@ -516,7 +516,7 @@ export function registerInterviewRooms(app, ctx) {
       return;
     }
     res.json({
-      iceServers: DEFAULT_ICE_SERVERS,
+      iceServers: resolveIceServers(),
       you: { role: access.role, participantId: access.participantId },
       participants: parse(row.participants, []),
     });
@@ -583,7 +583,7 @@ export function registerInterviewRooms(app, ctx) {
     res.json({
       room: roomForAccess(updated, access),
       you: { role: access.role, participantId: access.participantId },
-      iceServers: DEFAULT_ICE_SERVERS,
+      iceServers: resolveIceServers(),
     });
   });
 
@@ -688,7 +688,7 @@ export function registerInterviewRooms(app, ctx) {
     const signals = filterSignalsForPeer(rows, access.participantId, { since, limit: 100 });
     res.json({
       signals,
-      iceServers: DEFAULT_ICE_SERVERS,
+      iceServers: resolveIceServers(),
       participants: parse(row.participants, []),
       cursor: signals.length ? signals[signals.length - 1].createdAt : since,
     });

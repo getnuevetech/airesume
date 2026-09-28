@@ -68,6 +68,7 @@ export function OverviewPage() {
         </section>
         <section className="account-card">
           <h2>Continue</h2>
+          <Link className="quiet-row" to="/account/settings"><strong>Browser extension</strong><span>Capture employer listings into your tracker</span></Link>
           <Link className="quiet-row" to="/account/resume"><strong>Review your resume</strong><span>Rating and recommendations</span></Link>
           <Link className="quiet-row" to="/account/insights"><strong>Career insights</strong><span>Skill demand, gaps, and focus areas</span></Link>
           <Link className="quiet-row" to="/account/interview"><strong>Interview prep</strong><span>STAR drafts and voice practice from resume facts</span></Link>
@@ -1253,6 +1254,7 @@ export function ApplicationsPage() {
             capUsed={data.autoCapUsed || 0}
             excludeCompanies={data.profile?.preferences?.excludeCompanies || ""}
             excludeKeywords={data.profile?.preferences?.excludeKeywords || ""}
+            authorization={data.autoApplyAuthorization}
             onDone={() => { setMessage("Auto apply updated."); void reload(); }}
           />
         ) : (
@@ -1665,6 +1667,7 @@ function AutoApply({
   capUsed,
   excludeCompanies,
   excludeKeywords,
+  authorization,
   onDone,
 }: {
   enabled: boolean;
@@ -1673,6 +1676,12 @@ function AutoApply({
   capUsed: number;
   excludeCompanies: string;
   excludeKeywords: string;
+  authorization?: {
+    version: string;
+    text: string;
+    authorized: boolean;
+    authorizedAt: number | null;
+  };
   onDone: () => void;
 }) {
   const [on, setOn] = useState(enabled);
@@ -1680,11 +1689,14 @@ function AutoApply({
   const [cap, setCap] = useState(dailyCap);
   const [companies, setCompanies] = useState(excludeCompanies);
   const [keywords, setKeywords] = useState(excludeKeywords);
+  const [accepted, setAccepted] = useState(Boolean(authorization?.authorized));
+  const needsAuth = on && !authorization?.authorized;
   return (
     <form
       className="account-card"
       onSubmit={(event) => {
         event.preventDefault();
+        if (needsAuth && !accepted) return;
         void api("/api/account/auto-apply", {
           method: "PUT",
           body: JSON.stringify({
@@ -1693,21 +1705,137 @@ function AutoApply({
             dailyCap: cap,
             excludeCompanies: companies,
             excludeKeywords: keywords,
+            acceptAuthorization: accepted,
           }),
         })
           .then(() => (on ? api("/api/applications/auto", { method: "POST" }) : undefined))
           .then(onDone);
       }}
     >
-      <h2>Autopilot queue</h2>
-      <p className="lede">Autopilot never submits on a guess. It queues Ready or Review required rows for you to submit. Used {capUsed} of {cap} today.</p>
-      <label className="check-row"><input type="checkbox" checked={on} onChange={(event) => setOn(event.target.checked)} /> Queue matching jobs for review</label>
+      <h2>Controlled Auto-Apply</h2>
+      <p className="lede">
+        Autopilot queues Ready or Review required rows for your review — it never silently submits.
+        Used {capUsed} of {cap} today.
+        {authorization?.authorized
+          ? ` Authorization accepted ${authorization.authorizedAt ? new Date(authorization.authorizedAt).toLocaleDateString() : ""}.`
+          : " Separate authorization is required before enabling."}
+      </p>
+      <label className="check-row">
+        <input type="checkbox" checked={on} onChange={(event) => setOn(event.target.checked)} />
+        Enable Auto-Apply queueing for matching jobs
+      </label>
+      {on ? (
+        <div className="auto-apply-auth">
+          <p className="role">{authorization?.text || "Accept Auto-Apply authorization to continue."}</p>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={accepted}
+              disabled={Boolean(authorization?.authorized)}
+              onChange={(event) => setAccepted(event.target.checked)}
+            />
+            {authorization?.authorized
+              ? "Authorization on file for the current Auto-Apply terms"
+              : "I have read and accept the Auto-Apply authorization above"}
+          </label>
+        </div>
+      ) : null}
       <label className="field"><span>Minimum match</span><input type="number" min={50} max={99} value={min} onChange={(event) => setMin(Number(event.target.value))} /></label>
       <label className="field"><span>Daily cap</span><input type="number" min={1} max={25} value={cap} onChange={(event) => setCap(Number(event.target.value))} /></label>
       <label className="field"><span>Exclude companies</span><input value={companies} onChange={(event) => setCompanies(event.target.value)} placeholder="Acme, Staffing Hub" /></label>
       <label className="field"><span>Exclude keywords</span><input value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder="unpaid, clearance" /></label>
-      <button className="btn btn-primary btn-sm" type="submit">{on ? "Save and queue" : "Save manual-only"}</button>
+      <button className="btn btn-primary btn-sm" type="submit" disabled={needsAuth && !accepted}>
+        {on ? "Save and queue" : "Save manual-only / revoke Auto-Apply"}
+      </button>
     </form>
+  );
+}
+
+function ExtensionSettings({
+  onMessage,
+  onError,
+}: {
+  onMessage: (message: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [tokens, setTokens] = useState<{ id: string; prefix: string; label: string; active: boolean; createdAt: number; lastUsedAt: number | null }[]>([]);
+  const [freshToken, setFreshToken] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    const data = await api<{ tokens: typeof tokens }>("/api/extension/tokens");
+    setTokens(data.tokens || []);
+  }
+
+  useEffect(() => {
+    void load().catch((err: Error) => onError(err.message));
+  }, [onError]);
+
+  return (
+    <section className="account-card">
+      <h2>Browser extension capture</h2>
+      <p className="role">
+        Load the unpacked `extension/` folder in Chrome, paste an API token below into the popup, then capture listings from employer sites into your tracker.
+      </p>
+      {freshToken ? (
+        <p className="form-error" role="status">
+          Copy this token now — it will not be shown again: <code>{freshToken}</code>
+        </p>
+      ) : null}
+      <div className="job-actions">
+        <button
+          className="btn btn-primary btn-sm"
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void api<{ token: { token: string } }>("/api/extension/tokens", {
+              method: "POST",
+              body: JSON.stringify({ label: "Browser extension" }),
+            })
+              .then((result) => {
+                setFreshToken(result.token.token);
+                onMessage("Extension token created. Copy it into the extension popup.");
+                return load();
+              })
+              .catch((err: Error) => onError(err.message))
+              .finally(() => setBusy(false));
+          }}
+        >
+          Create extension token
+        </button>
+      </div>
+      {tokens.length ? (
+        <ul className="fact-list">
+          {tokens.map((item) => (
+            <li key={item.id}>
+              {item.prefix}… · {item.label} · {item.active ? "active" : "revoked"}
+              {item.active ? (
+                <>
+                  {" "}
+                  <button
+                    className="text-btn"
+                    type="button"
+                    onClick={() =>
+                      void api(`/api/extension/tokens/${item.id}`, { method: "DELETE" })
+                        .then(() => {
+                          onMessage("Token revoked.");
+                          return load();
+                        })
+                        .catch((err: Error) => onError(err.message))
+                    }
+                  >
+                    Revoke
+                  </button>
+                </>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="role">No tokens yet.</p>
+      )}
+    </section>
   );
 }
 
@@ -1824,6 +1952,7 @@ export function SettingsPage() {
           <button className="btn btn-primary btn-sm" type="submit">Update password</button>
         </form>
       ) : null}
+      {data?.features?.manual_apply ? <ExtensionSettings onMessage={setMessage} onError={setError} /> : null}
       <section className="account-card">
         <h2>Privacy</h2>
         <p className="role">Download a copy of your account data, or permanently delete your account and profile.</p>

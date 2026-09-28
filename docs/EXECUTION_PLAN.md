@@ -88,18 +88,19 @@ Browser
 15. ~~Follow-up reminders~~
 
 Next after Slice E:
-1. Browser extension capture (later / deferred)
-2. Controlled Auto Apply authorization UX (explicit request only)
+1. ~~Browser extension capture~~ (done on `cursor/extension-autoapply-webrtc-b068`)
+2. ~~Controlled Auto Apply authorization UX~~
+3. ~~Employer / WebRTC TURN production hardening~~
+4. ~~End-to-end polish + security headers / rate limits~~
 
 ### Deferred unless explicitly requested
 
-- Employer accounts, hiring pipeline, employer voice rooms
-- Controlled Auto Apply authorization UX
-- Browser extension
+- Store-packaged browser extension distribution
+- Managed hosted TURN provisioning beyond env configuration
 
 ### Later
 
-- TURN servers / production media hardening
+- Additional media SFU options beyond peer WebRTC + TURN
 
 ## Pricing gates (implemented in admin plan matrix)
 

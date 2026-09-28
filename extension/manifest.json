@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "JobPilot Capture",
+  "version": "1.0.0",
+  "description": "Capture job listings into your JobPilot tracker for Assisted Apply.",
+  "action": {
+    "default_title": "Capture job to JobPilot",
+    "default_popup": "popup.html"
+  },
+  "permissions": ["activeTab", "storage", "scripting"],
+  "host_permissions": ["http://localhost:3000/*", "http://127.0.0.1:3000/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
