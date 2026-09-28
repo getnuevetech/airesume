@@ -1170,8 +1170,42 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
   margin: 14px 0;
 }
 .admin-card h2 { font-size: 18px; margin-bottom: 8px; }
+.admin-card h3 { font-size: 15px; margin: 14px 0 8px; }
 .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end; }
 .admin-preview { width: min(280px, 100%); height: 160px; object-fit: cover; border-radius: 12px; margin-bottom: 8px; }
+.admin-preview-sm { width: 72px; height: 72px; border-radius: 50%; }
+.admin-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid #e7edf3;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.admin-toc a {
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.admin-toc a:hover { text-decoration: underline; }
+.admin-subcard {
+  border: 1px solid #e7edf3;
+  border-radius: 12px;
+  padding: 14px;
+  margin: 12px 0;
+  background: #fcfdff;
+}
+.admin-sticky-save {
+  position: sticky;
+  bottom: 12px;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+  z-index: 3;
+}
 .admin-table { display: grid; gap: 10px; }
 .admin-table article, .admin-actions {
   display: flex;
