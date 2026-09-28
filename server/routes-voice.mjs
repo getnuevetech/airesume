@@ -5,7 +5,7 @@ import { matchJob } from "./match.mjs";
 import { buildInterviewPrep } from "./interview-prep.mjs";
 import { buildVoicePractice, scoreVoiceAnswer, summarizeVoiceSession } from "./voice-interview.mjs";
 
-const PREP_STATUSES = ["Ready", "Applied", "Responded", "Interview", "Offer"];
+const PREP_STATUSES = ["Ready", "Review required", "Applied", "Responded", "Interview", "Offer"];
 
 function parse(value, fallback) {
   if (value == null || value === "") return fallback;

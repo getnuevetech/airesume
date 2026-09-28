@@ -92,6 +92,8 @@ export type AccountData = {
     kitOpened?: number;
     kitCompleted?: number;
     kitCompletionRate?: number;
+    followUpsDue?: number;
+    followUpsOpen?: number;
   };
   jobs: AccountJob[];
   applications: {

@@ -21,6 +21,7 @@ import { registerAdminPlans } from "./routes-admin-plans.mjs";
 import { registerCareer } from "./routes-career.mjs";
 import { registerInterview } from "./routes-interview.mjs";
 import { registerVoice } from "./routes-voice.mjs";
+import { registerFollowUps } from "./routes-follow-ups.mjs";
 
 migrate();
 
@@ -758,6 +759,10 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     requireFeature,
     syncProfileVersion,
     activeVersion,
+  });
+  registerFollowUps(app, {
+    requireUser,
+    requireFeature,
   });
 }
 
