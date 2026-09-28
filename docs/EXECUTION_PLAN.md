@@ -18,7 +18,7 @@ Already live beyond early Phase 1:
 - Paste-a-job (URL or description) with stronger requirement extraction
 - Application question drafts; salary, sponsorship, authorization, disability, veteran stay blank for the user
 - Weekly match explanation quotas (`match_explain_limit`; Free=5/week)
-- Billing and resume routes extracted from `platform.mjs`
+- Billing, resume, applications, jobs-admin, dashboard, profile, admin AI, and admin plans routes extracted from `platform.mjs`
 - Plans, Stripe/PayPal/manual billing hooks, AI provider admin, public `/resume/:slug`
 
 Default admin on first boot uses `ADMIN_EMAIL` / `ADMIN_PASSWORD` when set. Without `ADMIN_PASSWORD`, bootstrap credentials force a password change on first sign-in. Session cookies set `Secure` when the request is HTTPS (`x-forwarded-proto`) or `COOKIE_SECURE=1`.
@@ -46,11 +46,11 @@ Browser
 4. Review-first tracker + autopilot safety rules
 5. Paste-a-job + application question drafts
 6. Weekly match explanation quotas + billing/resume route split
+7. Full `platform.mjs` route modularization (applications, jobs-admin, dashboard, profile, admin AI/plans)
 
 ### Finish the review-first apply loop
 
-1. Continue splitting `platform.mjs` (jobs/applications admin modules)
-2. Measure AI costs from `ai_audit` and tune Free quotas
+1. Measure AI costs from `ai_audit` and tune Free quotas
 
 ### Later
 

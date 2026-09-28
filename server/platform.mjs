@@ -1,21 +1,20 @@
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, extname } from "node:path";
-import { db, id, uploadsDir } from "./db.mjs";
+import { db, id } from "./db.mjs";
 import { completeJson } from "./ai-run.mjs";
-import { AI_FUNCTIONS, FEATURES, RESUME_TEMPLATES, migrate, publicPlan, resolveTemplate, templateLimitOf } from "./schema.mjs";
+import { migrate, publicPlan } from "./schema.mjs";
 import { deliverMail } from "./mail.mjs";
 import { fetchFeedListings, normalizeFeedUrl, publicFeedConfig, resolvePrimary } from "./feeds.mjs";
 import { extractRequirements, matchJob } from "./match.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 import { TRACKER_STATUSES, startOfUtcDay } from "./apply-rules.mjs";
 import { draftQuestions } from "./questions.mjs";
-import { allowExplanation, explanationQuota, redactMatch } from "./quota.mjs";
 import { registerBilling } from "./routes-billing.mjs";
 import { registerResume } from "./routes-resume.mjs";
 import { registerApplications } from "./routes-applications.mjs";
 import { registerJobsAdmin } from "./routes-jobs-admin.mjs";
+import { registerDashboard } from "./routes-dashboard.mjs";
+import { registerProfile } from "./routes-profile.mjs";
+import { registerAdminAi } from "./routes-admin-ai.mjs";
+import { registerAdminPlans } from "./routes-admin-plans.mjs";
 
 migrate();
 
@@ -527,84 +526,8 @@ function autoCapUsed(userId, now = Date.now()) {
     .get(userId, start).count;
 }
 
-function profilePayload(profile, user) {
-  if (!profile) return null;
-  return {
-    headline: profile.headline || "",
-    summary: profile.summary || "",
-    skills: parse(profile.skills, []),
-    employment: parse(profile.employment, []),
-    education: parse(profile.education, []),
-    facts: parse(profile.facts, []),
-    preferences: parse(profile.preferences, {}),
-    resumeName: profile.resume_name || "",
-    photoUrl: profile.photo_url || "",
-    slug: profile.slug || "",
-    city: user?.city || "",
-    address: user?.address || "",
-    shareContact: parse(profile.preferences, {}).shareContact !== false,
-  };
-}
-
 function money(cents) {
   return `$${(cents / 100).toFixed(2)}`;
-}
-
-function jobCard(job, match, sourceNames, applied) {
-  const applyCompany = job.primary_company || job.company;
-  const via = applyCompany.toLowerCase() !== String(job.company).toLowerCase() ? job.company : "";
-  const locked = Boolean(match.explanationLocked);
-  return {
-    id: job.id,
-    title: job.title,
-    company: job.company,
-    applyCompany,
-    viaCompany: via,
-    sourceName: sourceNames.get(job.source_id) || "",
-    primaryUrl: job.primary_url || "",
-    location: job.location,
-    remoteType: job.remote_type,
-    salaryMin: job.salary_min,
-    salaryMax: job.salary_max,
-    category: job.category,
-    role: job.role,
-    verification: job.verification,
-    description: job.description,
-    score: match.score,
-    label: locked ? "" : match.label || "",
-    explanation: locked ? "" : match.explanation || "",
-    matched: locked ? [] : match.matched,
-    missing: locked ? [] : match.missing,
-    preferredMatched: locked ? [] : match.preferredMatched || [],
-    explanationLocked: locked,
-    applied,
-  };
-}
-
-function featuresFrom(input, base) {
-  const features = { ...base };
-  for (const feature of FEATURES) {
-    if (input && Object.prototype.hasOwnProperty.call(input, feature.key)) features[feature.key] = Boolean(input[feature.key]);
-  }
-  if (input && Object.prototype.hasOwnProperty.call(input, "job_limit")) features.job_limit = Math.max(0, Number(input.job_limit) || 0);
-  if (input && Object.prototype.hasOwnProperty.call(input, "template_limit")) {
-    features.template_limit = Math.max(1, Math.min(RESUME_TEMPLATES.length, Number(input.template_limit) || 1));
-  }
-  if (input && Object.prototype.hasOwnProperty.call(input, "match_explain_limit")) {
-    features.match_explain_limit = Math.max(0, Number(input.match_explain_limit) || 0);
-  }
-  return features;
-}
-
-function planSlug(name) {
-  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "plan";
-  let next = base;
-  let count = 2;
-  while (db.prepare("SELECT id FROM plans WHERE id = ?").get(next)) {
-    next = `${base}-${count}`;
-    count += 1;
-  }
-  return next;
 }
 
 export function registerPlatform(app, { requireUser, requireAdmin, audit, upload, originOf }) {
@@ -656,452 +579,40 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     categorizeAndVerify,
     saveJob,
   });
-
-  app.get("/api/plans", (_req, res) => {
-    const plans = db.prepare("SELECT * FROM plans WHERE active = 1 ORDER BY sort_order").all().map(publicPlan);
-    res.json({ plans, policy: policy() });
+  registerDashboard(app, {
+    requireUser,
+    syncProfileVersion,
+    featuresOf,
+    activeVersion,
+    parse,
+    policy,
+    autoCapUsed,
   });
-
-  app.get("/api/dashboard", (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    syncProfileVersion(user.id);
-    const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
-    const access = featuresOf(user);
-    const version = profile ? activeVersion(user.id) : null;
-    const doc = version ? parse(version.document, {}) : { skills: [], employment: [], education: [] };
-    const preferences = profile ? parse(profile.preferences, {}) : {};
-    const jobs = db.prepare("SELECT * FROM jobs WHERE active = 1").all();
-    const sourceNames = new Map(db.prepare("SELECT id, name FROM job_sources").all().map((source) => [source.id, source.name]));
-    const applications = db.prepare("SELECT * FROM applications WHERE user_id = ?").all(user.id);
-    const appliedIds = new Set(applications.map((item) => item.job_id));
-    let ranked = jobs
-      .map((job) => ({ job, ...matchJob(doc, preferences, job) }))
-      .sort((a, b) => b.score - a.score);
-    if (access.features.job_limit) ranked = ranked.slice(0, access.features.job_limit);
-    if (!access.features.job_browse) ranked = [];
-    const quota = explanationQuota(user.id, access.features);
-    ranked = ranked.map((item) => (allowExplanation(user.id, item.job.id, quota) ? item : redactMatch(item)));
-    const review = db.prepare("SELECT * FROM resume_reviews WHERE user_id = ? ORDER BY created_at DESC LIMIT 1").get(user.id);
-    const versions = db.prepare("SELECT * FROM resume_versions WHERE user_id = ? ORDER BY created_at DESC").all(user.id).map(publicVersion);
-    const responded = applications.filter((item) => ["Responded", "Interview", "Offer"].includes(item.status)).length;
-    const submitted = applications.filter((item) => item.status === "Applied" || ["Responded", "Interview", "Offer", "Rejected", "Withdrawn"].includes(item.status)).length;
-    const readyCount = applications.filter((item) => item.status === "Ready").length;
-    const reviewCount = applications.filter((item) => item.status === "Review required").length;
-    res.json({
-      profile: profilePayload(profile, user),
-      plan: access.plan,
-      features: access.features,
-      policy: policy(),
-      plans: db.prepare("SELECT * FROM plans WHERE active = 1 ORDER BY sort_order").all().map(publicPlan),
-      gateways: db.prepare("SELECT id, name, kind, enabled, mode FROM payment_gateways WHERE enabled = 1").all(),
-      autoApply: Boolean(user.auto_apply),
-      autoMin: user.auto_min || 85,
-      autoDailyCap: user.auto_daily_cap ?? 5,
-      autoCapUsed: autoCapUsed(user.id),
-      matchQuota: {
-        limit: quota.limit,
-        used: quota.used,
-        remaining: quota.unlimited ? null : quota.remaining,
-        unlimited: quota.unlimited,
-        resetsAt: quota.resetsAt,
-      },
-      statuses: TRACKER_STATUSES,
-      stats: {
-        resumeRating: review ? review.rating : null,
-        applied: submitted,
-        tracked: applications.length,
-        ready: readyCount,
-        reviewRequired: reviewCount,
-        responded,
-        available: ranked.length,
-        recommended: ranked.filter((item) => item.score >= 70 || item.label === "strong" || item.label === "good").length,
-        versions: versions.length,
-      },
-      jobs: ranked.map((item) => jobCard(item.job, item, sourceNames, appliedIds.has(item.job.id))),
-      applications: applications.map((item) => {
-        const job = jobs.find((row) => row.id === item.job_id) || db.prepare("SELECT * FROM jobs WHERE id = ?").get(item.job_id);
-        const target = item.target_company || job?.primary_company || job?.company || "";
-        const poster = job?.company || "";
-        return {
-          id: item.id,
-          jobId: item.job_id,
-          title: job?.title || "Role",
-          company: target || poster,
-          viaCompany: target && poster && target.toLowerCase() !== poster.toLowerCase() ? poster : "",
-          sourceName: job ? sourceNames.get(job.source_id) || "" : "",
-          targetUrl: item.target_url || "",
-          delivery: item.delivery || "",
-          status: item.status,
-          mode: item.mode,
-          match: item.match_score,
-          versionId: item.version_id,
-          questions: parse(item.questions, []),
-        };
-      }),
-      review: review
-        ? { id: review.id, rating: review.rating, feedback: parse(review.feedback, []), recommendations: parse(review.recommendations, []), provider: review.provider, model: review.model }
-        : null,
-      versions,
-      template: resolveTemplate(profile?.template, templateLimitOf(access.features)),
-      templateLimit: templateLimitOf(access.features),
-      templates: RESUME_TEMPLATES,
-    });
+  registerProfile(app, {
+    requireUser,
+    requireFeature,
+    featuresOf,
+    parse,
+    slugify,
+    activeVersion,
+    renderDocument,
+    documentFromProfile,
+    audit,
+    upload,
   });
-
-  app.put("/api/account/template", (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    const access = featuresOf(user);
-    const limit = templateLimitOf(access.features);
-    const templateId = String(req.body.template || "");
-    const index = RESUME_TEMPLATES.findIndex((item) => item.id === templateId);
-    if (index < 0) {
-      res.status(400).json({ error: "Choose one of the resume templates." });
-      return;
-    }
-    if (index >= limit) {
-      res.status(403).json({ error: `The ${access.plan.name} plan includes ${limit} template${limit === 1 ? "" : "s"}.` });
-      return;
-    }
-    db.prepare("UPDATE profiles SET template = ?, updated_at = ? WHERE user_id = ?").run(templateId, Date.now(), user.id);
-    res.json({ template: templateId });
+  registerAdminAi(app, {
+    requireAdmin,
+    maskSecret,
   });
-
-  app.put("/api/profile", (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    const access = requireFeature(user, "profile_edit", res);
-    if (!access) return;
-    const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
-    if (!profile) {
-      res.status(400).json({ error: "Upload a resume before editing a profile." });
-      return;
-    }
-    const name = String(req.body.name || user.name).trim();
-    const phone = String(req.body.phone || "").trim();
-    const address = String(req.body.address || "").trim();
-    const city = String(req.body.city || "").trim();
-    const headline = String(req.body.headline || "").trim();
-    const summary = String(req.body.summary || "").trim();
-    const skills = Array.isArray(req.body.skills) ? req.body.skills.map((skill) => String(skill).trim()).filter(Boolean).slice(0, 24) : [];
-    const employment = Array.isArray(req.body.employment) ? req.body.employment.slice(0, 12) : [];
-    const education = Array.isArray(req.body.education) ? req.body.education.map(String).filter(Boolean).slice(0, 8) : [];
-    let slug = String(req.body.slug || profile.slug || "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "");
-    if (!slug) slug = slugify(name, user.id);
-    const clash = db.prepare("SELECT user_id FROM profiles WHERE slug = ? AND user_id != ?").get(slug, user.id);
-    if (clash) {
-      res.status(409).json({ error: "That public link is already in use." });
-      return;
-    }
-    const preferences = {
-      ...parse(profile.preferences, {}),
-      salary: String(req.body.salary || ""),
-      workArrangement: String(req.body.workArrangement || ""),
-      locations: String(req.body.locations || ""),
-      workAuthorization: String(req.body.workAuthorization || ""),
-      shareContact: Boolean(req.body.shareContact),
-    };
-    const facts = [
-      { fact_id: "ID-001", statement: `Name: ${name}`, verified_by_user: true },
-      phone ? { fact_id: "ID-003", statement: `Phone: ${phone}`, verified_by_user: true } : null,
-      city ? { fact_id: "ID-004", statement: `Location: ${city}`, verified_by_user: true } : null,
-      ...employment.map((job, index) => ({ fact_id: `EXP-${index + 1}`, statement: `${job.title || "Role"}${job.employer ? ` at ${job.employer}` : ""}`, verified_by_user: true })),
-      ...skills.map((skill, index) => ({ fact_id: `SKILL-${index + 1}`, statement: skill, verified_by_user: true })),
-    ].filter(Boolean);
-    db.prepare("UPDATE users SET name = ?, phone = ?, address = ?, city = ? WHERE id = ?").run(name, phone, address, city, user.id);
-    db.prepare(
-      "UPDATE profiles SET headline = ?, summary = ?, skills = ?, employment = ?, education = ?, facts = ?, preferences = ?, slug = ?, updated_at = ? WHERE user_id = ?",
-    ).run(headline, summary, JSON.stringify(skills), JSON.stringify(employment), JSON.stringify(education), JSON.stringify(facts), JSON.stringify(preferences), slug, Date.now(), user.id);
-    const document = { headline, summary, skills, employment, education };
-    const current = activeVersion(user.id);
-    if (current) {
-      db.prepare("UPDATE resume_versions SET document = ?, rendered = ? WHERE id = ?").run(JSON.stringify(document), renderDocument(document), current.id);
-    }
-    res.json({ ok: true, slug });
+  registerAdminPlans(app, {
+    requireAdmin,
+    parse,
+    policy,
   });
-
-  app.post("/api/profile/photo", upload.single("photo"), (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    if (!req.file) {
-      res.status(400).json({ error: "Choose an image." });
-      return;
-    }
-    const extension = extname(req.file.originalname || "").toLowerCase();
-    if (![".png", ".jpg", ".jpeg", ".webp"].includes(extension)) {
-      res.status(400).json({ error: "Use a PNG, JPG, or WEBP photo." });
-      return;
-    }
-    const name = `${id("photo")}${extension}`;
-    writeFileSync(join(uploadsDir, name), req.file.buffer);
-    db.prepare("UPDATE profiles SET photo_url = ?, updated_at = ? WHERE user_id = ?").run(`/uploads/${name}`, Date.now(), user.id);
-    res.json({ photoUrl: `/uploads/${name}` });
-  });
-
-  app.post("/api/profile/photo/enhance", async (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    if (!requireFeature(user, "image_enhance", res)) return;
-    const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
-    if (!profile?.photo_url) {
-      res.status(400).json({ error: "Upload a photo first." });
-      return;
-    }
-    const ai = await completeJson(
-      "image_enhance",
-      "Return JSON {contrast, color, sharpness} as numbers from 1 to 1.35. These tune the existing photo. Do not describe a different person.",
-      "Tune this resume headshot.",
-    );
-    const contrast = clamp(ai.json?.contrast, 1.08);
-    const color = clamp(ai.json?.color, 1.05);
-    const sharpness = clamp(ai.json?.sharpness, 1.25);
-    const source = join(uploadsDir, profile.photo_url.replace(/^\/uploads\//, ""));
-    const nextName = `${id("photo")}.jpg`;
-    const dest = join(uploadsDir, nextName);
-    try {
-      const dir = mkdtempSync(join(tmpdir(), "photo-"));
-      const script = join(dir, "enhance.py");
-      writeFileSync(
-        script,
-        `from PIL import Image, ImageEnhance\nim = Image.open(${JSON.stringify(source)}).convert("RGB")\nim = ImageEnhance.Contrast(im).enhance(${contrast})\nim = ImageEnhance.Color(im).enhance(${color})\nim = ImageEnhance.Sharpness(im).enhance(${sharpness})\nim.save(${JSON.stringify(dest)}, quality=92)\n`,
-      );
-      execFileSync("python3", [script], { timeout: 20000 });
-    } catch {
-      res.status(500).json({ error: "The photo could not be enhanced." });
-      return;
-    }
-    db.prepare("UPDATE profiles SET photo_url = ?, updated_at = ? WHERE user_id = ?").run(`/uploads/${nextName}`, Date.now(), user.id);
-    audit({ userId: user.id, functionName: "image_enhance", provider: ai.provider, model: ai.model, status: "applied", detail: `${contrast},${color},${sharpness}` });
-    res.json({ photoUrl: `/uploads/${nextName}`, provider: ai.provider, model: ai.model });
-  });
-
-  app.get("/api/public/resume/:slug", (req, res) => {
-    const profile = db.prepare("SELECT * FROM profiles WHERE slug = ?").get(req.params.slug);
-    if (!profile) {
-      res.status(404).json({ error: "This resume link is not public." });
-      return;
-    }
-    const user = db.prepare("SELECT * FROM users WHERE id = ? AND status = 'active'").get(profile.user_id);
-    if (!user || !featuresOf(user).features.public_profile) {
-      res.status(404).json({ error: "This resume link is not public." });
-      return;
-    }
-    const version = activeVersion(user.id);
-    const doc = version ? parse(version.document, {}) : documentFromProfile(profile);
-    const preferences = parse(profile.preferences, {});
-    res.json({
-      name: user.name,
-      headline: doc.headline || profile.headline || "",
-      summary: doc.summary || "",
-      skills: doc.skills || [],
-      employment: doc.employment || [],
-      education: doc.education || [],
-      photoUrl: profile.photo_url || "",
-      city: user.city || "",
-      email: preferences.shareContact === false ? "" : user.email,
-      phone: preferences.shareContact === false ? "" : user.phone || "",
-      template: resolveTemplate(profile.template, templateLimitOf(featuresOf(user).features)),
-    });
-  });
-
-  app.get("/api/admin/ai", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    res.json({
-      functions: AI_FUNCTIONS,
-      providers: db.prepare("SELECT * FROM ai_providers ORDER BY created_at").all().map(publicProvider),
-      assignments: db.prepare("SELECT * FROM ai_assignments").all(),
-    });
-  });
-
-  app.post("/api/admin/ai/providers", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const kind = ["openai", "anthropic", "google", "deterministic"].includes(req.body.kind) ? req.body.kind : "";
-    const name = String(req.body.name || "").trim();
-    const model = String(req.body.model || "").trim();
-    if (!kind || name.length < 2 || model.length < 2) {
-      res.status(400).json({ error: "Name, kind, and model are required." });
-      return;
-    }
-    const providerId = id("ai");
-    db.prepare("INSERT INTO ai_providers (id, name, kind, model, api_key, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
-      providerId,
-      name,
-      kind,
-      model,
-      kind === "deterministic" ? "" : String(req.body.apiKey || ""),
-      req.body.enabled === false ? 0 : 1,
-      Date.now(),
-    );
-    res.json({ provider: publicProvider(db.prepare("SELECT * FROM ai_providers WHERE id = ?").get(providerId)) });
-  });
-
-  app.patch("/api/admin/ai/providers/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const provider = db.prepare("SELECT * FROM ai_providers WHERE id = ?").get(req.params.id);
-    if (!provider) {
-      res.status(404).json({ error: "Provider not found." });
-      return;
-    }
-    const name = String(req.body.name || provider.name).trim();
-    const model = String(req.body.model || provider.model).trim();
-    const kinds = ["openai", "anthropic", "google", "deterministic"];
-    const kind = kinds.includes(req.body.kind) ? req.body.kind : provider.kind;
-    if (name.length < 2 || model.length < 2) {
-      res.status(400).json({ error: "Name and model are required." });
-      return;
-    }
-    const apiKey = req.body.apiKey && !String(req.body.apiKey).startsWith("••••") ? String(req.body.apiKey) : provider.api_key;
-    const enabled = req.body.enabled === false ? 0 : 1;
-    db.prepare("UPDATE ai_providers SET name = ?, kind = ?, model = ?, api_key = ?, enabled = ? WHERE id = ?").run(
-      name,
-      kind,
-      model,
-      kind === "deterministic" ? "" : apiKey,
-      enabled,
-      provider.id,
-    );
-    let reassigned = 0;
-    let fallbackName = "";
-    if (!enabled) {
-      const fallback = db.prepare("SELECT * FROM ai_providers WHERE id != ? AND enabled = 1 ORDER BY kind = 'deterministic' DESC, created_at LIMIT 1").get(provider.id);
-      if (fallback) {
-        reassigned = db.prepare("UPDATE ai_assignments SET provider_id = ? WHERE provider_id = ?").run(fallback.id, provider.id).changes;
-        fallbackName = fallback.name;
-      }
-    }
-    res.json({ provider: publicProvider(db.prepare("SELECT * FROM ai_providers WHERE id = ?").get(provider.id)), reassigned, fallbackName });
-  });
-
-  app.delete("/api/admin/ai/providers/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const provider = db.prepare("SELECT * FROM ai_providers WHERE id = ?").get(req.params.id);
-    if (!provider) {
-      res.status(404).json({ error: "Provider not found." });
-      return;
-    }
-    const remaining = db.prepare("SELECT COUNT(*) AS count FROM ai_providers WHERE id != ?").get(provider.id).count;
-    if (!remaining) {
-      res.status(400).json({ error: "Keep at least one AI pipeline. Disable it if you only want to turn it off." });
-      return;
-    }
-    const fallback = db.prepare("SELECT * FROM ai_providers WHERE id != ? ORDER BY enabled DESC, kind = 'deterministic' DESC, created_at LIMIT 1").get(provider.id);
-    const moved = db.prepare("UPDATE ai_assignments SET provider_id = ? WHERE provider_id = ?").run(fallback.id, provider.id);
-    db.prepare("DELETE FROM ai_providers WHERE id = ?").run(provider.id);
-    res.json({ ok: true, reassigned: moved.changes, fallbackName: fallback.name });
-  });
-
-  app.put("/api/admin/ai/assignments", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const functionKey = AI_FUNCTIONS.some((item) => item.key === req.body.functionKey) ? req.body.functionKey : "";
-    const provider = db.prepare("SELECT id FROM ai_providers WHERE id = ? AND enabled = 1").get(String(req.body.providerId || ""));
-    if (!functionKey || !provider) {
-      res.status(400).json({ error: "Choose an enabled pipeline for that function." });
-      return;
-    }
-    db.prepare(
-      "INSERT INTO ai_assignments (function_key, provider_id, enabled) VALUES (?, ?, ?) ON CONFLICT(function_key) DO UPDATE SET provider_id = excluded.provider_id, enabled = excluded.enabled",
-    ).run(functionKey, provider.id, req.body.enabled === false ? 0 : 1);
-    res.json({ ok: true });
-  });
-
-  app.get("/api/admin/plans", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    res.json({
-      features: FEATURES,
-      plans: db.prepare("SELECT * FROM plans ORDER BY sort_order").all().map(publicPlan),
-      policy: policy(),
-      events: db.prepare("SELECT * FROM billing_events ORDER BY created_at DESC LIMIT 40").all(),
-    });
-  });
-
-  app.put("/api/admin/plans/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const plan = db.prepare("SELECT * FROM plans WHERE id = ?").get(req.params.id);
-    if (!plan) {
-      res.status(404).json({ error: "Plan not found." });
-      return;
-    }
-    const features = featuresFrom(req.body.features, parse(plan.features, {}));
-    db.prepare("UPDATE plans SET name = ?, blurb = ?, monthly_cents = ?, yearly_cents = ?, features = ?, popular = ?, active = ? WHERE id = ?").run(
-      String(req.body.name || plan.name),
-      String(req.body.blurb ?? plan.blurb),
-      Math.max(0, Number(req.body.monthlyCents ?? plan.monthly_cents) || 0),
-      Math.max(0, Number(req.body.yearlyCents ?? plan.yearly_cents) || 0),
-      JSON.stringify(features),
-      req.body.popular ? 1 : 0,
-      req.body.active === false ? 0 : 1,
-      plan.id,
-    );
-    res.json({ plan: publicPlan(db.prepare("SELECT * FROM plans WHERE id = ?").get(plan.id)) });
-  });
-
-  app.post("/api/admin/plans", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const name = String(req.body.name || "").trim();
-    if (name.length < 2) {
-      res.status(400).json({ error: "Name the plan." });
-      return;
-    }
-    const planId = planSlug(name);
-    const sort = (db.prepare("SELECT MAX(sort_order) AS n FROM plans").get()?.n || 0) + 1;
-    const features = featuresFrom(req.body.features, { profile_edit: true, job_limit: 5, template_limit: 2 });
-    db.prepare(
-      "INSERT INTO plans (id, name, blurb, monthly_cents, yearly_cents, features, sort_order, popular, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    ).run(
-      planId,
-      name,
-      String(req.body.blurb || ""),
-      Math.max(0, Number(req.body.monthlyCents) || 0),
-      Math.max(0, Number(req.body.yearlyCents) || 0),
-      JSON.stringify(features),
-      sort,
-      req.body.popular ? 1 : 0,
-      req.body.active === false ? 0 : 1,
-    );
-    res.json({ plan: publicPlan(db.prepare("SELECT * FROM plans WHERE id = ?").get(planId)) });
-  });
-
-  app.delete("/api/admin/plans/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const plan = db.prepare("SELECT * FROM plans WHERE id = ?").get(req.params.id);
-    if (!plan) {
-      res.status(404).json({ error: "Plan not found." });
-      return;
-    }
-    if (db.prepare("SELECT COUNT(*) AS count FROM plans").get().count <= 1) {
-      res.status(400).json({ error: "Keep at least one plan." });
-      return;
-    }
-    const users = db.prepare("SELECT COUNT(*) AS count FROM users WHERE plan_id = ?").get(plan.id).count;
-    const subscriptions = db.prepare("SELECT COUNT(*) AS count FROM subscriptions WHERE plan_id = ?").get(plan.id).count;
-    if (users || subscriptions) {
-      const count = Math.max(users, subscriptions);
-      res.status(400).json({ error: `Move ${count} account${count === 1 ? "" : "s"} off ${plan.name} before deleting it.` });
-      return;
-    }
-    db.prepare("DELETE FROM plans WHERE id = ?").run(plan.id);
-    res.json({ ok: true });
-  });
-
-}
-
-function publicVersion(row) {
-  return { id: row.id, label: row.label, kind: row.kind, active: Boolean(row.active), rendered: row.rendered, createdAt: row.created_at };
-}
-
-function publicProvider(row) {
-  return { id: row.id, name: row.name, kind: row.kind, model: row.model, enabled: Boolean(row.enabled), apiKey: maskSecret(row.api_key), hasKey: Boolean(row.api_key) };
 }
 
 function publicProviderGateway(row) {
   return { id: row.id, name: row.name, kind: row.kind, enabled: Boolean(row.enabled), mode: row.mode, publicKey: row.public_key || "", secretKey: maskSecret(row.secret_key) };
-}
-
-function clamp(value, fallback) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return fallback;
-  return Math.min(1.35, Math.max(1, number));
 }
 
 export { money };
