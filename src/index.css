@@ -165,13 +165,19 @@ button { cursor: pointer; }
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
   gap: 40px;
-  align-items: center;
+  align-items: stretch;
   padding: 24px 0 12px;
 }
-.hero-visual { position: relative; }
+.hero-visual {
+  position: relative;
+  min-height: 0;
+  align-self: stretch;
+}
 .hero-photo {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: 560px;
+  height: 100%;
   object-fit: cover;
   object-position: 22% 42%;
   border-radius: 22px;
@@ -188,14 +194,6 @@ button { cursor: pointer; }
 .hero-secondary { margin: 0 0 18px; }
 .hero-copy .drop {
   box-shadow: 0 12px 32px rgba(20, 40, 70, 0.06);
-}
-.hero-copy h1 {
-  font-size: clamp(34px, 3.4vw, 46px);
-  line-height: 1.12;
-  margin: 10px 0 12px;
-}
-.hero-copy .lede {
-  margin-bottom: 18px;
 }
 .trust-strip {
   display: grid;
@@ -1316,12 +1314,12 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
   .hero, .better, .cta, .cta-upload, .start-grid, .dash-grid, .contact-grid, .feature-grid, .price-grid, .fit-section {
     grid-template-columns: 1fr;
   }
-  .hero-visual { order: 1; }
+  .hero-visual { order: 1; min-height: 420px; }
   .hero-copy { order: 2; }
   .stories-grid, .blog-grid, .trust-strip, .results-grid, .pricing-teaser-grid, .fit-cols {
     grid-template-columns: 1fr 1fr;
   }
-  .hero-photo { height: 460px; }
+  .hero-photo { object-position: 22% 30%; }
   .float-cards { width: min(250px, 70%); }
   .steps { flex-direction: column; align-items: center; }
   .step-arrow { transform: rotate(90deg); margin: 0; }
@@ -1361,7 +1359,8 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
   .footer-top { flex-direction: column; align-items: flex-start; }
   .better, .cta { padding: 28px 20px; }
   .how, .stories { padding-top: 40px; }
-  .hero-photo { height: 420px; object-position: 18% 20%; }
+  .hero-visual { min-height: 360px; }
+  .hero-photo { object-position: 18% 20%; }
   .float-cards { width: 196px; top: 14px; right: 10px; gap: 6px; }
   .job-card, .ai-card { padding: 8px 8px; }
   .job-meta strong { font-size: 12px; }
