@@ -19,8 +19,8 @@ const features = [
   },
   {
     icon: <Plane size={22} />,
-    title: "Autopilot queue",
-    text: "Matching roles land in Ready or Review required. You submit — nothing is sent on a guess.",
+    title: "Browser apply assistant",
+    text: "Copy contact, tailored resume, and answers beside the employer form. Mark Applied when you finish — nothing is sent on a guess.",
   },
   {
     icon: <Star size={22} />,

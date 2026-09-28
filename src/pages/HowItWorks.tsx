@@ -21,7 +21,7 @@ const steps = [
     title: "3. Review & apply",
     text: "We prepare a tailored application. You review before anything is sent.",
     detail:
-      "The resume is reshaped for that posting using only facts you confirmed. Autopilot can queue Ready or Review required rows — it does not submit without your approval.",
+      "The resume is reshaped for that posting using only facts you confirmed. Use the browser apply assistant to copy answers into the employer form, or submit by email — Autopilot never sends without your approval.",
   },
 ];
 

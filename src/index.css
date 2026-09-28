@@ -898,6 +898,12 @@ button { cursor: pointer; }
 .job-side { display: grid; justify-items: end; gap: 8px; }
 .job-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .question-drafts { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f0f3f6; display: grid; gap: 10px; }
+.apply-kit { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f0f3f6; display: grid; gap: 10px; }
+.apply-kit-panel { display: grid; gap: 12px; }
+.apply-kit-steps { margin: 0; padding-left: 18px; display: grid; gap: 8px; color: var(--muted); }
+.apply-kit-steps li.ready strong { color: var(--ink); }
+.apply-kit-row { display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; padding: 8px 0; border-top: 1px solid #f0f3f6; }
+.apply-kit-resume { margin: 0; max-height: 220px; overflow: auto; white-space: pre-wrap; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; background: #f7f9fb; border-radius: 10px; padding: 12px; }
 .version-mini { padding: 10px 0; border-top: 1px solid #f0f3f6; }
 .template-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .template-card { text-align: left; background: #fff; border: 1px solid #e6edf3; border-radius: 16px; padding: 12px; display: grid; gap: 6px; }
