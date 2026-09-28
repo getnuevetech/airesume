@@ -7,8 +7,8 @@ import { applySecurityHeaders, rateLimit, pruneRateLimitBuckets } from "./securi
 import { migrate, SCHEMA_VERSION } from "./schema.mjs";
 import { db } from "./db.mjs";
 
-test("schema version is 21 for billing disclosure columns", () => {
-  assert.equal(SCHEMA_VERSION, 21);
+test("schema version is 21+ with billing disclosure and MFA columns available after migrate", () => {
+  assert.ok(SCHEMA_VERSION >= 21);
   migrate();
   assert.ok(db.prepare("PRAGMA table_info(extension_tokens)").all().some((column) => column.name === "token_hash"));
   assert.ok(db.prepare("PRAGMA table_info(users)").all().some((column) => column.name === "auto_apply_authorized_at"));

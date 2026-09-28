@@ -17,11 +17,12 @@ Operational checklist for JobPilot personal-data retention. Not a public policy.
 
 Confirm these clear on `POST /api/account/delete`:
 
-- [ ] `users`, sessions, password resets
-- [ ] profiles, facts, resume versions, uploads
-- [ ] applications, checkouts, subscriptions, billing events
-- [ ] extension tokens, email activations / drafts
-- [ ] employer-linked candidate artifacts if any
+- [x] `users`, sessions, password resets
+- [x] profiles, facts, resume versions
+- [x] profile photo files under `/uploads`
+- [x] applications, checkouts, subscriptions, billing events
+- [x] extension tokens, email activations / drafts
+- [x] employer-linked candidate artifacts if any
 - [ ] Object storage / future vector indexes when introduced
 
 ## Launch gate

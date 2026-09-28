@@ -17,6 +17,7 @@ import {
 import {
   buildSignal,
   filterSignalsForPeer,
+  iceConfigSummary,
   normalizeSignalType,
   pruneSignals,
   resolveIceServers,
@@ -517,6 +518,7 @@ export function registerInterviewRooms(app, ctx) {
     }
     res.json({
       iceServers: resolveIceServers(),
+      media: iceConfigSummary(resolveIceServers()),
       you: { role: access.role, participantId: access.participantId },
       participants: parse(row.participants, []),
     });

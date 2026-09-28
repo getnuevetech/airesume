@@ -9,6 +9,8 @@ export type User = {
   planId?: string;
   mustChangePassword?: boolean;
   hasPassword?: boolean;
+  mfaEnrolled?: boolean;
+  mfaVerified?: boolean;
 };
 
 export type ResumeFile = {

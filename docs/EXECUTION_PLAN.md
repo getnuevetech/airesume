@@ -63,9 +63,9 @@ Browser (+ optional extension)
 1. Outcome-grounded Q&A and next actions (not a generic chatbot) — **shipped**
 
 ### Slice L — Production hardening
-1. Admin MFA, HTTPS/deploy checks, TURN readiness warnings, deletion fan-out, log hygiene
+1. Admin MFA, HTTPS/deploy checks, TURN readiness warnings, deletion fan-out, log hygiene — **shipped**
 
-### Done (Slices A–F) — do not reopen unless regressing
+### Done (Slices A–L) — do not reopen unless regressing
 
 Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply quality loop, outcomes/interview/follow-ups, extension capture MVP, Auto-Apply auth, TURN env, security headers/rate limits, hide model names.
 

@@ -120,5 +120,7 @@ export function publicUser(row) {
     planId: row.plan_id || "free",
     mustChangePassword: Boolean(row.password_must_change),
     hasPassword: Boolean(row.password_hash),
+    mfaEnrolled: Boolean(row.totp_secret && row.totp_enabled_at),
+    mfaVerified: Boolean(row.__session?.mfa_at),
   };
 }

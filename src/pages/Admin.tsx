@@ -29,17 +29,92 @@ type CostBucket = {
 type AuditSummary = { last24Hours: CostBucket; last7Days: CostBucket; last30Days: CostBucket };
 
 export function AdminPage() {
-  const { user, ready } = useApp();
+  const { user, ready, refresh } = useApp();
   const { content } = useSiteContent();
   const navigate = useNavigate();
   const [tab, setTab] = useState<"home" | "users" | "admins" | "employers" | "mail" | "ai" | "plans" | "payments" | "jobs">("home");
+  const [mfa, setMfa] = useState<{ required: boolean; enrolled: boolean; verified: boolean } | null>(null);
+  const [mfaSetup, setMfaSetup] = useState<{ secret: string; otpauthUrl: string } | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaError, setMfaError] = useState("");
 
   useEffect(() => {
     if (ready && user?.role !== "admin") navigate("/signin", { replace: true });
     if (ready && user?.mustChangePassword) navigate("/account/settings", { replace: true });
   }, [ready, user, navigate]);
 
+  useEffect(() => {
+    if (!user || user.role !== "admin") return;
+    void api<{ required: boolean; enrolled: boolean; verified: boolean }>("/api/admin/mfa")
+      .then(setMfa)
+      .catch((err: Error & { mfaRequired?: boolean }) => {
+        if (String(err.message || "").includes("MFA") || err) {
+          setMfa({ required: true, enrolled: Boolean(user.mfaEnrolled), verified: Boolean(user.mfaVerified) });
+        }
+      });
+  }, [user]);
+
   if (!user || user.role !== "admin" || user.mustChangePassword) return null;
+
+  const needsMfaGate = Boolean(mfa?.required && (!mfa.enrolled || !mfa.verified));
+
+  async function setupMfa() {
+    setMfaError("");
+    try {
+      const data = await api<{ secret: string; otpauthUrl: string }>("/api/admin/mfa/setup", { method: "POST", body: "{}" });
+      setMfaSetup(data);
+    } catch (err) {
+      setMfaError(err instanceof Error ? err.message : "MFA setup failed.");
+    }
+  }
+
+  async function enableOrVerifyMfa() {
+    setMfaError("");
+    try {
+      const path = mfa?.enrolled || user?.mfaEnrolled ? "/api/admin/mfa/verify" : "/api/admin/mfa/enable";
+      await api(path, { method: "POST", body: JSON.stringify({ code: mfaCode }) });
+      setMfaCode("");
+      setMfaSetup(null);
+      await refresh();
+      const status = await api<{ required: boolean; enrolled: boolean; verified: boolean }>("/api/admin/mfa");
+      setMfa(status);
+    } catch (err) {
+      setMfaError(err instanceof Error ? err.message : "Invalid code.");
+    }
+  }
+
+  if (needsMfaGate) {
+    return (
+      <div className="admin-shell">
+        <main className="admin-main">
+          <section className="admin-card">
+            <h1>Admin MFA required</h1>
+            <p className="lede">Production admin access requires an authenticator app. Enroll once, then enter a 6-digit code for this session.</p>
+            {mfaError ? <p className="form-error">{mfaError}</p> : null}
+            {!mfa?.enrolled && !user?.mfaEnrolled ? (
+              <button className="btn btn-primary btn-sm" type="button" onClick={() => void setupMfa()}>
+                Generate authenticator secret
+              </button>
+            ) : null}
+            {mfaSetup ? (
+              <div className="role">
+                <p>Secret: <code>{mfaSetup.secret}</code></p>
+                <p className="role">otpauth: {mfaSetup.otpauthUrl}</p>
+              </div>
+            ) : null}
+            <label className="field">
+              <span>Authenticator code</span>
+              <input value={mfaCode} onChange={(event) => setMfaCode(event.target.value)} inputMode="numeric" maxLength={6} />
+            </label>
+            <button className="btn btn-primary btn-sm" type="button" onClick={() => void enableOrVerifyMfa()}>
+              {mfa?.enrolled || user?.mfaEnrolled ? "Verify MFA" : "Enable MFA"}
+            </button>
+            <p className="role"><Link to="/">Back to site</Link></p>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-shell">

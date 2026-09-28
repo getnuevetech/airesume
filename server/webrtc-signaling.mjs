@@ -124,10 +124,26 @@ export function resolveIceServers(env = process.env) {
 export function iceConfigSummary(servers = resolveIceServers()) {
   const hasTurn = servers.some((item) => /turn:/i.test(String(Array.isArray(item.urls) ? item.urls[0] : item.urls || "")));
   const hasStun = servers.some((item) => /stun:/i.test(String(Array.isArray(item.urls) ? item.urls[0] : item.urls || "")));
+  const productionReady = hasTurn;
+  if (!productionReady) {
+    warnMissingTurnOnce();
+  }
   return {
     serverCount: servers.length,
     hasTurn,
     hasStun,
-    productionReady: hasTurn,
+    productionReady,
+    warning: productionReady
+      ? ""
+      : "TURN is not configured. Interview room audio may fail on restrictive NATs. Set TURN_URIS, TURN_USERNAME, and TURN_CREDENTIAL.",
   };
+}
+
+let turnWarned = false;
+function warnMissingTurnOnce() {
+  if (turnWarned) return;
+  turnWarned = true;
+  console.warn(
+    "[jobpilot] Interview rooms: TURN credentials missing. Set TURN_URIS / TURN_USERNAME / TURN_CREDENTIAL for productionReady RTC.",
+  );
 }

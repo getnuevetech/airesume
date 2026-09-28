@@ -1,5 +1,7 @@
 import { randomBytes, randomInt } from "node:crypto";
-import { db, hashPassword, id, sha256 } from "./db.mjs";
+import { existsSync, unlinkSync } from "node:fs";
+import { basename, join } from "node:path";
+import { db, hashPassword, id, sha256, uploadsDir } from "./db.mjs";
 import { deliverMail } from "./mail.mjs";
 
 export const DRAFT_RETENTION_MS = 1000 * 60 * 60 * 24 * 30;
@@ -212,6 +214,16 @@ export function exportAccountBundle(userId) {
 }
 
 export function deleteAccountData(userId) {
+  try {
+    const profile = db.prepare("SELECT photo_url FROM profiles WHERE user_id = ?").get(userId);
+    const photo = String(profile?.photo_url || "");
+    if (photo.startsWith("/uploads/")) {
+      const file = join(uploadsDir, basename(photo));
+      if (existsSync(file)) unlinkSync(file);
+    }
+  } catch {
+    // Continue with DB deletion even if upload cleanup fails.
+  }
   const tables = [
     ["interview_room_signals", "room_id IN (SELECT id FROM interview_rooms WHERE employer_user_id = ? OR candidate_user_id = ?)"],
     ["interview_rooms", "employer_user_id = ? OR candidate_user_id = ?"],

@@ -33,6 +33,13 @@ import { registerEmployerPostings } from "./routes-employer-postings.mjs";
 import { registerInterviewRooms } from "./routes-interview-rooms.mjs";
 import { registerEmployerAnalytics } from "./routes-employer-analytics.mjs";
 import { applySecurityHeaders, rateLimit } from "./security.mjs";
+import { redactSensitive } from "./security-redact.mjs";
+import {
+  adminMfaRequired,
+  generateTotpSecret,
+  otpauthUrl,
+  verifyTotpCode,
+} from "./admin-mfa.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const homepageFile = join(here, "..", "shared", "homepage.json");
@@ -140,16 +147,23 @@ function clearSession(res, req) {
   res.setHeader("Set-Cookie", `jp_session=; ${sessionCookieAttrs(req, 0)}`);
 }
 
-function currentUser(req) {
+function currentSession(req) {
   const token = cookie(req, "jp_session");
   if (!token) return null;
+  return db
+    .prepare(`SELECT token, user_id, expires_at, mfa_at FROM sessions WHERE token = ? AND expires_at > ?`)
+    .get(token, Date.now()) || null;
+}
+
+function currentUser(req) {
+  const session = currentSession(req);
+  if (!session) return null;
   const row = db
-    .prepare(
-      `SELECT users.* FROM sessions JOIN users ON users.id = sessions.user_id
-       WHERE sessions.token = ? AND sessions.expires_at > ? AND users.status = 'active'`,
-    )
-    .get(token, Date.now());
-  return row || null;
+    .prepare(`SELECT * FROM users WHERE id = ? AND status = 'active'`)
+    .get(session.user_id);
+  if (!row) return null;
+  row.__session = session;
+  return row;
 }
 
 function allowedWhilePasswordChange(req) {
@@ -158,6 +172,14 @@ function allowedWhilePasswordChange(req) {
   if (req.method === "POST" && path === "/api/auth/logout") return true;
   if (req.method === "POST" && path === "/api/account/password") return true;
   return false;
+}
+
+function isAdminMfaPath(req) {
+  const path = String(req.originalUrl || req.url || "").split("?")[0];
+  return (
+    (req.method === "GET" && path === "/api/admin/mfa") ||
+    (req.method === "POST" && (path === "/api/admin/mfa/setup" || path === "/api/admin/mfa/enable" || path === "/api/admin/mfa/verify"))
+  );
 }
 
 function requireUser(req, res) {
@@ -180,6 +202,26 @@ function requireAdmin(req, res) {
     res.status(403).json({ error: "Admin access required." });
     return null;
   }
+  if (adminMfaRequired() && !isAdminMfaPath(req)) {
+    const enrolled = Boolean(user.totp_secret && user.totp_enabled_at);
+    if (!enrolled) {
+      res.status(403).json({
+        error: "Enroll admin MFA before using admin tools in production.",
+        mfaRequired: true,
+        mfaEnrolled: false,
+      });
+      return null;
+    }
+    const mfaAt = Number(user.__session?.mfa_at || 0);
+    if (!mfaAt || Date.now() - mfaAt > 1000 * 60 * 60 * 12) {
+      res.status(403).json({
+        error: "Verify admin MFA to continue.",
+        mfaRequired: true,
+        mfaEnrolled: true,
+      });
+      return null;
+    }
+  }
   return user;
 }
 
@@ -194,7 +236,7 @@ function audit(entry) {
     entry.provider,
     entry.model,
     entry.status,
-    entry.detail || "",
+    redactSensitive(entry.detail || "", { maxLen: 500 }),
     Date.now(),
     Math.max(0, Number(entry.costMicros) || 0),
   );
@@ -645,6 +687,81 @@ app.get("/api/profile", (req, res) => {
       slug: profile.slug || "",
     },
   });
+});
+
+app.get("/api/admin/mfa", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user || user.role !== "admin") {
+    res.status(403).json({ error: "Admin access required." });
+    return;
+  }
+  res.json({
+    required: adminMfaRequired(),
+    enrolled: Boolean(user.totp_secret && user.totp_enabled_at),
+    verified: Boolean(user.__session?.mfa_at),
+  });
+});
+
+app.post("/api/admin/mfa/setup", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user || user.role !== "admin") {
+    res.status(403).json({ error: "Admin access required." });
+    return;
+  }
+  if (user.totp_enabled_at) {
+    res.status(400).json({ error: "MFA is already enabled. Verify with your authenticator." });
+    return;
+  }
+  const secret = generateTotpSecret();
+  db.prepare("UPDATE users SET totp_secret = ? WHERE id = ?").run(secret, user.id);
+  res.json({
+    secret,
+    otpauthUrl: otpauthUrl({ secret, email: user.email }),
+    note: "Add this secret to your authenticator, then call /api/admin/mfa/enable with a 6-digit code.",
+  });
+});
+
+app.post("/api/admin/mfa/enable", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user || user.role !== "admin") {
+    res.status(403).json({ error: "Admin access required." });
+    return;
+  }
+  if (!user.totp_secret) {
+    res.status(400).json({ error: "Run MFA setup first." });
+    return;
+  }
+  if (!verifyTotpCode(user.totp_secret, req.body.code)) {
+    res.status(400).json({ error: "Invalid authenticator code." });
+    return;
+  }
+  const now = Date.now();
+  db.prepare("UPDATE users SET totp_enabled_at = ? WHERE id = ?").run(now, user.id);
+  if (user.__session?.token) {
+    db.prepare("UPDATE sessions SET mfa_at = ? WHERE token = ?").run(now, user.__session.token);
+  }
+  res.json({ ok: true, enrolled: true, verified: true });
+});
+
+app.post("/api/admin/mfa/verify", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user || user.role !== "admin") {
+    res.status(403).json({ error: "Admin access required." });
+    return;
+  }
+  if (!user.totp_secret || !user.totp_enabled_at) {
+    res.status(400).json({ error: "Enroll MFA before verifying." });
+    return;
+  }
+  if (!verifyTotpCode(user.totp_secret, req.body.code)) {
+    res.status(400).json({ error: "Invalid authenticator code." });
+    return;
+  }
+  const now = Date.now();
+  if (user.__session?.token) {
+    db.prepare("UPDATE sessions SET mfa_at = ? WHERE token = ?").run(now, user.__session.token);
+  }
+  res.json({ ok: true, verified: true });
 });
 
 app.get("/api/admin/homepage", (req, res) => {
