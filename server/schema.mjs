@@ -1,7 +1,7 @@
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -225,6 +225,15 @@ export function migrate() {
   addColumn("applications", "target_email", "TEXT DEFAULT ''");
   addColumn("applications", "delivery", "TEXT DEFAULT ''");
   addColumn("applications", "questions", "TEXT DEFAULT '[]'");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS match_explanation_views (
+      user_id TEXT NOT NULL,
+      job_id TEXT NOT NULL,
+      week_start INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, job_id, week_start)
+    );
+  `);
 
   const provider = db.prepare("SELECT id FROM ai_providers LIMIT 1").get();
   if (!provider) {
@@ -241,10 +250,10 @@ export function migrate() {
       "INSERT INTO plans (id, name, blurb, monthly_cents, yearly_cents, features, sort_order, popular, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
     );
     const rows = [
-      ["free", "Free", "Profile, review, and a short job list.", 0, 0, { profile_edit: true, resume_review: true, resume_upscale: false, job_browse: true, job_limit: 5, manual_apply: false, auto_apply: false, public_profile: true, image_enhance: false, template_limit: 2 }, 1, 0],
-      ["starter", "Starter", "Upscale the resume and apply yourself.", 799, 7900, { profile_edit: true, resume_review: true, resume_upscale: true, job_browse: true, job_limit: 15, manual_apply: true, auto_apply: false, public_profile: true, image_enhance: false, template_limit: 3 }, 2, 0],
-      ["pro", "Pro", "Every tailored version and the full job list.", 1499, 9900, { profile_edit: true, resume_review: true, resume_upscale: true, job_browse: true, job_limit: 0, manual_apply: true, auto_apply: false, public_profile: true, image_enhance: true, template_limit: 4 }, 3, 1],
-      ["autopilot", "Autopilot", "Auto-apply when the match clears your bar.", 2499, 19900, { profile_edit: true, resume_review: true, resume_upscale: true, job_browse: true, job_limit: 0, manual_apply: true, auto_apply: true, public_profile: true, image_enhance: true, template_limit: 6 }, 4, 0],
+      ["free", "Free", "Profile, review, and a short job list.", 0, 0, { profile_edit: true, resume_review: true, resume_upscale: false, job_browse: true, job_limit: 5, match_explain_limit: 5, manual_apply: false, auto_apply: false, public_profile: true, image_enhance: false, template_limit: 2 }, 1, 0],
+      ["starter", "Starter", "Upscale the resume and apply yourself.", 799, 7900, { profile_edit: true, resume_review: true, resume_upscale: true, job_browse: true, job_limit: 15, match_explain_limit: 25, manual_apply: true, auto_apply: false, public_profile: true, image_enhance: false, template_limit: 3 }, 2, 0],
+      ["pro", "Pro", "Every tailored version and the full job list.", 1499, 9900, { profile_edit: true, resume_review: true, resume_upscale: true, job_browse: true, job_limit: 0, match_explain_limit: 0, manual_apply: true, auto_apply: false, public_profile: true, image_enhance: true, template_limit: 4 }, 3, 1],
+      ["autopilot", "Autopilot", "Auto-apply when the match clears your bar.", 2499, 19900, { profile_edit: true, resume_review: true, resume_upscale: true, job_browse: true, job_limit: 0, match_explain_limit: 0, manual_apply: true, auto_apply: true, public_profile: true, image_enhance: true, template_limit: 6 }, 4, 0],
     ];
     for (const row of rows) insert.run(row[0], row[1], row[2], row[3], row[4], JSON.stringify(row[5]), row[6], row[7]);
   }
@@ -339,12 +348,19 @@ export function migrate() {
   }
 
   const templateDefaults = { free: 2, starter: 3, pro: 4, autopilot: 6 };
+  const explainDefaults = { free: 5, starter: 25, pro: 0, autopilot: 0 };
   for (const plan of db.prepare("SELECT id, features FROM plans").all()) {
     const features = JSON.parse(plan.features || "{}");
+    let dirty = false;
     if (features.template_limit == null) {
       features.template_limit = templateDefaults[plan.id] ?? 2;
-      db.prepare("UPDATE plans SET features = ? WHERE id = ?").run(JSON.stringify(features), plan.id);
+      dirty = true;
     }
+    if (features.match_explain_limit == null) {
+      features.match_explain_limit = explainDefaults[plan.id] ?? 5;
+      dirty = true;
+    }
+    if (dirty) db.prepare("UPDATE plans SET features = ? WHERE id = ?").run(JSON.stringify(features), plan.id);
   }
 
   const versionRow = db.prepare("SELECT version FROM schema_version LIMIT 1").get();
@@ -361,6 +377,8 @@ export function featureLabels(features) {
   if (features.resume_review) labels.push("Resume rating and recommendations");
   if (features.resume_upscale) labels.push("Resume versions from accepted edits");
   if (features.job_browse) labels.push(features.job_limit ? `${features.job_limit} tailored jobs` : "Full tailored job list");
+  if (features.match_explain_limit === 0) labels.push("Unlimited match explanations");
+  else if (features.match_explain_limit) labels.push(`${features.match_explain_limit} match explanations / week`);
   if (features.manual_apply) labels.push("Manual apply");
   if (features.auto_apply) labels.push("Auto apply");
   if (features.public_profile) labels.push("Shareable resume link");

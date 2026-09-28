@@ -9,6 +9,7 @@ import { autoDecision, TRACKER_STATUSES } from "./apply-rules.mjs";
 import { parseJobPaste } from "./job-import.mjs";
 import { extractRequirements, matchJob, matchLabel } from "./match.mjs";
 import { draftQuestions } from "./questions.mjs";
+import { matchExplainLimit, redactMatch, startOfUtcWeek } from "./quota.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -174,6 +175,15 @@ test("draftQuestions leaves salary and authorization blank", () => {
   assert.ok(questions.some((item) => item.kind === "draft" && item.answer));
 });
 
+test("matchExplainLimit treats 0 as unlimited and redacts locked matches", () => {
+  assert.equal(matchExplainLimit({ match_explain_limit: 5 }), 5);
+  assert.equal(matchExplainLimit({ match_explain_limit: 0 }), 0);
+  const redacted = redactMatch({ score: 90, label: "strong", explanation: "hi", matched: ["SQL"], missing: [], preferredMatched: [] });
+  assert.equal(redacted.explanation, "");
+  assert.equal(redacted.explanationLocked, true);
+  assert.ok(startOfUtcWeek() > 0);
+});
+
 test("fresh data dir migrates and seeds schema version", () => {
   const dir = mkdtempSync(join(tmpdir(), "jobpilot-test-"));
   const script = `
@@ -193,6 +203,10 @@ test("fresh data dir migrates and seeds schema version", () => {
     const columns = db.prepare("PRAGMA table_info(applications)").all().map((row) => row.name);
     if (!columns.includes("questions")) process.exit(5);
     if (!db.prepare("PRAGMA table_info(users)").all().some((row) => row.name === "auto_daily_cap")) process.exit(6);
+    const views = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='match_explanation_views'").get();
+    if (!views) process.exit(7);
+    const free = JSON.parse(db.prepare("SELECT features FROM plans WHERE id='free'").get().features);
+    if (free.match_explain_limit !== 5) process.exit(8);
   `;
   try {
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {

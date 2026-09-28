@@ -12,6 +12,9 @@ import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 import { TRACKER_STATUSES, autoDecision, startOfUtcDay } from "./apply-rules.mjs";
 import { fetchJobUrl, parseJobPaste } from "./job-import.mjs";
 import { draftQuestions } from "./questions.mjs";
+import { allowExplanation, explanationQuota, redactMatch } from "./quota.mjs";
+import { registerBilling } from "./routes-billing.mjs";
+import { registerResume } from "./routes-resume.mjs";
 
 migrate();
 
@@ -549,6 +552,7 @@ function money(cents) {
 function jobCard(job, match, sourceNames, applied) {
   const applyCompany = job.primary_company || job.company;
   const via = applyCompany.toLowerCase() !== String(job.company).toLowerCase() ? job.company : "";
+  const locked = Boolean(match.explanationLocked);
   return {
     id: job.id,
     title: job.title,
@@ -566,11 +570,12 @@ function jobCard(job, match, sourceNames, applied) {
     verification: job.verification,
     description: job.description,
     score: match.score,
-    label: match.label || "",
-    explanation: match.explanation || "",
-    matched: match.matched,
-    missing: match.missing,
-    preferredMatched: match.preferredMatched || [],
+    label: locked ? "" : match.label || "",
+    explanation: locked ? "" : match.explanation || "",
+    matched: locked ? [] : match.matched,
+    missing: locked ? [] : match.missing,
+    preferredMatched: locked ? [] : match.preferredMatched || [],
+    explanationLocked: locked,
     applied,
   };
 }
@@ -583,6 +588,9 @@ function featuresFrom(input, base) {
   if (input && Object.prototype.hasOwnProperty.call(input, "job_limit")) features.job_limit = Math.max(0, Number(input.job_limit) || 0);
   if (input && Object.prototype.hasOwnProperty.call(input, "template_limit")) {
     features.template_limit = Math.max(1, Math.min(RESUME_TEMPLATES.length, Number(input.template_limit) || 1));
+  }
+  if (input && Object.prototype.hasOwnProperty.call(input, "match_explain_limit")) {
+    features.match_explain_limit = Math.max(0, Number(input.match_explain_limit) || 0);
   }
   return features;
 }
@@ -599,6 +607,32 @@ function planSlug(name) {
 }
 
 export function registerPlatform(app, { requireUser, requireAdmin, audit, upload, originOf }) {
+  registerBilling(app, {
+    requireUser,
+    requireAdmin,
+    policy,
+    planRow,
+    creditFor,
+    priceFor,
+    applyPlan,
+    originOf,
+    publicProviderGateway,
+    maskSecret,
+  });
+  registerResume(app, {
+    requireUser,
+    requireFeature,
+    syncProfileVersion,
+    activeVersion,
+    reviewDocument,
+    audit,
+    parse,
+    sourceText,
+    claimsSupported,
+    setPath,
+    renderDocument,
+  });
+
   app.get("/api/plans", (_req, res) => {
     const plans = db.prepare("SELECT * FROM plans WHERE active = 1 ORDER BY sort_order").all().map(publicPlan);
     res.json({ plans, policy: policy() });
@@ -622,6 +656,8 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       .sort((a, b) => b.score - a.score);
     if (access.features.job_limit) ranked = ranked.slice(0, access.features.job_limit);
     if (!access.features.job_browse) ranked = [];
+    const quota = explanationQuota(user.id, access.features);
+    ranked = ranked.map((item) => (allowExplanation(user.id, item.job.id, quota) ? item : redactMatch(item)));
     const review = db.prepare("SELECT * FROM resume_reviews WHERE user_id = ? ORDER BY created_at DESC LIMIT 1").get(user.id);
     const versions = db.prepare("SELECT * FROM resume_versions WHERE user_id = ? ORDER BY created_at DESC").all(user.id).map(publicVersion);
     const responded = applications.filter((item) => ["Responded", "Interview", "Offer"].includes(item.status)).length;
@@ -639,6 +675,13 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       autoMin: user.auto_min || 85,
       autoDailyCap: user.auto_daily_cap ?? 5,
       autoCapUsed: autoCapUsed(user.id),
+      matchQuota: {
+        limit: quota.limit,
+        used: quota.used,
+        remaining: quota.unlimited ? null : quota.remaining,
+        unlimited: quota.unlimited,
+        resetsAt: quota.resetsAt,
+      },
       statuses: TRACKER_STATUSES,
       stats: {
         resumeRating: review ? review.rating : null,
@@ -807,81 +850,6 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     db.prepare("UPDATE profiles SET photo_url = ?, updated_at = ? WHERE user_id = ?").run(`/uploads/${nextName}`, Date.now(), user.id);
     audit({ userId: user.id, functionName: "image_enhance", provider: ai.provider, model: ai.model, status: "applied", detail: `${contrast},${color},${sharpness}` });
     res.json({ photoUrl: `/uploads/${nextName}`, provider: ai.provider, model: ai.model });
-  });
-
-  app.post("/api/resume/review", async (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    if (!requireFeature(user, "resume_review", res)) return;
-    syncProfileVersion(user.id);
-    const version = activeVersion(user.id);
-    if (!version) {
-      res.status(400).json({ error: "There is no resume to review yet." });
-      return;
-    }
-    const review = await reviewDocument(user, version);
-    audit({ userId: user.id, functionName: "resume_diagnostic", provider: review.provider, model: review.model, status: "ready", detail: String(review.rating) });
-    res.json({ review });
-  });
-
-  app.post("/api/resume/apply", async (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    if (!requireFeature(user, "resume_upscale", res)) return;
-    const review = db.prepare("SELECT * FROM resume_reviews WHERE id = ? AND user_id = ?").get(String(req.body.reviewId || ""), user.id);
-    const version = review ? db.prepare("SELECT * FROM resume_versions WHERE id = ? AND user_id = ?").get(review.version_id, user.id) : null;
-    if (!review || !version) {
-      res.status(400).json({ error: "Run a review before applying recommendations." });
-      return;
-    }
-    const selected = new Set((req.body.recommendationIds || []).map(String));
-    const recommendations = parse(review.recommendations, []).filter((item) => selected.has(item.id) && item.kind === "rewrite" && item.proposed && item.path);
-    if (!recommendations.length) {
-      res.status(400).json({ error: "Select at least one rewrite. Notes are guidance and are not inserted." });
-      return;
-    }
-    const doc = parse(version.document, {});
-    const source = sourceText(doc);
-    const applied = [];
-    for (const item of recommendations) {
-      if (!claimsSupported(item.proposed, source)) continue;
-      if (setPath(doc, item.path, item.proposed)) applied.push(item.id);
-    }
-    if (!applied.length) {
-      res.status(400).json({ error: "Those recommendations could not be applied without adding unsupported claims." });
-      return;
-    }
-    const count = db.prepare("SELECT COUNT(*) AS count FROM resume_versions WHERE user_id = ? AND kind = 'upscale'").get(user.id).count + 1;
-    const versionId = id("ver");
-    db.prepare(
-      `INSERT INTO resume_versions (id, user_id, label, kind, document, rendered, parent_id, active, created_at)
-       VALUES (?, ?, ?, 'upscale', ?, ?, ?, 0, ?)`,
-    ).run(versionId, user.id, `Upscale ${count}`, JSON.stringify(doc), renderDocument(doc), version.id, Date.now());
-    audit({ userId: user.id, functionName: "resume_upscale", provider: review.provider, model: review.model, status: "version", detail: versionId });
-    res.json({ versionId, applied });
-  });
-
-  app.post("/api/resume/versions/:id/activate", (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    const version = db.prepare("SELECT * FROM resume_versions WHERE id = ? AND user_id = ?").get(req.params.id, user.id);
-    if (!version) {
-      res.status(404).json({ error: "Version not found." });
-      return;
-    }
-    const doc = parse(version.document, {});
-    db.prepare("UPDATE resume_versions SET active = 0 WHERE user_id = ?").run(user.id);
-    db.prepare("UPDATE resume_versions SET active = 1 WHERE id = ?").run(version.id);
-    db.prepare("UPDATE profiles SET headline = ?, summary = ?, skills = ?, employment = ?, education = ?, updated_at = ? WHERE user_id = ?").run(
-      doc.headline || "",
-      doc.summary || "",
-      JSON.stringify(doc.skills || []),
-      JSON.stringify(doc.employment || []),
-      JSON.stringify(doc.education || []),
-      Date.now(),
-      user.id,
-    );
-    res.json({ ok: true });
   });
 
   app.post("/api/applications", async (req, res) => {
@@ -1175,143 +1143,6 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     });
   });
 
-  app.post("/api/billing/checkout", async (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    const plan = db.prepare("SELECT * FROM plans WHERE id = ? AND active = 1").get(String(req.body.planId || ""));
-    const gateway = db.prepare("SELECT * FROM payment_gateways WHERE id = ? AND enabled = 1").get(String(req.body.gatewayId || ""));
-    if (!plan || !gateway) {
-      res.status(400).json({ error: "Choose an active plan and an enabled payment gateway." });
-      return;
-    }
-    if (plan.id === (user.plan_id || "free")) {
-      res.status(400).json({ error: "You are already on that plan." });
-      return;
-    }
-    const rules = policy();
-    const current = planRow(user.plan_id);
-    const upgrade = plan.sort_order >= (current?.sort_order || 0);
-    if (upgrade && !rules.allowUpgrade) {
-      res.status(403).json({ error: "Upgrades are turned off by an admin." });
-      return;
-    }
-    if (!upgrade && !rules.allowDowngrade) {
-      res.status(403).json({ error: "Downgrades are turned off by an admin." });
-      return;
-    }
-    const cycle = req.body.cycle === "yearly" ? "yearly" : "monthly";
-    const credit = creditFor(user);
-    const amount = Math.max(0, priceFor(plan, cycle) - (rules.allowProration ? credit : 0));
-    if (gateway.kind === "manual" || amount === 0) {
-      applyPlan(user, plan, gateway, cycle, "", amount, rules.allowProration ? credit : 0);
-      res.json({ applied: true, amount, credit });
-      return;
-    }
-    const checkoutId = id("chk");
-    if (gateway.kind === "stripe") {
-      const body = new URLSearchParams({
-        mode: "payment",
-        "line_items[0][price_data][currency]": "usd",
-        "line_items[0][price_data][product_data][name]": `${plan.name} ${cycle}`,
-        "line_items[0][price_data][unit_amount]": String(amount),
-        "line_items[0][quantity]": "1",
-        success_url: `${originOf(req)}/account/plan?checkout=success&checkout_id=${checkoutId}`,
-        cancel_url: `${originOf(req)}/account/plan?checkout=cancel`,
-        client_reference_id: user.id,
-      });
-      const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${gateway.secret_key}`, "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-      });
-      const session = await response.json();
-      if (!response.ok) {
-        res.status(400).json({ error: session.error?.message || "Stripe did not start checkout." });
-        return;
-      }
-      db.prepare(
-        "INSERT INTO checkouts (id, user_id, plan_id, gateway_id, cycle, amount_cents, credit_cents, status, external_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
-      ).run(checkoutId, user.id, plan.id, gateway.id, cycle, amount, credit, session.id, Date.now());
-      res.json({ url: session.url, checkoutId });
-      return;
-    }
-    if (gateway.kind === "paypal") {
-      const base = gateway.mode === "live" ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com";
-      const tokenResponse = await fetch(`${base}/v1/oauth2/token`, {
-        method: "POST",
-        headers: { Authorization: `Basic ${Buffer.from(`${gateway.public_key}:${gateway.secret_key}`).toString("base64")}`, "Content-Type": "application/x-www-form-urlencoded" },
-        body: "grant_type=client_credentials",
-      });
-      const token = await tokenResponse.json();
-      if (!token.access_token) {
-        res.status(400).json({ error: "PayPal did not accept those credentials." });
-        return;
-      }
-      const orderResponse = await fetch(`${base}/v2/checkout/orders`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token.access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          intent: "CAPTURE",
-          purchase_units: [{ amount: { currency_code: "USD", value: (amount / 100).toFixed(2) }, description: plan.name }],
-          application_context: { return_url: `${originOf(req)}/account/plan?checkout=success&checkout_id=${checkoutId}`, cancel_url: `${originOf(req)}/account/plan?checkout=cancel` },
-        }),
-      });
-      const order = await orderResponse.json();
-      const approve = order.links?.find((link) => link.rel === "approve")?.href;
-      if (!approve) {
-        res.status(400).json({ error: "PayPal did not return a checkout link." });
-        return;
-      }
-      db.prepare(
-        "INSERT INTO checkouts (id, user_id, plan_id, gateway_id, cycle, amount_cents, credit_cents, status, external_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
-      ).run(checkoutId, user.id, plan.id, gateway.id, cycle, amount, credit, order.id, Date.now());
-      res.json({ url: approve, checkoutId });
-      return;
-    }
-    res.status(400).json({ error: "That gateway is not supported." });
-  });
-
-  app.post("/api/billing/confirm", async (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    const checkout = db.prepare("SELECT * FROM checkouts WHERE id = ? AND user_id = ?").get(String(req.body.checkoutId || ""), user.id);
-    if (!checkout) {
-      res.status(404).json({ error: "Checkout not found." });
-      return;
-    }
-    if (checkout.status === "paid") {
-      res.json({ applied: true });
-      return;
-    }
-    const gateway = db.prepare("SELECT * FROM payment_gateways WHERE id = ?").get(checkout.gateway_id);
-    const plan = db.prepare("SELECT * FROM plans WHERE id = ?").get(checkout.plan_id);
-    let paid = false;
-    if (gateway?.kind === "stripe") {
-      const response = await fetch(`https://api.stripe.com/v1/checkout/sessions/${checkout.external_id}`, { headers: { Authorization: `Bearer ${gateway.secret_key}` } });
-      const session = await response.json();
-      paid = session.payment_status === "paid";
-    }
-    if (gateway?.kind === "paypal") {
-      const base = gateway.mode === "live" ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com";
-      const tokenResponse = await fetch(`${base}/v1/oauth2/token`, {
-        method: "POST",
-        headers: { Authorization: `Basic ${Buffer.from(`${gateway.public_key}:${gateway.secret_key}`).toString("base64")}`, "Content-Type": "application/x-www-form-urlencoded" },
-        body: "grant_type=client_credentials",
-      });
-      const token = await tokenResponse.json();
-      const capture = await fetch(`${base}/v2/checkout/orders/${checkout.external_id}/capture`, { method: "POST", headers: { Authorization: `Bearer ${token.access_token}`, "Content-Type": "application/json" } });
-      const body = await capture.json();
-      paid = body.status === "COMPLETED";
-    }
-    if (!paid) {
-      res.status(400).json({ error: "The payment is not complete yet." });
-      return;
-    }
-    applyPlan(user, plan, gateway, checkout.cycle, checkout.external_id, checkout.amount_cents, checkout.credit_cents);
-    db.prepare("UPDATE checkouts SET status = 'paid' WHERE id = ?").run(checkout.id);
-    res.json({ applied: true });
-  });
-
   app.get("/api/admin/ai", (req, res) => {
     if (!requireAdmin(req, res)) return;
     res.json({
@@ -1491,64 +1322,6 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     res.json({ ok: true });
   });
 
-  app.put("/api/admin/billing-policy", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const next = {
-      allowUpgrade: Boolean(req.body.allowUpgrade),
-      allowDowngrade: Boolean(req.body.allowDowngrade),
-      allowProration: Boolean(req.body.allowProration),
-      allowRefund: Boolean(req.body.allowRefund),
-    };
-    db.prepare("INSERT INTO settings (key, value) VALUES ('billing_policy', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(next));
-    res.json({ policy: next });
-  });
-
-  app.get("/api/admin/gateways", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    res.json({ gateways: db.prepare("SELECT * FROM payment_gateways ORDER BY created_at").all().map(publicProviderGateway) });
-  });
-
-  app.post("/api/admin/gateways", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const kind = ["stripe", "paypal", "manual"].includes(req.body.kind) ? req.body.kind : "";
-    const name = String(req.body.name || "").trim();
-    if (!kind || name.length < 2) {
-      res.status(400).json({ error: "Name and gateway type are required." });
-      return;
-    }
-    const gatewayId = id("gw");
-    db.prepare("INSERT INTO payment_gateways (id, name, kind, enabled, public_key, secret_key, mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
-      gatewayId,
-      name,
-      kind,
-      req.body.enabled ? 1 : 0,
-      String(req.body.publicKey || ""),
-      String(req.body.secretKey || ""),
-      req.body.mode === "live" ? "live" : "test",
-      Date.now(),
-    );
-    res.json({ gateway: publicProviderGateway(db.prepare("SELECT * FROM payment_gateways WHERE id = ?").get(gatewayId)) });
-  });
-
-  app.patch("/api/admin/gateways/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const gateway = db.prepare("SELECT * FROM payment_gateways WHERE id = ?").get(req.params.id);
-    if (!gateway) {
-      res.status(404).json({ error: "Gateway not found." });
-      return;
-    }
-    const secret = req.body.secretKey && !String(req.body.secretKey).startsWith("••••") ? String(req.body.secretKey) : gateway.secret_key;
-    db.prepare("UPDATE payment_gateways SET name = ?, enabled = ?, public_key = ?, secret_key = ?, mode = ? WHERE id = ?").run(
-      String(req.body.name || gateway.name),
-      req.body.enabled ? 1 : 0,
-      String(req.body.publicKey ?? gateway.public_key),
-      secret,
-      req.body.mode === "live" ? "live" : "test",
-      gateway.id,
-    );
-    res.json({ ok: true });
-  });
-
   app.get("/api/admin/jobs", (req, res) => {
     if (!requireAdmin(req, res)) return;
     const sources = db.prepare("SELECT * FROM job_sources ORDER BY created_at").all();
@@ -1720,10 +1493,6 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     res.json({ id: jobId });
   });
 
-  app.get("/api/admin/billing-events", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    res.json({ events: db.prepare("SELECT * FROM billing_events ORDER BY created_at DESC LIMIT 50").all() });
-  });
 }
 
 function publicVersion(row) {

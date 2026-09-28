@@ -405,6 +405,9 @@ export function JobsPage() {
             <p className="eyebrow">Jobs</p>
             <h1>Tailored to your resume</h1>
             <p className="lede">{data.stats.available} roles in this list. {data.stats.recommended} are strong matches.</p>
+            {data.matchQuota && !data.matchQuota.unlimited ? (
+              <p className="role">Match explanations this week: {data.matchQuota.used} used, {data.matchQuota.remaining} left on {data.plan.name}.</p>
+            ) : null}
           </div>
         </header>
         <section className="account-card">
@@ -431,7 +434,8 @@ export function JobsPage() {
               {job.viaCompany ? <p className="role">Listed by {job.viaCompany}{job.sourceName ? ` on ${job.sourceName}` : ""}. This application goes to {job.applyCompany}.</p> : null}
               <p className="lede">{job.description}</p>
               {job.explanation ? <p className="role">{job.label ? `${job.label}: ` : ""}{job.explanation}</p> : null}
-              <p className="role">{job.matched.join(", ") || "Limited skill overlap"}{job.missing.length ? ` · Gap: ${job.missing.join(", ")}` : ""}</p>
+              {job.explanationLocked ? <p className="role">Explanation locked — weekly Free/Starter quota reached. Upgrade for more.</p> : null}
+              <p className="role">{job.explanationLocked ? "Details hidden until an explanation slot is available" : (job.matched.join(", ") || "Limited skill overlap")}{!job.explanationLocked && job.missing.length ? ` · Gap: ${job.missing.join(", ")}` : ""}</p>
             </div>
             <div className="job-side">
               <span className="match-badge">{job.score}%</span>

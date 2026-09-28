@@ -30,6 +30,7 @@ export type AccountJob = {
   matched: string[];
   missing: string[];
   preferredMatched: string[];
+  explanationLocked?: boolean;
   applied: boolean;
 };
 export type AccountData = {
@@ -63,6 +64,13 @@ export type AccountData = {
   autoMin: number;
   autoDailyCap: number;
   autoCapUsed: number;
+  matchQuota?: {
+    limit: number;
+    used: number;
+    remaining: number | null;
+    unlimited: boolean;
+    resetsAt: number;
+  };
   statuses: string[];
   stats: {
     resumeRating: number | null;

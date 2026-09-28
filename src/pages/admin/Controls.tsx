@@ -225,7 +225,7 @@ const emptyPlan = {
   yearlyCents: 0,
   popular: false,
   active: true,
-  features: { profile_edit: true, job_limit: 5, template_limit: 2 } as Record<string, boolean | number>,
+  features: { profile_edit: true, job_limit: 5, template_limit: 2, match_explain_limit: 5 } as Record<string, boolean | number>,
 };
 
 export function PlansAdmin() {
@@ -288,6 +288,7 @@ export function PlansAdmin() {
         </div>
         <label className="field"><span>Job list size, 0 for all</span><input type="number" value={Number(draft.features.job_limit || 0)} onChange={(event) => setDraft({ ...draft, features: { ...draft.features, job_limit: Number(event.target.value) } })} /></label>
         <label className="field"><span>Resume templates, 1 to 6</span><input type="number" min={1} max={6} value={Number(draft.features.template_limit || 2)} onChange={(event) => setDraft({ ...draft, features: { ...draft.features, template_limit: Number(event.target.value) } })} /></label>
+        <label className="field"><span>Match explanations / week, 0 for unlimited</span><input type="number" min={0} value={Number(draft.features.match_explain_limit ?? 5)} onChange={(event) => setDraft({ ...draft, features: { ...draft.features, match_explain_limit: Number(event.target.value) } })} /></label>
         {features.map((feature) => (
           <label className="check-row" key={feature.key}>
             <input type="checkbox" checked={Boolean(draft.features[feature.key])} onChange={(event) => setDraft({ ...draft, features: { ...draft.features, [feature.key]: event.target.checked } })} />
@@ -306,6 +307,7 @@ export function PlansAdmin() {
           </div>
           <label className="field"><span>Job list size, 0 for all</span><input type="number" value={Number(plan.features.job_limit || 0)} onChange={(event) => updatePlan(plan.id, { features: { ...plan.features, job_limit: Number(event.target.value) } })} /></label>
           <label className="field"><span>Resume templates, 1 to 6</span><input type="number" min={1} max={6} value={Number(plan.features.template_limit || 2)} onChange={(event) => updatePlan(plan.id, { features: { ...plan.features, template_limit: Number(event.target.value) } })} /></label>
+          <label className="field"><span>Match explanations / week, 0 for unlimited</span><input type="number" min={0} value={Number(plan.features.match_explain_limit ?? 5)} onChange={(event) => updatePlan(plan.id, { features: { ...plan.features, match_explain_limit: Number(event.target.value) } })} /></label>
           {features.map((feature) => (
             <label className="check-row" key={feature.key}>
               <input
