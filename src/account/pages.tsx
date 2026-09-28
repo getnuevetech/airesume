@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
@@ -69,7 +69,7 @@ export function OverviewPage() {
           <h2>Continue</h2>
           <Link className="quiet-row" to="/account/resume"><strong>Review your resume</strong><span>Rating and recommendations</span></Link>
           <Link className="quiet-row" to="/account/insights"><strong>Career insights</strong><span>Skill demand, gaps, and focus areas</span></Link>
-          <Link className="quiet-row" to="/account/interview"><strong>Interview prep</strong><span>STAR drafts from your resume facts</span></Link>
+          <Link className="quiet-row" to="/account/interview"><strong>Interview prep</strong><span>STAR drafts and voice practice from resume facts</span></Link>
           <Link className="quiet-row" to="/account/templates"><strong>Choose a template</strong><span>{data.templateLimit} design{data.templateLimit === 1 ? "" : "s"} on this plan</span></Link>
           <Link className="quiet-row" to="/account/profile"><strong>Update your profile</strong><span>Contact, experience, and photo</span></Link>
         </section>
@@ -238,6 +238,47 @@ type InterviewPrep = {
   reminders: string[];
 };
 
+type VoiceFeedback = {
+  score: number;
+  label: string;
+  usedSkills: string[];
+  usedEmployers: string[];
+  usedTitles: string[];
+  usedNumbers: string[];
+  unverifiedNumbers: string[];
+  notes: string[];
+  suggestion: string;
+};
+
+type VoiceSession = {
+  id: string;
+  applicationId: string;
+  title: string;
+  company: string;
+  status: string;
+  prompts: {
+    id: string;
+    prompt: string;
+    kind: string;
+    coachAnswer: string;
+    ready: boolean;
+    note: string;
+    sourceBullet?: { title: string; employer: string; bullet: string } | null;
+  }[];
+  facts: { skills: string[]; employers: string[]; titles: string[]; knownNumbers: string[] };
+  reminders: string[];
+  turns: {
+    promptId: string;
+    prompt: string;
+    kind: string;
+    answer: string;
+    mode: string;
+    feedback: VoiceFeedback | null;
+    answeredAt: number | null;
+  }[];
+  summary: { answered: number; total: number; averageScore: number; inventedMetricFlags: number; status: string };
+};
+
 export function InterviewPage() {
   const { data, setError } = useAccount();
   const eligible = (data?.applications || []).filter((item) =>
@@ -248,6 +289,7 @@ export function InterviewPage() {
     return rank(a.status) - rank(b.status);
   });
   const [selected, setSelected] = useState("");
+  const [mode, setMode] = useState<"prep" | "voice">("prep");
   useEffect(() => {
     if (!priority.length) {
       setSelected("");
@@ -263,7 +305,7 @@ export function InterviewPage() {
           <div>
             <p className="eyebrow">Interview prep</p>
             <h1>Prepare</h1>
-            <p className="lede">STAR drafts and talking points come from resume bullets and match overlap. Metrics you cannot verify stay blank.</p>
+            <p className="lede">STAR drafts, talking points, and voice practice from resume bullets. Metrics you cannot verify stay blank.</p>
           </div>
         </header>
         {!priority.length ? (
@@ -289,11 +331,21 @@ export function InterviewPage() {
                   </button>
                 ))}
               </div>
+              <div className="job-actions" style={{ justifyContent: "flex-start", marginTop: 12 }}>
+                <button className={`btn btn-sm ${mode === "prep" ? "btn-primary" : "btn-ghost"}`} type="button" onClick={() => setMode("prep")}>Written prep</button>
+                <button className={`btn btn-sm ${mode === "voice" ? "btn-primary" : "btn-ghost"}`} type="button" onClick={() => setMode("voice")}>Voice practice</button>
+              </div>
             </section>
-            {selected ? (
+            {selected && mode === "prep" ? (
               <InterviewPrepPanel
                 applicationId={selected}
                 defaultOpen
+                onError={(message) => setError(message)}
+              />
+            ) : null}
+            {selected && mode === "voice" ? (
+              <VoicePracticePanel
+                applicationId={selected}
                 onError={(message) => setError(message)}
               />
             ) : null}
@@ -412,6 +464,216 @@ function InterviewPrepPanel({
     </div>
   );
 }
+
+function VoicePracticePanel({
+  applicationId,
+  onError,
+}: {
+  applicationId: string;
+  onError: (message: string) => void;
+}) {
+  const [session, setSession] = useState<VoiceSession | null>(null);
+  const [index, setIndex] = useState(0);
+  const [answer, setAnswer] = useState("");
+  const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
+
+  useEffect(() => {
+    setSession(null);
+    setIndex(0);
+    setAnswer("");
+    setListening(false);
+    setSpeaking(false);
+  }, [applicationId]);
+
+  useEffect(() => () => {
+    recognitionRef.current?.stop();
+    window.speechSynthesis?.cancel();
+  }, []);
+
+  async function startSession() {
+    setBusy(true);
+    try {
+      const data = await api<{ session: VoiceSession }>(`/api/applications/${applicationId}/voice-practice`, {
+        method: "POST",
+        body: "{}",
+      });
+      setSession(data.session);
+      setIndex(0);
+      setAnswer("");
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Could not start voice practice.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const turn = session?.turns[index] || null;
+  const prompt = session?.prompts[index] || null;
+
+  function speakPrompt() {
+    if (!prompt?.prompt || !window.speechSynthesis) {
+      onError("Speech synthesis is not available in this browser.");
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(prompt.prompt);
+    utterance.onstart = () => setSpeaking(true);
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function stopListening() {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setListening(false);
+  }
+
+  function startListening() {
+    const SpeechRecognition = (window as unknown as {
+      SpeechRecognition?: new () => SpeechRecognitionLike;
+      webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+    }).SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike }).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      onError("Speech recognition is not available. Type your answer instead.");
+      return;
+    }
+    stopListening();
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onresult = (event) => {
+      let text = "";
+      for (let i = 0; i < event.results.length; i += 1) {
+        text += event.results[i][0].transcript;
+      }
+      setAnswer(text.trim());
+    };
+    recognition.onerror = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+    recognition.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  }
+
+  async function submitAnswer(mode: "typed" | "speech") {
+    if (!session || !prompt) return;
+    setBusy(true);
+    stopListening();
+    try {
+      const data = await api<{ session: VoiceSession }>(`/api/voice-practice/${session.id}/answer`, {
+        method: "POST",
+        body: JSON.stringify({ promptId: prompt.id, answer, mode }),
+      });
+      setSession(data.session);
+      setAnswer(data.session.turns[index]?.answer || answer);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Could not score the answer.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="account-card interview-prep-panel">
+      <header className="account-head" style={{ marginBottom: 8 }}>
+        <div>
+          <h2>Voice practice</h2>
+          <p className="lede">Hear each prompt, answer by mic or keyboard, and get coaching that only trusts resume facts.</p>
+        </div>
+        {!session ? (
+          <button className="btn btn-primary btn-sm" type="button" disabled={busy} onClick={() => void startSession()}>
+            {busy ? "Starting…" : "Start session"}
+          </button>
+        ) : null}
+      </header>
+      {!session ? (
+        <p className="role">Start a session to rehearse the same prompts as written prep, out loud.</p>
+      ) : (
+        <>
+          <p className="role">
+            {session.title} · {session.company} · {session.summary.answered}/{session.summary.total} answered
+            {session.summary.averageScore ? ` · avg ${session.summary.averageScore}` : ""}
+            {session.summary.inventedMetricFlags ? ` · ${session.summary.inventedMetricFlags} invented-metric flag(s)` : ""}
+          </p>
+          {prompt && turn ? (
+            <div className="voice-practice">
+              <div className="voice-prompt">
+                <p className="eyebrow">Question {index + 1} of {session.prompts.length}</p>
+                <h3>{prompt.prompt}</h3>
+                <div className="job-actions" style={{ justifyContent: "flex-start" }}>
+                  <button className="btn btn-ghost btn-sm" type="button" onClick={speakPrompt} disabled={speaking}>
+                    {speaking ? "Speaking…" : "Hear question"}
+                  </button>
+                  {listening ? (
+                    <button className="btn btn-ghost btn-sm" type="button" onClick={stopListening}>Stop mic</button>
+                  ) : (
+                    <button className="btn btn-ghost btn-sm" type="button" onClick={startListening}>Use mic</button>
+                  )}
+                </div>
+              </div>
+              <label className="field">
+                <span>Your answer {listening ? "(listening…)" : turn.mode ? `(${turn.mode})` : ""}</span>
+                <textarea
+                  rows={5}
+                  value={answer}
+                  onChange={(event) => setAnswer(event.target.value)}
+                  placeholder="Speak or type a STAR answer from verified resume facts."
+                />
+              </label>
+              <div className="job-actions" style={{ justifyContent: "flex-start" }}>
+                <button className="btn btn-primary btn-sm" type="button" disabled={busy || !answer.trim()} onClick={() => void submitAnswer(listening || turn.mode === "speech" ? "speech" : "typed")}>
+                  {busy ? "Scoring…" : "Score answer"}
+                </button>
+                <button className="btn btn-ghost btn-sm" type="button" disabled={index <= 0} onClick={() => { setIndex((value) => Math.max(0, value - 1)); setAnswer(session.turns[Math.max(0, index - 1)]?.answer || ""); }}>
+                  Previous
+                </button>
+                <button className="btn btn-ghost btn-sm" type="button" disabled={index >= session.prompts.length - 1} onClick={() => { setIndex((value) => Math.min(session.prompts.length - 1, value + 1)); setAnswer(session.turns[Math.min(session.prompts.length - 1, index + 1)]?.answer || ""); }}>
+                  Next
+                </button>
+                <button className="btn btn-ghost btn-sm" type="button" disabled={busy} onClick={() => void startSession()}>New session</button>
+              </div>
+              {turn.feedback ? (
+                <div className="voice-feedback">
+                  <p className="role"><strong>{turn.feedback.label}</strong> · score {turn.feedback.score}</p>
+                  <ul className="interview-signals">
+                    {turn.feedback.notes.map((note) => <li key={note}>{note}</li>)}
+                  </ul>
+                  <p className="lede">{turn.feedback.suggestion}</p>
+                </div>
+              ) : null}
+              {prompt.coachAnswer ? <p className="role">Coach draft (facts only): {prompt.coachAnswer}</p> : null}
+            </div>
+          ) : null}
+          <ul className="interview-signals">
+            {session.reminders.map((line) => <li key={line}>{line}</li>)}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+};
 
 function Tile({ label, value }: { label: string; value: string }) {
   return (

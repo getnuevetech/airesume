@@ -33,6 +33,11 @@ const features = [
     text: "Practice prompts and STAR drafts built from resume bullets. Gaps stay honest — no invented metrics.",
   },
   {
+    icon: <Sparkle />,
+    title: "Voice practice",
+    text: "Hear interview prompts, answer by mic or keyboard, and get coaching that only trusts facts already on your resume.",
+  },
+  {
     icon: <Search />,
     title: "Employer search",
     text: "Hiring teams can search members who published a public resume link — contact stays private unless shared.",

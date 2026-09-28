@@ -913,6 +913,9 @@ button { cursor: pointer; }
 .interview-pick button { text-align: left; border: 1px solid #e6ebf0; background: #fff; border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; cursor: pointer; }
 .interview-pick button.on { border-color: #67c39a; background: var(--green-soft); }
 .interview-signals { margin: 0; padding-left: 18px; color: var(--muted); display: grid; gap: 6px; }
+.voice-practice { display: grid; gap: 14px; margin-top: 8px; }
+.voice-prompt { display: grid; gap: 8px; }
+.voice-feedback { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: #f7f9fb; }
 .version-mini { padding: 10px 0; border-top: 1px solid #f0f3f6; }
 .template-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .template-card { text-align: left; background: #fff; border: 1px solid #e6edf3; border-radius: 16px; padding: 12px; display: grid; gap: 6px; }
