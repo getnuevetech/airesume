@@ -2,6 +2,9 @@
 
 import { db, id } from "./db.mjs";
 import { matchJob } from "./match.mjs";
+import { buildApplyKit } from "./apply-kit.mjs";
+import { applyKitMetrics, recordApplyKitEvent } from "./apply-kit-metrics.mjs";
+import { ensureFollowUpReminder } from "./follow-ups.mjs";
 import {
   createExtensionToken,
   listExtensionTokens,
@@ -183,5 +186,90 @@ export function registerExtension(app, ctx) {
       )
       .all(user.id);
     res.json({ captures: rows });
+  });
+
+  function extensionApplication(req, res) {
+    const limited = rateLimit(req, { key: "ext-kit", limit: 60, windowMs: 60_000 });
+    if (limited.limited) {
+      res.status(429).json({ error: "Extension rate limit reached. Wait a minute and try again." });
+      return null;
+    }
+    const user = resolveExtensionUser(bearerToken(req)) || requireUser(req, res);
+    if (!user) return null;
+    const access = featuresOf(user);
+    if (!access.features.manual_apply) {
+      res.status(403).json({ error: "Assisted Apply is not on your plan." });
+      return null;
+    }
+    const row = db.prepare("SELECT * FROM applications WHERE id = ? AND user_id = ?").get(req.params.id, user.id);
+    if (!row) {
+      res.status(404).json({ error: "Application not found." });
+      return null;
+    }
+    return { user, row };
+  }
+
+  app.get("/api/extension/applications/:id/apply-kit", (req, res) => {
+    const ctxApp = extensionApplication(req, res);
+    if (!ctxApp) return;
+    const { user, row } = ctxApp;
+    const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(row.job_id);
+    const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
+    const version = row.version_id
+      ? db.prepare("SELECT * FROM resume_versions WHERE id = ? AND user_id = ?").get(row.version_id, user.id)
+      : null;
+    const kit = buildApplyKit({
+      user,
+      profile,
+      job,
+      application: { ...row, questions: parse(row.questions, []) },
+      version,
+      preferences: profile ? parse(profile.preferences, {}) : {},
+    });
+    recordApplyKitEvent(user.id, row.id, "opened", "extension");
+    res.json({ kit, metrics: applyKitMetrics({ userId: user.id, applicationId: row.id }) });
+  });
+
+  app.post("/api/extension/applications/:id/apply-kit/event", (req, res) => {
+    const ctxApp = extensionApplication(req, res);
+    if (!ctxApp) return;
+    const { user, row } = ctxApp;
+    try {
+      const recorded = recordApplyKitEvent(user.id, row.id, req.body.event, req.body.detail);
+      res.json({ ok: true, event: recorded, metrics: applyKitMetrics({ userId: user.id, applicationId: row.id }) });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Could not record event." });
+    }
+  });
+
+  app.post("/api/extension/applications/:id/mark-applied", (req, res) => {
+    const ctxApp = extensionApplication(req, res);
+    if (!ctxApp) return;
+    const { user, row } = ctxApp;
+    if (!["Ready", "Review required", "Resume preparing"].includes(row.status)) {
+      res.status(400).json({ error: "Only prepared applications can be marked Applied from the extension." });
+      return;
+    }
+    if (!row.version_id) {
+      res.status(400).json({ error: "Pin a tailored resume version before marking Applied." });
+      return;
+    }
+    const delivery = "You applied on the employer site with the JobPilot extension autofill assist.";
+    db.prepare("UPDATE applications SET status = 'Applied', delivery = ?, updated_at = ? WHERE id = ?").run(delivery, Date.now(), row.id);
+    recordApplyKitEvent(user.id, row.id, "completed", "extension");
+    const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(row.job_id);
+    ensureFollowUpReminder({
+      userId: user.id,
+      applicationId: row.id,
+      status: "Applied",
+      company: row.target_company || job?.primary_company || job?.company || "",
+      title: job?.title || "",
+    });
+    res.json({
+      ok: true,
+      status: "Applied",
+      delivery,
+      metrics: applyKitMetrics({ userId: user.id, applicationId: row.id }),
+    });
   });
 }

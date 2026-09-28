@@ -56,8 +56,8 @@ Browser (+ optional extension)
 3. Optional embeddings behind a flag (deterministic gates remain authoritative) — **shipped** (`MATCH_EMBEDDINGS=1`)
 
 ### Slice J — Extension autofill assist
-1. Field detection + user-triggered fill from apply kit
-2. Mark Applied + metrics (no CAPTCHA bypass)
+1. Field detection + user-triggered fill from apply kit — **shipped**
+2. Mark Applied + metrics (no CAPTCHA bypass) — **shipped**
 
 ### Slice K — AI Job Coach
 1. Outcome-grounded Q&A and next actions (not a generic chatbot)

@@ -2,7 +2,7 @@
 
 import { db, id } from "./db.mjs";
 
-export const APPLY_KIT_EVENTS = new Set(["opened", "copied", "completed"]);
+export const APPLY_KIT_EVENTS = new Set(["opened", "copied", "completed", "filled"]);
 
 /**
  * Record an apply-kit funnel event.

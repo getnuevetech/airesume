@@ -8,28 +8,15 @@
         font: 13px/1.4 system-ui, sans-serif;
         margin: 0;
         padding: 12px;
-        width: 320px;
+        width: 340px;
         color: #10233f;
         background: #f7f9fb;
       }
-      h1 {
-        font-size: 15px;
-        margin: 0 0 8px;
-      }
-      label {
-        display: grid;
-        gap: 4px;
-        margin-bottom: 8px;
-      }
-      input,
-      textarea,
-      select,
-      button {
-        font: inherit;
-      }
-      input,
-      textarea,
-      select {
+      h1 { font-size: 15px; margin: 0 0 8px; }
+      h2 { font-size: 13px; margin: 14px 0 8px; }
+      label { display: grid; gap: 4px; margin-bottom: 8px; }
+      input, textarea, button { font: inherit; }
+      input, textarea {
         padding: 6px 8px;
         border: 1px solid #c9d4e2;
         border-radius: 8px;
@@ -42,24 +29,13 @@
         color: #fff;
         cursor: pointer;
       }
-      button.secondary {
-        background: #dfe7f0;
-        color: #10233f;
-      }
-      .row {
-        display: flex;
-        gap: 8px;
-      }
-      .row button {
-        flex: 1;
-      }
-      .status {
-        margin-top: 8px;
-        color: #5b6b7c;
-      }
-      .error {
-        color: #b42318;
-      }
+      button.secondary { background: #dfe7f0; color: #10233f; }
+      button:disabled { opacity: 0.55; cursor: not-allowed; }
+      .row { display: flex; gap: 8px; }
+      .row button { flex: 1; }
+      .status { margin-top: 8px; color: #5b6b7c; }
+      .error { color: #b42318; }
+      .hint { color: #5b6b7c; font-size: 12px; margin: 0 0 8px; }
     </style>
   </head>
   <body>
@@ -86,7 +62,7 @@
     </label>
     <label>
       Description
-      <textarea id="description" rows="5"></textarea>
+      <textarea id="description" rows="4"></textarea>
     </label>
     <div class="row">
       <button id="refresh" class="secondary" type="button">Re-scan page</button>
@@ -95,6 +71,20 @@
     <div class="row" style="margin-top: 8px">
       <button id="prepare" type="button">Assisted Apply</button>
       <button id="save" class="secondary" type="button">Save settings</button>
+    </div>
+
+    <h2>Autofill assist</h2>
+    <p class="hint">Detects fields and fills from your apply kit only when you click. Never bypasses CAPTCHA or login walls. Sensitive fields stay blank.</p>
+    <label>
+      Application id
+      <input id="applicationId" placeholder="Filled after Assisted Apply" />
+    </label>
+    <div class="row">
+      <button id="detect" class="secondary" type="button">Detect fields</button>
+      <button id="fill" type="button">Fill from kit</button>
+    </div>
+    <div class="row" style="margin-top: 8px">
+      <button id="markApplied" class="secondary" type="button">Mark Applied</button>
     </div>
     <p id="status" class="status">Open a job listing, then capture.</p>
     <script src="popup.js"></script>
