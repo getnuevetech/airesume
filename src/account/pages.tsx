@@ -1004,6 +1004,8 @@ function ProfileView({
 export function ResumePage() {
   const { data, reload, setError, setMessage } = useAccount();
   const [selected, setSelected] = useState<string[]>([]);
+  const [clarifyAnswers, setClarifyAnswers] = useState<Record<string, string>>({});
+  const [clarifyBusy, setClarifyBusy] = useState("");
   if (!data) return null;
   return (
     <Gate feature="resume_review">
@@ -1012,7 +1014,10 @@ export function ResumePage() {
           <div>
             <p className="eyebrow">Resume</p>
             <h1>Review and versions</h1>
-            <p className="lede">Feedback stays here. A rewrite you accept becomes a new version. Your public resume does not change until you choose one.</p>
+            <p className="lede">
+              Feedback stays here. Answer clarifications to grow the Fact Ledger, then accept rewrites into a new Upscale version.
+              Your public resume does not change until you choose one.
+            </p>
             {data.reviewQuota && !data.reviewQuota.unlimited ? (
               <p className="role">Resume reviews this week: {data.reviewQuota.used} used, {data.reviewQuota.remaining} left on {data.plan.name}.</p>
             ) : null}
@@ -1025,17 +1030,99 @@ export function ResumePage() {
             {data.review ? (
               <>
                 {data.review.feedback.map((line) => <p key={line}>{line}</p>)}
-                {data.review.recommendations.map((item) => (
-                  <label className="check-row" key={item.id}>
-                    <input type="checkbox" disabled={item.kind !== "rewrite"} checked={selected.includes(item.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} />
-                    <span><strong>{item.title}</strong><br />{item.detail}</span>
-                  </label>
-                ))}
-                <button className="btn btn-primary btn-sm" type="button" disabled={!data.features.resume_upscale || !selected.length} onClick={() => void api("/api/resume/apply", { method: "POST", body: JSON.stringify({ reviewId: data.review?.id, recommendationIds: selected }) }).then(() => { setSelected([]); setMessage("New version saved."); return reload(); }).catch((err: Error) => setError(err.message))}>
+                {data.review.recommendations.map((item) => {
+                  const isClarify = item.kind === "clarify" || (item.kind === "note" && !item.proposed);
+                  if (isClarify) {
+                    return (
+                      <article className="clarify-card" key={item.id}>
+                        <strong>{item.title}</strong>
+                        <p className="role">{item.detail}</p>
+                        {item.answered ? (
+                          <p className="role">Saved to Fact Ledger: {item.answer}</p>
+                        ) : (
+                          <div className="clarify-row">
+                            <input
+                              value={clarifyAnswers[item.id] || ""}
+                              onChange={(event) => setClarifyAnswers((current) => ({ ...current, [item.id]: event.target.value }))}
+                              placeholder={item.clarifyType === "skill" ? "e.g. SQL" : "e.g. raised completion 18%"}
+                            />
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              type="button"
+                              disabled={clarifyBusy === item.id || !(clarifyAnswers[item.id] || "").trim()}
+                              onClick={() => {
+                                setClarifyBusy(item.id);
+                                void api<{ message?: string }>("/api/resume/clarify", {
+                                  method: "POST",
+                                  body: JSON.stringify({
+                                    reviewId: data.review?.id,
+                                    recommendationId: item.id,
+                                    answer: clarifyAnswers[item.id],
+                                  }),
+                                })
+                                  .then((result) => {
+                                    setMessage(result.message || "Saved to Fact Ledger.");
+                                    setClarifyAnswers((current) => {
+                                      const next = { ...current };
+                                      delete next[item.id];
+                                      return next;
+                                    });
+                                    return reload();
+                                  })
+                                  .catch((err: Error) => setError(err.message))
+                                  .finally(() => setClarifyBusy(""));
+                              }}
+                            >
+                              {clarifyBusy === item.id ? "Saving…" : "Save to Fact Ledger"}
+                            </button>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  }
+                  return (
+                    <label className="check-row" key={item.id}>
+                      <input
+                        type="checkbox"
+                        disabled={item.kind !== "rewrite"}
+                        checked={selected.includes(item.id)}
+                        onChange={(event) =>
+                          setSelected((current) =>
+                            event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id),
+                          )
+                        }
+                      />
+                      <span>
+                        <strong>{item.title}</strong>
+                        <br />
+                        {item.detail}
+                      </span>
+                    </label>
+                  );
+                })}
+                <button
+                  className="btn btn-primary btn-sm"
+                  type="button"
+                  disabled={!data.features.resume_upscale || !selected.length}
+                  onClick={() =>
+                    void api("/api/resume/apply", {
+                      method: "POST",
+                      body: JSON.stringify({ reviewId: data.review?.id, recommendationIds: selected }),
+                    })
+                      .then(() => {
+                        setSelected([]);
+                        setMessage("New version saved.");
+                        return reload();
+                      })
+                      .catch((err: Error) => setError(err.message))
+                  }
+                >
                   {data.features.resume_upscale ? "Create version from selected" : "Upscale is not on this plan"}
                 </button>
               </>
-            ) : <p>Run an analysis to see what to improve.</p>}
+            ) : (
+              <p>Run an analysis to see what to improve.</p>
+            )}
           </section>
           <section className="account-card">
             <h2>Versions</h2>
@@ -1043,7 +1130,20 @@ export function ResumePage() {
               <article key={version.id} className="version-mini">
                 <strong>{version.label}</strong>
                 <p className="role">{version.active ? "Public resume" : version.kind}</p>
-                {!version.active ? <button className="text-btn" type="button" onClick={() => void api(`/api/resume/versions/${version.id}/activate`, { method: "POST" }).then(() => { setMessage("Public resume updated."); return reload(); })}>Use this version</button> : null}
+                {!version.active ? (
+                  <button
+                    className="text-btn"
+                    type="button"
+                    onClick={() =>
+                      void api(`/api/resume/versions/${version.id}/activate`, { method: "POST" }).then(() => {
+                        setMessage("Public resume updated.");
+                        return reload();
+                      })
+                    }
+                  >
+                    Use this version
+                  </button>
+                ) : null}
               </article>
             ))}
           </section>

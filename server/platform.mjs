@@ -8,6 +8,7 @@ import { authenticitySignals, normalizeJobListing } from "./job-schema.mjs";
 import { extractJobRequirements } from "./job-requirements.mjs";
 import { computeApplicationReadiness } from "./readiness.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
+import { buildClarificationRecommendations } from "./upscale-clarify.mjs";
 import { TRACKER_STATUSES, startOfUtcDay } from "./apply-rules.mjs";
 import { draftQuestions } from "./questions.mjs";
 import { registerBilling } from "./routes-billing.mjs";
@@ -181,13 +182,11 @@ function diagnose(doc) {
   const blob = renderDocument(doc);
   if (!/\d/.test(blob)) {
     rating -= 8;
-    feedback.push("No measurable figure is on the resume. Add only numbers you can confirm in the profile editor.");
-    recommendations.push({
-      id: "metrics",
-      title: "Add a verified number",
-      detail: "Scope, team size, or a result you can stand behind. Nothing is inserted automatically.",
-      kind: "note",
-    });
+    feedback.push("No measurable figure is on the resume. Add only numbers you can confirm via clarification — Upscale will not invent them.");
+  }
+  const clarifications = buildClarificationRecommendations(doc);
+  for (const item of clarifications.recommendations) {
+    if (!recommendations.some((existing) => existing.id === item.id)) recommendations.push(item);
   }
   rating = Math.max(35, Math.min(96, rating));
   return { rating, feedback, recommendations };
@@ -220,6 +219,12 @@ async function reviewDocument(user, version) {
       feedback: Array.isArray(ai.json.feedback) && ai.json.feedback.length ? ai.json.feedback.map(String) : local.feedback,
       recommendations: recommendations.length ? recommendations : local.recommendations,
     };
+    const clarify = local.recommendations.filter((item) => item.kind === "clarify");
+    for (const item of clarify) {
+      if (!result.recommendations.some((existing) => existing.id === item.id)) {
+        result.recommendations.push(item);
+      }
+    }
   }
   const reviewId = id("rev");
   db.prepare(

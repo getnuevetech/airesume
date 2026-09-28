@@ -1,5 +1,15 @@
 export type Employment = { title: string; employer: string; dates?: string; bullets: string[] };
-export type Recommendation = { id: string; title: string; detail: string; kind: string; proposed?: string };
+export type Recommendation = {
+  id: string;
+  title: string;
+  detail: string;
+  kind: string;
+  proposed?: string;
+  path?: string;
+  clarifyType?: string;
+  answered?: boolean;
+  answer?: string;
+};
 export type ApplicationQuestion = {
   id: string;
   prompt: string;

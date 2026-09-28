@@ -1361,6 +1361,25 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
 .room-transcript { display: grid; gap: 12px; max-height: 420px; overflow: auto; padding-right: 4px; }
 .room-turn { padding: 10px 0; border-top: 1px solid #f0f3f6; }
 .room-turn:first-child { border-top: 0; padding-top: 0; }
+.clarify-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 0;
+  border-bottom: 1px solid #eef2f6;
+}
+.clarify-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.clarify-row input {
+  width: 100%;
+  border: 1px solid #d5dde6;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
 .version-mini { padding: 10px 0; border-top: 1px solid #f0f3f6; }
 .template-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .template-card { text-align: left; background: #fff; border: 1px solid #e6edf3; border-radius: 16px; padding: 12px; display: grid; gap: 6px; }

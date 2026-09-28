@@ -74,9 +74,14 @@ Browser (+ optional extension)
 1. Add Employer viewed, Recruiter contact, and Hired to the application tracker — **shipped**
 2. Wire follow-up reminders, career insights, interview/voice prep eligibility — **shipped**
 
-### Done (Slices A–N) — do not reopen unless regressing
+### Slice O — Upscale clarification → Fact Ledger
+1. Diagnostic clarifications for missing metrics/skills — **shipped**
+2. `POST /api/resume/clarify` stores verified ledger facts and unlocks Upscale claims checks — **shipped**
+3. Resume UI answer → Save to Fact Ledger loop — **shipped**
 
-Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply quality loop, outcomes/interview/follow-ups, extension capture MVP, Auto-Apply auth, TURN env, security headers/rate limits, hide model names, launch readiness panel, richer tracker outcomes.
+### Done (Slices A–O) — do not reopen unless regressing
+
+Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply quality loop, outcomes/interview/follow-ups, extension capture MVP, Auto-Apply auth, TURN env, security headers/rate limits, hide model names, launch readiness panel, richer tracker outcomes, Upscale clarification → Fact Ledger loop.
 
 ### Deferred unless explicitly requested
 
@@ -86,7 +91,6 @@ Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply
 - Employer feature expansion
 - Salary negotiation / recruiter outreach agents
 - SFU media stack
-- Upscale clarification → Fact Ledger closed loop
 - Producer/reviewer disagreement reconciliation
 
 ## Pricing gates (implemented in admin plan matrix)
