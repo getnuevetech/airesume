@@ -1,7 +1,7 @@
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -130,6 +130,40 @@ export function migrate() {
       updated_at INTEGER NOT NULL,
       started_at INTEGER,
       completed_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS employer_postings (
+      id TEXT PRIMARY KEY,
+      employer_user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      company TEXT NOT NULL,
+      location TEXT DEFAULT '',
+      remote_type TEXT DEFAULT '',
+      employment_type TEXT DEFAULT 'full-time',
+      salary_min INTEGER,
+      salary_max INTEGER,
+      description TEXT DEFAULT '',
+      skills TEXT DEFAULT '[]',
+      requirements TEXT DEFAULT '{}',
+      category TEXT DEFAULT '',
+      role TEXT DEFAULT '',
+      apply_url TEXT DEFAULT '',
+      status TEXT NOT NULL,
+      job_id TEXT DEFAULT '',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS employer_invites (
+      id TEXT PRIMARY KEY,
+      employer_user_id TEXT NOT NULL,
+      posting_id TEXT NOT NULL,
+      candidate_user_id TEXT NOT NULL,
+      pipeline_id TEXT DEFAULT '',
+      message TEXT DEFAULT '',
+      status TEXT NOT NULL,
+      overlap TEXT DEFAULT '{}',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(posting_id, candidate_user_id)
     );
     CREATE TABLE IF NOT EXISTS ai_providers (
       id TEXT PRIMARY KEY,

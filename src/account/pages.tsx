@@ -70,6 +70,7 @@ export function OverviewPage() {
           <Link className="quiet-row" to="/account/resume"><strong>Review your resume</strong><span>Rating and recommendations</span></Link>
           <Link className="quiet-row" to="/account/insights"><strong>Career insights</strong><span>Skill demand, gaps, and focus areas</span></Link>
           <Link className="quiet-row" to="/account/interview"><strong>Interview prep</strong><span>STAR drafts and voice practice from resume facts</span></Link>
+          <Link className="quiet-row" to="/account/invites"><strong>Employer invites</strong><span>Respond to roles employers send you</span></Link>
           <Link className="quiet-row" to="/account/templates"><strong>Choose a template</strong><span>{data.templateLimit} design{data.templateLimit === 1 ? "" : "s"} on this plan</span></Link>
           <Link className="quiet-row" to="/account/profile"><strong>Update your profile</strong><span>Contact, experience, and photo</span></Link>
         </section>
@@ -969,6 +970,108 @@ export function TemplatesPage() {
         <div className="template-preview">
           <ResumeSheet resume={preview} />
         </div>
+      </div>
+    </Gate>
+  );
+}
+
+export function InvitesPage() {
+  const { setError, setMessage, reload } = useAccount();
+  const [invites, setInvites] = useState<{
+    id: string;
+    status: string;
+    message: string;
+    overlap: { score: number; matched: string[]; missing: string[] };
+    posting: {
+      id: string;
+      title: string;
+      company: string;
+      location: string;
+      description: string;
+      skills: string[];
+      jobId: string;
+      applyUrl: string;
+    } | null;
+  }[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  async function load() {
+    const data = await api<{ invites: typeof invites }>("/api/invites");
+    setInvites(data.invites);
+    setLoaded(true);
+  }
+
+  useEffect(() => {
+    void load().catch((err: Error) => setError(err.message));
+  }, [setError]);
+
+  async function respond(inviteId: string, status: "viewed" | "accepted" | "declined") {
+    try {
+      const data = await api<{ invite: (typeof invites)[number]; applicationId?: string }>(`/api/invites/${inviteId}/respond`, {
+        method: "POST",
+        body: JSON.stringify({ status }),
+      });
+      setInvites((current) => current.map((item) => (item.id === inviteId ? { ...item, ...data.invite } : item)));
+      if (status === "accepted") {
+        setMessage(data.applicationId ? "Invite accepted and added to your tracker." : "Invite accepted.");
+        await reload();
+      } else if (status === "declined") {
+        setMessage("Invite declined.");
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update invite.");
+    }
+  }
+
+  return (
+    <Gate feature="job_browse">
+      <div className="account-page">
+        <header className="account-head">
+          <div>
+            <p className="eyebrow">Inbound</p>
+            <h1>Employer invites</h1>
+            <p className="lede">Employers who found your public profile can invite you to open roles. Accepting adds the role to your tracker.</p>
+          </div>
+        </header>
+        {!loaded ? <p className="lede">Loading invites…</p> : null}
+        {loaded && !invites.length ? (
+          <section className="account-card">
+            <h2>No invites yet</h2>
+            <p className="lede">Keep a public resume link on if you want employers to reach you.</p>
+            <Link className="btn btn-primary btn-sm" to="/account/settings">Open settings</Link>
+          </section>
+        ) : null}
+        {invites.map((invite) => (
+          <article className="account-card" key={invite.id}>
+            <h2>{invite.posting?.title || "Role"}</h2>
+            <p className="role">
+              {invite.posting?.company || "Employer"}
+              {invite.posting?.location ? ` · ${invite.posting.location}` : ""}
+              {` · ${invite.status}`}
+              {invite.overlap?.score != null ? ` · ${invite.overlap.score}% skill overlap` : ""}
+            </p>
+            {invite.message ? <p>{invite.message}</p> : null}
+            {(invite.overlap?.matched || []).length ? (
+              <p className="role">Matched: {invite.overlap.matched.join(", ")}</p>
+            ) : null}
+            {(invite.overlap?.missing || []).length ? (
+              <p className="role">Gaps called out honestly: {invite.overlap.missing.join(", ")}</p>
+            ) : null}
+            <div className="job-actions" style={{ justifyContent: "flex-start" }}>
+              {invite.status === "pending" ? (
+                <button className="btn btn-ghost btn-sm" type="button" onClick={() => void respond(invite.id, "viewed")}>Mark viewed</button>
+              ) : null}
+              {["pending", "viewed"].includes(invite.status) ? (
+                <>
+                  <button className="btn btn-primary btn-sm" type="button" onClick={() => void respond(invite.id, "accepted")}>Accept</button>
+                  <button className="btn btn-ghost btn-sm" type="button" onClick={() => void respond(invite.id, "declined")}>Decline</button>
+                </>
+              ) : null}
+              {invite.posting?.jobId ? <Link className="btn btn-ghost btn-sm" to="/account/jobs">Browse jobs</Link> : null}
+            </div>
+          </article>
+        ))}
       </div>
     </Gate>
   );
