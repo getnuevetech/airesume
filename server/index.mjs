@@ -19,6 +19,7 @@ import { registerPlatform, syncProfileVersion } from "./platform.mjs";
 import { deliverMail, publicMailSettings, saveMailSettings } from "./mail.mjs";
 import { auditCostSummary, moneyFromMicros } from "./ai-cost.mjs";
 import { registerEmployer } from "./routes-employer.mjs";
+import { registerEmployerVoice } from "./routes-employer-voice.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const homepageFile = join(here, "..", "shared", "homepage.json");
@@ -734,6 +735,7 @@ app.post("/api/account/password", (req, res) => {
 });
 
 registerEmployer(app, { requireUser, setSession });
+registerEmployerVoice(app, { requireUser });
 registerPlatform(app, { requireUser, requireAdmin, audit, upload, originOf });
 
 app.use("/uploads", express.static(uploadsDir));

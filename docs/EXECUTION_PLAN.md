@@ -26,6 +26,7 @@ Already live beyond early Phase 1:
 - Voice practice: speak or type answers to prep prompts with fact-safe coaching
 - Employer accounts with public-candidate search
 - Employer hiring pipeline: save public candidates and move Saved → Hired/Passed
+- Live employer voice interviews with join codes and fact-safe answer scoring
 - Billing, resume, applications, jobs-admin, dashboard, profile, admin AI, and admin plans routes extracted from `platform.mjs`
 - Plans, Stripe/PayPal/manual billing hooks, AI provider admin, public `/resume/:slug`
 
@@ -62,11 +63,12 @@ Browser
 12. Employer accounts + public candidate search
 13. Voice practice sessions with fact-safe answer coaching
 14. Employer hiring pipeline (shortlist stages + notes)
+15. Live employer-led voice interviews with join codes
 
 ### Later
 
-- Live employer-led voice interviews
 - Employer job postings and outbound invites
+- Richer multi-party interview rooms
 
 ## Pricing gates (implemented in admin plan matrix)
 

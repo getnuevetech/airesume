@@ -22,6 +22,13 @@ import {
   sortPipeline,
   summarizePipeline,
 } from "./employer-pipeline.mjs";
+import {
+  buildEmployerVoiceQuestions,
+  canAdvanceSession,
+  makeJoinCode,
+  publicCandidateFacts,
+  scoreLiveAnswer,
+} from "./employer-voice.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -417,6 +424,38 @@ test("employer pipeline normalizes stages and summarizes active hires", () => {
   assert.ok(ordered.slice(0, 2).every((row) => !["Hired", "Passed"].includes(row.status)));
 });
 
+test("employer live voice builds questions and scores against public facts", () => {
+  assert.equal(makeJoinCode().length, 6);
+  const questions = buildEmployerVoiceQuestions({
+    roleTitle: "Product Manager",
+    candidate: { headline: "PM", skills: ["SQL", "Product management"] },
+    custom: ["How do you partner with design?"],
+  });
+  assert.ok(questions.some((item) => /Product Manager/.test(item.prompt)));
+  assert.ok(questions.some((item) => item.id.startsWith("custom")));
+  assert.equal(canAdvanceSession("scheduled", "live"), true);
+  assert.equal(canAdvanceSession("complete", "live"), false);
+  const facts = publicCandidateFacts({
+    skills: JSON.stringify(["SQL"]),
+    summary: "Grew activation 12%",
+    employment: JSON.stringify([{ title: "PM", employer: "Acme", bullets: ["Owned activation with SQL"] }]),
+  });
+  assert.ok(facts.employers.includes("Acme"));
+  const feedback = scoreLiveAnswer({
+    question: questions.find((item) => item.id === "challenge"),
+    answer: "At Acme as a PM I owned activation with SQL.",
+    facts,
+  });
+  assert.ok(feedback.score >= 45);
+  assert.ok(feedback.usedEmployers.includes("Acme"));
+  const invented = scoreLiveAnswer({
+    question: questions[0],
+    answer: "I grew revenue 900% overnight.",
+    facts,
+  });
+  assert.ok(invented.unverifiedNumbers.length >= 1);
+});
+
 test("fresh data dir migrates and seeds schema version", () => {
   const dir = mkdtempSync(join(tmpdir(), "jobpilot-test-"));
   const script = `
@@ -445,6 +484,7 @@ test("fresh data dir migrates and seeds schema version", () => {
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_profiles'").get()) process.exit(11);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='voice_practice_sessions'").get()) process.exit(12);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_pipeline'").get()) process.exit(13);
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_voice_sessions'").get()) process.exit(14);
   `;
   try {
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {

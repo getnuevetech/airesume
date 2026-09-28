@@ -48,6 +48,11 @@ const features = [
     text: "Save public candidates, tag a role, add notes, and move them through Saved → Interviewing → Offer → Hired.",
   },
   {
+    icon: <Sparkle />,
+    title: "Live employer interviews",
+    text: "Share a join code, capture spoken or typed answers, and score them only against the candidate’s public resume facts.",
+  },
+  {
     icon: <Shield />,
     title: "Private by design",
     text: "Your file is read in this browser. It is not uploaded to a server.",

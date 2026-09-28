@@ -7,7 +7,7 @@ import { BlogPage, BlogPostPage } from "./pages/Blog";
 import { ContactPage } from "./pages/Contact";
 import { AccountShell } from "./account/Shell";
 import { ApplicationsPage, InsightsPage, InterviewPage, JobsPage, OverviewPage, PlanPage, ProfilePage, ResumePage, SettingsPage, TemplatesPage } from "./account/pages";
-import { EmployerCandidatesPage, EmployerCompanyPage, EmployerLandingPage, EmployerPipelinePage, EmployerShell } from "./employer/pages";
+import { EmployerCandidatesPage, EmployerCompanyPage, EmployerInterviewsPage, EmployerLandingPage, EmployerPipelinePage, EmployerShell, EmployerVoiceSessionPage, VoiceJoinPage } from "./employer/pages";
 import { DashboardPage } from "./pages/Dashboard";
 import { FeaturesPage } from "./pages/Features";
 import { ForgotPasswordPage } from "./pages/ForgotPassword";
@@ -29,6 +29,7 @@ export default function App() {
         <Routes>
           <Route path="admin" element={<AdminPage />} />
           <Route path="resume/:slug" element={<PublicResumePage />} />
+          <Route path="voice/:code" element={<VoiceJoinPage />} />
           <Route path="account" element={<AccountShell />}>
             <Route index element={<OverviewPage />} />
             <Route path="profile" element={<ProfilePage />} />
@@ -44,6 +45,8 @@ export default function App() {
           <Route path="employer" element={<EmployerShell />}>
             <Route index element={<EmployerCandidatesPage />} />
             <Route path="pipeline" element={<EmployerPipelinePage />} />
+            <Route path="interviews" element={<EmployerInterviewsPage />} />
+            <Route path="interviews/:id" element={<EmployerVoiceSessionPage />} />
             <Route path="company" element={<EmployerCompanyPage />} />
           </Route>
           <Route element={<Layout />}>
