@@ -58,6 +58,11 @@ const features = [
     text: "Employers publish open roles to the catalog and invite public candidates. Accepting an invite adds the role to your tracker.",
   },
   {
+    icon: <Sparkle />,
+    title: "Interview rooms",
+    text: "Host, interviewer, and candidate join the same room with a shared transcript. Candidate answers are scored only against public resume facts.",
+  },
+  {
     icon: <Shield />,
     title: "Private by design",
     text: "Your file is read in this browser. It is not uploaded to a server.",
