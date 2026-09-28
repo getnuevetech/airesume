@@ -68,6 +68,11 @@ const features = [
     text: "Track funnel health, invite and hire rates, and SLA breaches for review, invites, and interviews.",
   },
   {
+    icon: <Sparkle />,
+    title: "Live room audio",
+    text: "Join WebRTC audio inside interview rooms. Hosts, interviewers, and candidates can talk while the shared transcript stays fact-safe.",
+  },
+  {
     icon: <Shield />,
     title: "Private by design",
     text: "Your file is read in this browser. It is not uploaded to a server.",

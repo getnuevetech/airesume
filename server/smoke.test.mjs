@@ -51,6 +51,13 @@ import {
   findSlaBreaches,
   normalizeSlaSettings,
 } from "./employer-analytics.mjs";
+import {
+  buildSignal,
+  filterSignalsForPeer,
+  pruneSignals,
+  shouldCreateOffer,
+  upsertAudioParticipant,
+} from "./webrtc-signaling.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -572,6 +579,65 @@ test("employer analytics funnel and SLA breaches use live hiring data", () => {
   assert.ok(tips.some((item) => item.id === "schedule-interviews" || item.id === "clear-invites"));
 });
 
+test("webrtc signaling filters peer messages and chooses offerer", () => {
+  assert.equal(shouldCreateOffer("candidate", "host"), true);
+  assert.equal(shouldCreateOffer("host", "candidate"), false);
+  const made = buildSignal({
+    id: "sig1",
+    roomId: "room1",
+    fromParticipantId: "host",
+    toParticipantId: "candidate",
+    type: "offer",
+    payload: { sdp: { type: "offer", sdp: "v=0" } },
+    createdAt: 100,
+  });
+  assert.equal(made?.type, "offer");
+  const filtered = filterSignalsForPeer(
+    [
+      made,
+      buildSignal({
+        id: "sig2",
+        roomId: "room1",
+        fromParticipantId: "candidate",
+        toParticipantId: "host",
+        type: "answer",
+        payload: {},
+        createdAt: 120,
+      }),
+      buildSignal({
+        id: "sig3",
+        roomId: "room1",
+        fromParticipantId: "host",
+        toParticipantId: "candidate",
+        type: "ice",
+        payload: { candidate: { candidate: "a" } },
+        createdAt: 140,
+      }),
+    ],
+    "candidate",
+    { since: 90 },
+  );
+  assert.equal(filtered.length, 2);
+  assert.equal(filtered[0].type, "offer");
+  const pruned = pruneSignals(
+    [
+      { id: "old", createdAt: Date.now() - 10 * 60 * 1000 },
+      { id: "new", createdAt: Date.now() },
+    ],
+    { maxAgeMs: 60 * 1000, now: Date.now() },
+  );
+  assert.equal(pruned.length, 1);
+  assert.equal(pruned[0].id, "new");
+  const people = upsertAudioParticipant(
+    [{ id: "host", present: false, lastSeenAt: null, audioConnected: false, audioMuted: false }],
+    "host",
+    { audioConnected: true, audioMuted: true },
+    Date.now(),
+  );
+  assert.equal(people[0].audioConnected, true);
+  assert.equal(people[0].audioMuted, true);
+});
+
 test("fresh data dir migrates and seeds schema version", () => {
   const dir = mkdtempSync(join(tmpdir(), "jobpilot-test-"));
   const script = `
@@ -605,6 +671,7 @@ test("fresh data dir migrates and seeds schema version", () => {
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_invites'").get()) process.exit(16);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='interview_rooms'").get()) process.exit(17);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_sla_settings'").get()) process.exit(18);
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='interview_room_signals'").get()) process.exit(19);
   `;
   try {
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {

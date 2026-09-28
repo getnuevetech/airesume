@@ -14,6 +14,14 @@ import {
   scoreRoomCandidateAnswer,
   summarizeRoom,
 } from "./interview-rooms.mjs";
+import {
+  DEFAULT_ICE_SERVERS,
+  buildSignal,
+  filterSignalsForPeer,
+  normalizeSignalType,
+  pruneSignals,
+  upsertAudioParticipant,
+} from "./webrtc-signaling.mjs";
 
 function parse(value, fallback) {
   if (value == null || value === "") return fallback;
@@ -483,6 +491,206 @@ export function registerInterviewRooms(app, ctx) {
     res.json({
       room: roomForAccess(updated, access),
       you: { role: access.role, participantId: access.participantId },
+    });
+  });
+
+  function findRoomByCode(code) {
+    const normalized = String(code || "").trim().toUpperCase();
+    return db
+      .prepare(
+        "SELECT * FROM interview_rooms WHERE join_code = ? OR host_code = ? OR interviewer_code = ?",
+      )
+      .get(normalized, normalized, normalized);
+  }
+
+  app.get("/api/room/:code/rtc", (req, res) => {
+    const code = String(req.params.code || "").trim().toUpperCase();
+    const row = findRoomByCode(code);
+    if (!row) {
+      res.status(404).json({ error: "Room not found." });
+      return;
+    }
+    const access = resolveAccess(row, { code, roleHint: req.query.role });
+    if (!access) {
+      res.status(403).json({ error: "Invalid room code." });
+      return;
+    }
+    res.json({
+      iceServers: DEFAULT_ICE_SERVERS,
+      you: { role: access.role, participantId: access.participantId },
+      participants: parse(row.participants, []),
+    });
+  });
+
+  app.post("/api/room/:code/audio", (req, res) => {
+    const code = String(req.params.code || "").trim().toUpperCase();
+    const row = findRoomByCode(code);
+    if (!row) {
+      res.status(404).json({ error: "Room not found." });
+      return;
+    }
+    if (normalizeRoomStatus(row.status) === "ended") {
+      res.status(400).json({ error: "This room has ended." });
+      return;
+    }
+    const access = resolveAccess(row, { code, roleHint: req.body.role });
+    if (!access) {
+      res.status(403).json({ error: "Invalid room code." });
+      return;
+    }
+    const now = Date.now();
+    const participants = upsertAudioParticipant(parse(row.participants, []), access.participantId, {
+      audioConnected: req.body.audioConnected,
+      audioMuted: req.body.audioMuted,
+    }, now);
+    db.prepare("UPDATE interview_rooms SET participants = ?, updated_at = ? WHERE id = ?").run(
+      JSON.stringify(participants),
+      now,
+      row.id,
+    );
+    if (req.body.audioConnected === false) {
+      const hangups = parse(row.participants, [])
+        .filter((person) => person.id !== access.participantId)
+        .map((person) =>
+          buildSignal({
+            id: id("sig"),
+            roomId: row.id,
+            fromParticipantId: access.participantId,
+            toParticipantId: person.id,
+            type: "hangup",
+            payload: {},
+            createdAt: now,
+          }),
+        )
+        .filter(Boolean);
+      const insert = db.prepare(
+        `INSERT INTO interview_room_signals (id, room_id, from_participant_id, to_participant_id, type, payload, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const signal of hangups) {
+        insert.run(
+          signal.id,
+          signal.roomId,
+          signal.fromParticipantId,
+          signal.toParticipantId,
+          signal.type,
+          JSON.stringify(signal.payload),
+          signal.createdAt,
+        );
+      }
+    }
+    const updated = db.prepare("SELECT * FROM interview_rooms WHERE id = ?").get(row.id);
+    res.json({
+      room: roomForAccess(updated, access),
+      you: { role: access.role, participantId: access.participantId },
+      iceServers: DEFAULT_ICE_SERVERS,
+    });
+  });
+
+  app.post("/api/room/:code/signals", (req, res) => {
+    const code = String(req.params.code || "").trim().toUpperCase();
+    const row = findRoomByCode(code);
+    if (!row) {
+      res.status(404).json({ error: "Room not found." });
+      return;
+    }
+    if (normalizeRoomStatus(row.status) === "ended") {
+      res.status(400).json({ error: "This room has ended." });
+      return;
+    }
+    const access = resolveAccess(row, { code, roleHint: req.body.role });
+    if (!access) {
+      res.status(403).json({ error: "Invalid room code." });
+      return;
+    }
+    const type = normalizeSignalType(req.body.type);
+    if (!type) {
+      res.status(400).json({ error: "Signal type must be offer, answer, ice, or hangup." });
+      return;
+    }
+    const toParticipantId = String(req.body.toParticipantId || "").trim();
+    if (!toParticipantId || toParticipantId === access.participantId) {
+      res.status(400).json({ error: "A different toParticipantId is required." });
+      return;
+    }
+    const signal = buildSignal({
+      id: id("sig"),
+      roomId: row.id,
+      fromParticipantId: access.participantId,
+      toParticipantId,
+      type,
+      payload: req.body.payload || {},
+      createdAt: Date.now(),
+    });
+    if (!signal) {
+      res.status(400).json({ error: "Invalid signal." });
+      return;
+    }
+    db.prepare(
+      `INSERT INTO interview_room_signals (id, room_id, from_participant_id, to_participant_id, type, payload, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      signal.id,
+      signal.roomId,
+      signal.fromParticipantId,
+      signal.toParticipantId,
+      signal.type,
+      JSON.stringify(signal.payload),
+      signal.createdAt,
+    );
+    // prune old signals for this room
+    const existing = db
+      .prepare("SELECT * FROM interview_room_signals WHERE room_id = ? ORDER BY created_at")
+      .all(row.id)
+      .map((item) => ({
+        id: item.id,
+        roomId: item.room_id,
+        fromParticipantId: item.from_participant_id,
+        toParticipantId: item.to_participant_id,
+        type: item.type,
+        payload: parse(item.payload, {}),
+        createdAt: item.created_at,
+      }));
+    const keep = new Set(pruneSignals(existing).map((item) => item.id));
+    for (const item of existing) {
+      if (!keep.has(item.id)) {
+        db.prepare("DELETE FROM interview_room_signals WHERE id = ?").run(item.id);
+      }
+    }
+    res.json({ signal });
+  });
+
+  app.get("/api/room/:code/signals", (req, res) => {
+    const code = String(req.params.code || "").trim().toUpperCase();
+    const row = findRoomByCode(code);
+    if (!row) {
+      res.status(404).json({ error: "Room not found." });
+      return;
+    }
+    const access = resolveAccess(row, { code, roleHint: req.query.role });
+    if (!access) {
+      res.status(403).json({ error: "Invalid room code." });
+      return;
+    }
+    const since = Number(req.query.since) || 0;
+    const rows = db
+      .prepare("SELECT * FROM interview_room_signals WHERE room_id = ? ORDER BY created_at")
+      .all(row.id)
+      .map((item) => ({
+        id: item.id,
+        roomId: item.room_id,
+        fromParticipantId: item.from_participant_id,
+        toParticipantId: item.to_participant_id,
+        type: item.type,
+        payload: parse(item.payload, {}),
+        createdAt: item.created_at,
+      }));
+    const signals = filterSignalsForPeer(rows, access.participantId, { since, limit: 100 });
+    res.json({
+      signals,
+      iceServers: DEFAULT_ICE_SERVERS,
+      participants: parse(row.participants, []),
+      cursor: signals.length ? signals[signals.length - 1].createdAt : since,
     });
   });
 }

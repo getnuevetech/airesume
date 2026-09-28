@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useRoomAudio } from "../hooks/useRoomAudio";
 
 type RoomParticipant = {
   id: string;
@@ -8,6 +9,8 @@ type RoomParticipant = {
   displayName: string;
   present: boolean;
   lastSeenAt: number | null;
+  audioConnected?: boolean;
+  audioMuted?: boolean;
 };
 
 type RoomTurn = {
@@ -76,6 +79,12 @@ export function InterviewRoomPage() {
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const audio = useRoomAudio({
+    code,
+    role: you?.role || search.get("role") || "",
+    participantId: you?.participantId || "",
+    enabled: Boolean(you) && room?.status !== "ended",
+  });
 
   const activePrompt = useMemo(
     () => room?.agenda.find((item) => item.id === room.currentPromptId) || room?.agenda[0] || null,
@@ -253,7 +262,9 @@ export function InterviewRoomPage() {
         <div className="chips">
           {room.participants.map((person) => (
             <span className={`chip ${person.present ? "on" : ""}`} key={person.id}>
-              {person.displayName} · {person.role}{person.present ? " · here" : ""}
+              {person.displayName} · {person.role}
+              {person.present ? " · here" : ""}
+              {person.audioConnected ? (person.audioMuted ? " · muted" : " · audio") : ""}
             </span>
           ))}
         </div>
@@ -262,6 +273,32 @@ export function InterviewRoomPage() {
             <span>Your display name</span>
             <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Alex, hiring manager" />
           </label>
+        ) : null}
+      </section>
+      <section className="account-card">
+        <h2>Live audio</h2>
+        <p className="lede">Browser WebRTC audio with STUN. Join from each seat to talk; transcript and fact-safe scoring still work beside it.</p>
+        {audio.error ? <p className="form-error">{audio.error}</p> : null}
+        <div className="job-actions" style={{ justifyContent: "flex-start" }}>
+          {!audio.joined ? (
+            <button className="btn btn-primary btn-sm" type="button" disabled={room.status === "ended"} onClick={() => void audio.join()}>
+              Join audio
+            </button>
+          ) : (
+            <>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => void audio.toggleMute()}>
+                {audio.muted ? "Unmute" : "Mute"}
+              </button>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => void audio.leave()}>
+                Leave audio
+              </button>
+            </>
+          )}
+        </div>
+        {audio.joined ? (
+          <p className="role" style={{ marginTop: 10 }}>
+            Connected peers: {audio.peers.length ? audio.peers.map((peer) => peer.displayName || peer.id).join(", ") : "waiting for others to join audio"}
+          </p>
         ) : null}
       </section>
       <section className="account-card">
