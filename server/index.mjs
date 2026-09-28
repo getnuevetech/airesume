@@ -40,6 +40,7 @@ import {
   otpauthUrl,
   verifyTotpCode,
 } from "./admin-mfa.mjs";
+import { computeLaunchReadiness } from "./launch-readiness.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const homepageFile = join(here, "..", "shared", "homepage.json");
@@ -244,6 +245,11 @@ function audit(entry) {
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/api/admin/launch-readiness", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.json(computeLaunchReadiness());
 });
 
 app.get("/api/content/homepage", (_req, res) => {

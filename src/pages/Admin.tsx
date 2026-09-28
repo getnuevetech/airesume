@@ -6,6 +6,7 @@ import { useSiteContent } from "../content/siteContent";
 import type { User } from "../data";
 import { AiAdmin, JobsAdmin, PaymentsAdmin, PlansAdmin } from "./admin/Controls";
 import { HomepageEditor } from "./admin/HomepageEditor";
+import { LaunchReadinessAdmin } from "./admin/LaunchReadinessAdmin";
 
 type Mail = { id: string; to_email: string; subject: string; body: string };
 type Audit = {
@@ -33,7 +34,9 @@ export function AdminPage() {
   const { user, ready, refresh } = useApp();
   const { content } = useSiteContent();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"home" | "users" | "admins" | "employers" | "mail" | "ai" | "plans" | "payments" | "jobs">("home");
+  const [tab, setTab] = useState<
+    "home" | "launch" | "users" | "admins" | "employers" | "mail" | "ai" | "plans" | "payments" | "jobs"
+  >("home");
   const [mfa, setMfa] = useState<{ required: boolean; enrolled: boolean; verified: boolean } | null>(null);
   const [mfaSetup, setMfaSetup] = useState<{ secret: string; otpauthUrl: string } | null>(null);
   const [mfaCode, setMfaCode] = useState("");
@@ -127,6 +130,9 @@ export function AdminPage() {
         <button type="button" className={tab === "home" ? "on" : ""} onClick={() => setTab("home")}>
           Homepage
         </button>
+        <button type="button" className={tab === "launch" ? "on" : ""} onClick={() => setTab("launch")}>
+          Launch
+        </button>
         <button type="button" className={tab === "users" ? "on" : ""} onClick={() => setTab("users")}>
           Users
         </button>
@@ -154,6 +160,7 @@ export function AdminPage() {
       </aside>
       <main className="admin-main">
         {tab === "home" ? <HomepageEditor /> : null}
+        {tab === "launch" ? <LaunchReadinessAdmin /> : null}
         {tab === "users" ? <PeopleEditor roleFilter="user" /> : null}
         {tab === "admins" ? <PeopleEditor roleFilter="admin" /> : null}
         {tab === "employers" ? <PeopleEditor roleFilter="employer" /> : null}

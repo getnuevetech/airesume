@@ -65,13 +65,18 @@ Browser (+ optional extension)
 ### Slice L — Production hardening
 1. Admin MFA, HTTPS/deploy checks, TURN readiness warnings, deletion fan-out, log hygiene — **shipped**
 
-### Done (Slices A–L) — do not reopen unless regressing
+### Slice M — Launch readiness
+1. Consolidated launch checklist (`docs/LAUNCH_CHECKLIST.md`) — **shipped**
+2. Admin → Launch live ops panel (`/api/admin/launch-readiness`) — **shipped**
+3. Production env example + Chrome Web Store packaging notes (deferred listing) — **shipped**
 
-Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply quality loop, outcomes/interview/follow-ups, extension capture MVP, Auto-Apply auth, TURN env, security headers/rate limits, hide model names.
+### Done (Slices A–M) — do not reopen unless regressing
+
+Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply quality loop, outcomes/interview/follow-ups, extension capture MVP, Auto-Apply auth, TURN env, security headers/rate limits, hide model names, launch readiness panel.
 
 ### Deferred unless explicitly requested
 
-- Chrome Web Store packaging
+- Chrome Web Store submission (packaging notes ready in `extension/STORE.md`)
 - Managed TURN hosting
 - Silent Auto Apply submit
 - Employer feature expansion

@@ -24,3 +24,4 @@ Autofill never bypasses CAPTCHA, SSO, or login walls and never auto-submits form
 - The token is shown once; JobPilot stores only a hash.
 - Capture never submits applications for you — it imports the listing and optionally prepares Assisted Apply.
 - Host permissions include `https://*/*` so content scripts can read public career pages. Restrict this for production packaging if you ship a store build.
+- Chrome Web Store listing is deferred until autofill quality is proven — see `STORE.md`.
