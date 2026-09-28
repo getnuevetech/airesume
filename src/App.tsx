@@ -7,7 +7,7 @@ import { BlogPage, BlogPostPage } from "./pages/Blog";
 import { ContactPage } from "./pages/Contact";
 import { AccountShell } from "./account/Shell";
 import { ApplicationsPage, InsightsPage, InterviewPage, JobsPage, OverviewPage, PlanPage, ProfilePage, ResumePage, SettingsPage, TemplatesPage } from "./account/pages";
-import { EmployerCandidatesPage, EmployerCompanyPage, EmployerLandingPage, EmployerShell } from "./employer/pages";
+import { EmployerCandidatesPage, EmployerCompanyPage, EmployerLandingPage, EmployerPipelinePage, EmployerShell } from "./employer/pages";
 import { DashboardPage } from "./pages/Dashboard";
 import { FeaturesPage } from "./pages/Features";
 import { ForgotPasswordPage } from "./pages/ForgotPassword";
@@ -43,6 +43,7 @@ export default function App() {
           </Route>
           <Route path="employer" element={<EmployerShell />}>
             <Route index element={<EmployerCandidatesPage />} />
+            <Route path="pipeline" element={<EmployerPipelinePage />} />
             <Route path="company" element={<EmployerCompanyPage />} />
           </Route>
           <Route element={<Layout />}>

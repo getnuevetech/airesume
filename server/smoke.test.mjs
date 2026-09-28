@@ -16,6 +16,12 @@ import { buildCareerInsights } from "./career-intel.mjs";
 import { buildInterviewPrep } from "./interview-prep.mjs";
 import { buildVoicePractice, scoreVoiceAnswer, summarizeVoiceSession } from "./voice-interview.mjs";
 import { searchCandidates } from "./employer-search.mjs";
+import {
+  canTransition,
+  normalizePipelineStatus,
+  sortPipeline,
+  summarizePipeline,
+} from "./employer-pipeline.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -389,6 +395,28 @@ test("searchCandidates only returns public profiles matching skills", () => {
   assert.equal(searchCandidates(rows, { skill: "React" }).length, 0);
 });
 
+test("employer pipeline normalizes stages and summarizes active hires", () => {
+  assert.equal(normalizePipelineStatus("interviewing"), "Interviewing");
+  assert.equal(canTransition("Saved", "Reviewing"), true);
+  assert.equal(canTransition("Saved", "Hired"), true);
+  assert.equal(canTransition("Hired", "Interviewing"), false);
+  assert.equal(canTransition("Passed", "Reviewing"), true);
+  const rows = [
+    { status: "Saved", updatedAt: 3 },
+    { status: "Interviewing", updatedAt: 2 },
+    { status: "Hired", updatedAt: 9 },
+    { status: "Passed", updatedAt: 8 },
+  ];
+  const summary = summarizePipeline(rows);
+  assert.equal(summary.total, 4);
+  assert.equal(summary.active, 2);
+  assert.equal(summary.counts.Interviewing, 1);
+  const ordered = sortPipeline(rows);
+  assert.equal(ordered[0].status, "Interviewing");
+  assert.ok(["Hired", "Passed"].includes(ordered.at(-1).status));
+  assert.ok(ordered.slice(0, 2).every((row) => !["Hired", "Passed"].includes(row.status)));
+});
+
 test("fresh data dir migrates and seeds schema version", () => {
   const dir = mkdtempSync(join(tmpdir(), "jobpilot-test-"));
   const script = `
@@ -416,6 +444,7 @@ test("fresh data dir migrates and seeds schema version", () => {
     if (!db.prepare("PRAGMA table_info(ai_audit)").all().some((row) => row.name === "cost_micros")) process.exit(10);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_profiles'").get()) process.exit(11);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='voice_practice_sessions'").get()) process.exit(12);
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_pipeline'").get()) process.exit(13);
   `;
   try {
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {

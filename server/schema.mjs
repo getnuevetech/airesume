@@ -1,7 +1,7 @@
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -102,6 +102,17 @@ export function migrate() {
       turns TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS employer_pipeline (
+      id TEXT PRIMARY KEY,
+      employer_user_id TEXT NOT NULL,
+      candidate_user_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      role_title TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(employer_user_id, candidate_user_id)
     );
     CREATE TABLE IF NOT EXISTS ai_providers (
       id TEXT PRIMARY KEY,
