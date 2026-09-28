@@ -162,6 +162,7 @@ export async function extractCareerProfile(text) {
     const reviewed = reviewExtraction(baseline, text);
     reviewed.provider = ai.provider;
     reviewed.model = ai.model;
+    reviewed.costMicros = ai.costMicros || 0;
     if (ai.error) reviewed.warnings = [...(reviewed.warnings || []), "The assigned model was unavailable, so a rules-based extraction was used."];
     return reviewed;
   }
@@ -171,6 +172,7 @@ export async function extractCareerProfile(text) {
     ...parsed,
     provider: ai.provider,
     model: ai.model,
+    costMicros: ai.costMicros || 0,
     prompt: "CAREER_EXTRACTION_V1",
     facts: Array.isArray(parsed.facts) && parsed.facts.length ? parsed.facts : baseline.facts,
     questions: baseline.questions,

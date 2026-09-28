@@ -7,7 +7,26 @@ import type { User } from "../data";
 import { AiAdmin, JobsAdmin, PaymentsAdmin, PlansAdmin } from "./admin/Controls";
 
 type Mail = { id: string; to_email: string; subject: string; body: string };
-type Audit = { id: string; function_name: string; provider: string; model: string; status: string; created_at: number };
+type Audit = {
+  id: string;
+  functionName?: string;
+  function_name?: string;
+  provider: string;
+  model: string;
+  status: string;
+  createdAt?: number;
+  created_at?: number;
+  costLabel?: string;
+  costMicros?: number;
+};
+type CostBucket = {
+  calls: number;
+  costMicros: number;
+  costLabel: string;
+  byFunction: { functionName: string; calls: number; costMicros: number; costLabel: string }[];
+  byProvider: { provider: string; model: string; calls: number; costMicros: number; costLabel: string }[];
+};
+type AuditSummary = { last24Hours: CostBucket; last7Days: CostBucket; last30Days: CostBucket };
 
 export function AdminPage() {
   const { user, ready } = useApp();
@@ -551,6 +570,7 @@ type MailSettings = { host: string; port: number; secure: boolean; user: string;
 function MailEditor() {
   const [messages, setMessages] = useState<Mail[]>([]);
   const [entries, setEntries] = useState<Audit[]>([]);
+  const [summary, setSummary] = useState<AuditSummary | null>(null);
   const [settings, setSettings] = useState<MailSettings>({ host: "", port: 587, secure: false, user: "", fromEmail: "", fromName: "JobPilot", hasPassword: false, configured: false });
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -558,7 +578,10 @@ function MailEditor() {
 
   function load() {
     void api<{ messages: Mail[] }>("/api/admin/outbox").then((data) => setMessages(data.messages));
-    void api<{ entries: Audit[] }>("/api/admin/audit").then((data) => setEntries(data.entries));
+    void api<{ entries: Audit[]; summary: AuditSummary }>("/api/admin/audit").then((data) => {
+      setEntries(data.entries);
+      setSummary(data.summary);
+    });
     void api<{ settings: MailSettings }>("/api/admin/email").then((data) => setSettings(data.settings)).catch((err: Error) => setError(err.message));
   }
 
@@ -622,10 +645,34 @@ function MailEditor() {
           <p>{messageItem.body}</p>
         </article>
       ))}
+      <h2>AI cost summary</h2>
+      <p className="lede">Estimated spend from audited model calls. Built-in rules count as $0. Free plans cap resume reviews at 3/week to keep this in check.</p>
+      {summary ? (
+        <div className="admin-grid">
+          {(
+            [
+              ["Last 24 hours", summary.last24Hours],
+              ["Last 7 days", summary.last7Days],
+              ["Last 30 days", summary.last30Days],
+            ] as [string, CostBucket][]
+          ).map(([label, item]) => (
+              <article className="admin-card" key={label}>
+                <strong>{label}</strong>
+                <p className="role">{item.calls} calls · {item.costLabel}</p>
+                {item.byFunction.slice(0, 4).map((row) => (
+                  <p className="role" key={row.functionName}>
+                    {row.functionName}: {row.calls} · {row.costLabel}
+                  </p>
+                ))}
+              </article>
+          ))}
+        </div>
+      ) : null}
       <h2>AI audit</h2>
       {entries.map((entry) => (
         <p key={entry.id} className="role">
-          {entry.function_name} · {entry.provider}/{entry.model} · {entry.status}
+          {entry.functionName || entry.function_name} · {entry.provider}/{entry.model} · {entry.status}
+          {entry.costLabel ? ` · ${entry.costLabel}` : ""}
         </p>
       ))}
     </div>

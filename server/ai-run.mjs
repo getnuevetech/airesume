@@ -1,4 +1,5 @@
 import { db } from "./db.mjs";
+import { estimateCostMicros } from "./ai-cost.mjs";
 
 const enabledProviderSql = "SELECT 1 AS assignment_enabled, ai_providers.* FROM ai_providers WHERE enabled = 1 ORDER BY kind = 'deterministic' DESC, created_at LIMIT 1";
 
@@ -19,16 +20,30 @@ export async function completeJson(functionKey, system, user) {
   const provider = assignment?.name || "Built-in rules";
   const model = assignment?.model || "rules-v1";
   if (!assignment || !assignment.assignment_enabled || !assignment.enabled || assignment.kind === "deterministic") {
-    return { json: null, provider, model, kind: "deterministic" };
+    return { json: null, provider, model, kind: "deterministic", costMicros: 0 };
   }
   try {
     const text = await callProvider(assignment, system, user);
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     const json = start >= 0 && end > start ? JSON.parse(text.slice(start, end + 1)) : null;
-    return { json, provider, model, kind: assignment.kind };
+    const costMicros = estimateCostMicros({
+      kind: assignment.kind,
+      model,
+      system,
+      user,
+      response: text,
+    });
+    return { json, provider, model, kind: assignment.kind, costMicros };
   } catch (error) {
-    return { json: null, provider, model, kind: assignment.kind, error: error instanceof Error ? error.message : "AI call failed" };
+    return {
+      json: null,
+      provider,
+      model,
+      kind: assignment.kind,
+      costMicros: 0,
+      error: error instanceof Error ? error.message : "AI call failed",
+    };
   }
 }
 

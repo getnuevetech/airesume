@@ -71,6 +71,13 @@ export type AccountData = {
     unlimited: boolean;
     resetsAt: number;
   };
+  reviewQuota?: {
+    limit: number;
+    used: number;
+    remaining: number | null;
+    unlimited: boolean;
+    resetsAt: number;
+  };
   statuses: string[];
   stats: {
     resumeRating: number | null;
