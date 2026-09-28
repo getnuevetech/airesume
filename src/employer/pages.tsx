@@ -89,6 +89,7 @@ export function EmployerShell() {
           <NavLink to="/employer/pipeline" className={({ isActive }) => (isActive ? "on" : "")}>Pipeline</NavLink>
           <NavLink to="/employer/postings" className={({ isActive }) => (isActive ? "on" : "")}>Postings</NavLink>
           <NavLink to="/employer/interviews" className={({ isActive }) => (isActive ? "on" : "")}>Interviews</NavLink>
+          <NavLink to="/employer/rooms" className={({ isActive }) => (isActive ? "on" : "")}>Rooms</NavLink>
           <NavLink to="/employer/company" className={({ isActive }) => (isActive ? "on" : "")}>Company</NavLink>
         </nav>
         <div className="account-user">
@@ -147,7 +148,7 @@ export function EmployerLandingPage() {
       {mode === "intro" ? (
         <section className="account-card">
           <h2>Employer workspace</h2>
-          <p className="lede">Create a company account, post open roles, invite public candidates, and run live voice interviews.</p>
+          <p className="lede">Create a company account, post open roles, invite candidates, and run multi-party interview rooms.</p>
           <div className="job-actions" style={{ justifyContent: "flex-start" }}>
             <button className="btn btn-primary" type="button" onClick={() => setMode("register")}>Create employer account</button>
             <Link className="btn btn-ghost" to="/signin">Sign in</Link>
@@ -281,6 +282,7 @@ export function EmployerPipelinePage() {
   const [message, setMessage] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [startingId, setStartingId] = useState("");
+  const [roomStartingId, setRoomStartingId] = useState("");
   const [postings, setPostings] = useState<{ id: string; title: string; status: string }[]>([]);
   const [inviteFor, setInviteFor] = useState("");
   const [invitePostingId, setInvitePostingId] = useState("");
@@ -350,6 +352,26 @@ export function EmployerPipelinePage() {
       setError(err instanceof Error ? err.message : "Could not start voice interview.");
     } finally {
       setStartingId("");
+    }
+  }
+
+  async function startRoom(entry: PipelineEntry) {
+    setRoomStartingId(entry.id);
+    setError("");
+    try {
+      const data = await api<{ room: { id: string; hostPath: string } }>("/api/employer/rooms", {
+        method: "POST",
+        body: JSON.stringify({
+          pipelineId: entry.id,
+          roleTitle: entry.roleTitle,
+          interviewers: [{ displayName: "Interviewer" }],
+        }),
+      });
+      navigate(`/employer/rooms/${data.room.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open interview room.");
+    } finally {
+      setRoomStartingId("");
     }
   }
 
@@ -486,6 +508,14 @@ export function EmployerPipelinePage() {
                 onClick={() => void sendInvite(entry)}
               >
                 {inviteFor === entry.id ? "Inviting…" : "Invite"}
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                type="button"
+                disabled={roomStartingId === entry.id || ["Hired", "Passed"].includes(entry.status)}
+                onClick={() => void startRoom(entry)}
+              >
+                {roomStartingId === entry.id ? "Opening…" : "Open room"}
               </button>
               <button
                 className="btn btn-ghost btn-sm"
@@ -731,6 +761,187 @@ export function EmployerCompanyPage() {
         <label className="field"><span>About the team</span><textarea rows={4} value={employer.blurb} onChange={(event) => setEmployer({ ...employer, blurb: event.target.value })} /></label>
         <button className="btn btn-primary btn-sm" type="submit">Save</button>
       </form>
+    </div>
+  );
+}
+
+export function EmployerRoomsPage() {
+  const navigate = useNavigate();
+  const [rooms, setRooms] = useState<{
+    id: string;
+    title: string;
+    status: string;
+    joinCode: string;
+    interviewerCode: string;
+    hostPath: string;
+    joinPath: string;
+    interviewerPath: string;
+    summary: { present: number; participantCount: number; candidateAnswers: number };
+    candidate: { name: string } | null;
+  }[]>([]);
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    void api<{ rooms: typeof rooms }>("/api/employer/rooms")
+      .then((data) => {
+        setRooms(data.rooms);
+        setLoaded(true);
+      })
+      .catch((err: Error) => {
+        setError(err.message);
+        setLoaded(true);
+      });
+  }, []);
+
+  return (
+    <div className="account-page">
+      <header className="account-head">
+        <div>
+          <p className="eyebrow">Live rooms</p>
+          <h1>Interview rooms</h1>
+          <p className="lede">Multi-party rooms with host, interviewer, and candidate links. Shared transcript polls live; candidate answers stay fact-safe.</p>
+        </div>
+        <Link className="btn btn-ghost btn-sm" to="/employer/pipeline">Open pipeline</Link>
+      </header>
+      {error ? <p className="form-error">{error}</p> : null}
+      {!loaded ? <p className="lede">Loading rooms…</p> : null}
+      {loaded && !rooms.length ? (
+        <section className="account-card">
+          <h2>No rooms yet</h2>
+          <p className="lede">From the pipeline, choose Open room on a shortlisted candidate.</p>
+        </section>
+      ) : null}
+      {rooms.map((room) => (
+        <article className="account-card" key={room.id}>
+          <div className="job-card" style={{ padding: 0, boxShadow: "none", background: "transparent" }}>
+            <div>
+              <h2>{room.title}</h2>
+              <p className="role">
+                {room.candidate?.name || "Candidate"} · {room.status}
+                {` · ${room.summary.present}/${room.summary.participantCount} present`}
+                {room.summary.candidateAnswers ? ` · ${room.summary.candidateAnswers} answers` : ""}
+              </p>
+              <p className="role">Candidate {room.joinCode} · Interviewer {room.interviewerCode}</p>
+            </div>
+            <div className="job-side">
+              <button className="btn btn-primary btn-sm" type="button" onClick={() => navigate(`/employer/rooms/${room.id}`)}>Manage</button>
+              <Link className="btn btn-ghost btn-sm" to={room.hostPath}>Enter as host</Link>
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+export function EmployerRoomHostPage() {
+  const { id = "" } = useParams();
+  const [room, setRoom] = useState<{
+    id: string;
+    title: string;
+    status: string;
+    joinCode: string;
+    interviewerCode: string;
+    hostCode: string;
+    joinPath: string;
+    interviewerPath: string;
+    hostPath: string;
+    summary: { present: number; participantCount: number; averageScore: number; inventedMetricFlags: number };
+    candidate: { name: string; resumeUrl: string } | null;
+  } | null>(null);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    const data = await api<{ room: NonNullable<typeof room> }>(`/api/employer/rooms/${id}`);
+    setRoom(data.room);
+  }
+
+  useEffect(() => {
+    void load().catch((err: Error) => setError(err.message));
+    const timer = window.setInterval(() => {
+      void load().catch(() => undefined);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [id]);
+
+  async function setStatus(status: "live" | "ended") {
+    setBusy(true);
+    setError("");
+    try {
+      const data = await api<{ room: NonNullable<typeof room> }>(`/api/employer/rooms/${id}/status`, {
+        method: "POST",
+        body: JSON.stringify({ status }),
+      });
+      setRoom(data.room);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update room.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy(label: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value.startsWith("/") ? `${window.location.origin}${value}` : value);
+      setCopied(label);
+      window.setTimeout(() => setCopied((current) => (current === label ? "" : current)), 1600);
+    } catch {
+      setError("Clipboard access was blocked.");
+    }
+  }
+
+  if (!room) {
+    return (
+      <div className="account-page">
+        {error ? <p className="form-error">{error}</p> : <p className="lede">Loading room…</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="account-page">
+      <header className="account-head">
+        <div>
+          <p className="eyebrow">Room</p>
+          <h1>{room.title}</h1>
+          <p className="lede">
+            {room.status}
+            {` · ${room.summary.present}/${room.summary.participantCount} present`}
+            {room.summary.averageScore ? ` · avg ${room.summary.averageScore}` : ""}
+            {room.summary.inventedMetricFlags ? ` · ${room.summary.inventedMetricFlags} invented-metric flag(s)` : ""}
+          </p>
+        </div>
+        <Link className="btn btn-ghost btn-sm" to="/employer/rooms">All rooms</Link>
+      </header>
+      {error ? <p className="form-error">{error}</p> : null}
+      <section className="account-card">
+        <h2>Share links</h2>
+        <div className="apply-kit-row">
+          <div><strong>Candidate</strong><p className="role">{room.joinPath} · code {room.joinCode}</p></div>
+          <button className="text-btn" type="button" onClick={() => void copy("candidate", room.joinPath)}>{copied === "candidate" ? "Copied" : "Copy"}</button>
+        </div>
+        <div className="apply-kit-row">
+          <div><strong>Interviewer</strong><p className="role">{room.interviewerPath} · code {room.interviewerCode}</p></div>
+          <button className="text-btn" type="button" onClick={() => void copy("interviewer", room.interviewerPath)}>{copied === "interviewer" ? "Copied" : "Copy"}</button>
+        </div>
+        <div className="apply-kit-row">
+          <div><strong>Host</strong><p className="role">{room.hostPath}</p></div>
+          <button className="text-btn" type="button" onClick={() => void copy("host", room.hostPath)}>{copied === "host" ? "Copied" : "Copy"}</button>
+        </div>
+        <div className="job-actions" style={{ justifyContent: "flex-start", marginTop: 12 }}>
+          {room.status === "lobby" ? (
+            <button className="btn btn-primary btn-sm" type="button" disabled={busy} onClick={() => void setStatus("live")}>Go live</button>
+          ) : null}
+          {room.status !== "ended" ? (
+            <button className="btn btn-ghost btn-sm" type="button" disabled={busy} onClick={() => void setStatus("ended")}>End room</button>
+          ) : null}
+          <Link className="btn btn-primary btn-sm" to={room.hostPath}>Enter room</Link>
+          {room.candidate?.resumeUrl ? <Link className="btn btn-ghost btn-sm" to={room.candidate.resumeUrl} target="_blank">Resume</Link> : null}
+        </div>
+      </section>
     </div>
   );
 }

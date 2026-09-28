@@ -38,6 +38,13 @@ import {
   summarizePostings,
   validatePosting,
 } from "./employer-postings.mjs";
+import {
+  appendRoomTurn,
+  buildRoomParticipants,
+  canChangeRoomStatus,
+  markPresence,
+  summarizeRoom,
+} from "./interview-rooms.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -488,6 +495,33 @@ test("employer postings validate open roles and score invite overlap", () => {
   assert.equal(summarizeInvites([{ status: "pending" }, { status: "accepted" }]).open, 1);
 });
 
+test("interview rooms track multi-party presence and shared turns", () => {
+  assert.equal(canChangeRoomStatus("lobby", "live"), true);
+  assert.equal(canChangeRoomStatus("ended", "live"), false);
+  const participants = buildRoomParticipants({
+    hostName: "Riley",
+    hostUserId: "e1",
+    candidateName: "Alex",
+    candidateUserId: "c1",
+    interviewers: [{ displayName: "Jordan" }],
+  });
+  assert.equal(participants.length, 3);
+  const present = markPresence(participants, "host", Date.now());
+  assert.equal(present.find((person) => person.id === "host")?.present, true);
+  const turns = appendRoomTurn([], {
+    kind: "answer",
+    speakerRole: "candidate",
+    speakerName: "Alex",
+    text: "At Acme I owned activation with SQL.",
+    feedback: { score: 70, unverifiedNumbers: [] },
+  });
+  assert.equal(turns.length, 1);
+  const summary = summarizeRoom({ turns, participants: present, status: "live" });
+  assert.equal(summary.candidateAnswers, 1);
+  assert.equal(summary.averageScore, 70);
+  assert.equal(summary.present, 1);
+});
+
 test("fresh data dir migrates and seeds schema version", () => {
   const dir = mkdtempSync(join(tmpdir(), "jobpilot-test-"));
   const script = `
@@ -519,6 +553,7 @@ test("fresh data dir migrates and seeds schema version", () => {
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_voice_sessions'").get()) process.exit(14);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_postings'").get()) process.exit(15);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='employer_invites'").get()) process.exit(16);
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='interview_rooms'").get()) process.exit(17);
   `;
   try {
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {

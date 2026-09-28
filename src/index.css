@@ -937,6 +937,9 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
 .voice-practice { display: grid; gap: 14px; margin-top: 8px; }
 .voice-prompt { display: grid; gap: 8px; }
 .voice-feedback { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: #f7f9fb; }
+.room-transcript { display: grid; gap: 12px; max-height: 420px; overflow: auto; padding-right: 4px; }
+.room-turn { padding: 10px 0; border-top: 1px solid #f0f3f6; }
+.room-turn:first-child { border-top: 0; padding-top: 0; }
 .version-mini { padding: 10px 0; border-top: 1px solid #f0f3f6; }
 .template-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .template-card { text-align: left; background: #fff; border: 1px solid #e6edf3; border-radius: 16px; padding: 12px; display: grid; gap: 6px; }

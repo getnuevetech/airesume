@@ -7,7 +7,7 @@ import { BlogPage, BlogPostPage } from "./pages/Blog";
 import { ContactPage } from "./pages/Contact";
 import { AccountShell } from "./account/Shell";
 import { ApplicationsPage, InsightsPage, InterviewPage, InvitesPage, JobsPage, OverviewPage, PlanPage, ProfilePage, ResumePage, SettingsPage, TemplatesPage } from "./account/pages";
-import { EmployerCandidatesPage, EmployerCompanyPage, EmployerInterviewsPage, EmployerLandingPage, EmployerPipelinePage, EmployerPostingsPage, EmployerShell, EmployerVoiceSessionPage, VoiceJoinPage } from "./employer/pages";
+import { EmployerCandidatesPage, EmployerCompanyPage, EmployerInterviewsPage, EmployerLandingPage, EmployerPipelinePage, EmployerPostingsPage, EmployerRoomHostPage, EmployerRoomsPage, EmployerShell, EmployerVoiceSessionPage, VoiceJoinPage } from "./employer/pages";
 import { DashboardPage } from "./pages/Dashboard";
 import { FeaturesPage } from "./pages/Features";
 import { ForgotPasswordPage } from "./pages/ForgotPassword";
@@ -20,6 +20,7 @@ import { PublicResumePage } from "./pages/PublicResume";
 import { ResetPasswordPage } from "./pages/ResetPassword";
 import { SignInPage } from "./pages/SignIn";
 import { StoriesPage } from "./pages/Stories";
+import { InterviewRoomPage } from "./pages/InterviewRoom";
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="admin" element={<AdminPage />} />
           <Route path="resume/:slug" element={<PublicResumePage />} />
           <Route path="voice/:code" element={<VoiceJoinPage />} />
+          <Route path="room/:code" element={<InterviewRoomPage />} />
           <Route path="account" element={<AccountShell />}>
             <Route index element={<OverviewPage />} />
             <Route path="profile" element={<ProfilePage />} />
@@ -49,6 +51,8 @@ export default function App() {
             <Route path="postings" element={<EmployerPostingsPage />} />
             <Route path="interviews" element={<EmployerInterviewsPage />} />
             <Route path="interviews/:id" element={<EmployerVoiceSessionPage />} />
+            <Route path="rooms" element={<EmployerRoomsPage />} />
+            <Route path="rooms/:id" element={<EmployerRoomHostPage />} />
             <Route path="company" element={<EmployerCompanyPage />} />
           </Route>
           <Route element={<Layout />}>
