@@ -68,11 +68,141 @@ export function OverviewPage() {
         <section className="account-card">
           <h2>Continue</h2>
           <Link className="quiet-row" to="/account/resume"><strong>Review your resume</strong><span>Rating and recommendations</span></Link>
+          <Link className="quiet-row" to="/account/insights"><strong>Career insights</strong><span>Skill demand, gaps, and focus areas</span></Link>
           <Link className="quiet-row" to="/account/templates"><strong>Choose a template</strong><span>{data.templateLimit} design{data.templateLimit === 1 ? "" : "s"} on this plan</span></Link>
           <Link className="quiet-row" to="/account/profile"><strong>Update your profile</strong><span>Contact, experience, and photo</span></Link>
         </section>
       </div>
     </div>
+  );
+}
+
+type CareerInsights = {
+  summary: {
+    catalogJobs: number;
+    visibleJobs: number;
+    strongMatches: number;
+    tracked: number;
+    submitted: number;
+    responses: number;
+    responseRate: number | null;
+    skillCount: number;
+  };
+  strengths: { skill: string; demand: number; kind: string }[];
+  gaps: { skill: string; demand: number; kind: string }[];
+  risingPreferred: { skill: string; demand: number; kind: string }[];
+  categoryOutlook: { category: string; jobs: number; avgScore: number; strong: number }[];
+  focus: { id: string; title: string; detail: string }[];
+  topMatches: { id: string; title: string; company: string; score: number; label: string; missing: string[] }[];
+};
+
+export function InsightsPage() {
+  const { setError } = useAccount();
+  const [insights, setInsights] = useState<CareerInsights | null>(null);
+  const [limited, setLimited] = useState(false);
+  const [planName, setPlanName] = useState("");
+
+  useEffect(() => {
+    void api<{ insights: CareerInsights; limited: boolean; plan: { name: string } }>("/api/career/insights")
+      .then((data) => {
+        setInsights(data.insights);
+        setLimited(Boolean(data.limited));
+        setPlanName(data.plan?.name || "");
+      })
+      .catch((err: Error) => setError(err.message));
+  }, [setError]);
+
+  return (
+    <Gate feature="job_browse">
+      <div className="account-page">
+        <header className="account-head">
+          <div>
+            <p className="eyebrow">Career intelligence</p>
+            <h1>Insights</h1>
+            <p className="lede">
+              Demand and gaps are counted from open roles against skills already on your resume. Nothing is invented.
+              {limited ? ` Your ${planName || "current"} plan shows a shorter skill list.` : ""}
+            </p>
+          </div>
+        </header>
+        {!insights ? <p className="lede">Building insights…</p> : (
+          <>
+            <div className="stat-grid">
+              <Tile label="Catalog roles" value={String(insights.summary.catalogJobs)} />
+              <Tile label="Strong matches" value={String(insights.summary.strongMatches)} />
+              <Tile label="Tracked" value={String(insights.summary.tracked)} />
+              <Tile label="Response rate" value={insights.summary.responseRate === null ? "—" : `${insights.summary.responseRate}%`} />
+            </div>
+            <div className="account-split">
+              <section className="account-card">
+                <h2>Focus next</h2>
+                {insights.focus.length ? insights.focus.map((item) => (
+                  <article className="insight-focus" key={item.id}>
+                    <strong>{item.title}</strong>
+                    <p className="role">{item.detail}</p>
+                  </article>
+                )) : <p className="role">Add skills or browse jobs to unlock focus tips.</p>}
+              </section>
+              <section className="account-card">
+                <h2>Category outlook</h2>
+                {insights.categoryOutlook.length ? insights.categoryOutlook.map((row) => (
+                  <div className="quiet-row" key={row.category}>
+                    <div>
+                      <strong>{row.category}</strong>
+                      <p className="role">{row.jobs} roles · {row.strong} strong</p>
+                    </div>
+                    <span className="match-badge">{row.avgScore}%</span>
+                  </div>
+                )) : <p className="role">No active jobs yet.</p>}
+              </section>
+            </div>
+            <div className="account-split">
+              <section className="account-card">
+                <h2>Skills in demand you already have</h2>
+                <div className="chips">
+                  {insights.strengths.length ? insights.strengths.map((item) => (
+                    <span className="chip" key={item.skill}>{item.skill} · {item.demand}</span>
+                  )) : <p className="role">Confirm skills on your profile to see strengths.</p>}
+                </div>
+              </section>
+              <section className="account-card">
+                <h2>High-demand gaps</h2>
+                <p className="role">Only add these if they are true for you.</p>
+                <div className="chips">
+                  {insights.gaps.length ? insights.gaps.map((item) => (
+                    <span className="chip chip-gap" key={item.skill}>{item.skill} · {item.demand}</span>
+                  )) : <p className="role">No clear gaps against current listings.</p>}
+                </div>
+                {insights.risingPreferred.length ? (
+                  <>
+                    <h3>Also preferred</h3>
+                    <div className="chips">
+                      {insights.risingPreferred.map((item) => (
+                        <span className="chip" key={item.skill}>{item.skill}</span>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+              </section>
+            </div>
+            <section className="account-card">
+              <h2>Strong matches to prepare</h2>
+              {insights.topMatches.length ? insights.topMatches.map((job) => (
+                <div className="quiet-row" key={job.id}>
+                  <div>
+                    <strong>{job.title}</strong>
+                    <p>{job.company}</p>
+                    {job.missing.length ? <p className="role">Gap: {job.missing.join(", ")}</p> : null}
+                  </div>
+                  <span className="match-badge">{job.score}%</span>
+                </div>
+              )) : <p className="role">No strong matches in your current list.</p>}
+              <Link className="text-btn" to="/account/jobs">Open jobs</Link>
+            </section>
+          </>
+        )}
+      </div>
+    </Gate>
   );
 }
 

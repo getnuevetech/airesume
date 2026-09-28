@@ -13,6 +13,11 @@ const features = [
     text: "Roles are scored against your skills so the strongest overlaps show up first.",
   },
   {
+    icon: <Star size={22} />,
+    title: "Career insights",
+    text: "See which skills open roles demand, where your resume already wins, and what to focus on next — without inventing experience.",
+  },
+  {
     icon: <Sparkle />,
     title: "Tailored for each job",
     text: "The same experience is rewritten for the posting in front of you, without starting over.",
@@ -21,11 +26,6 @@ const features = [
     icon: <Plane size={22} />,
     title: "Browser apply assistant",
     text: "Copy contact, tailored resume, and answers beside the employer form. Mark Applied when you finish — nothing is sent on a guess.",
-  },
-  {
-    icon: <Star size={22} />,
-    title: "Keyword optimization",
-    text: "Important phrases from the role are surfaced so the resume speaks the reader’s language.",
   },
   {
     icon: <Shield />,

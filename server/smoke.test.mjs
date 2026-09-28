@@ -12,6 +12,7 @@ import { draftQuestions } from "./questions.mjs";
 import { matchExplainLimit, redactMatch, resumeReviewLimit, startOfUtcWeek } from "./quota.mjs";
 import { estimateCostMicros, moneyFromMicros } from "./ai-cost.mjs";
 import { buildApplyKit } from "./apply-kit.mjs";
+import { buildCareerInsights } from "./career-intel.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -227,6 +228,43 @@ test("buildApplyKit surfaces contact resume and blank answers without inventing"
   assert.equal(kit.blankCount, 1);
   assert.equal(kit.canComplete, true);
   assert.ok(kit.steps.some((step) => step.id === "mark"));
+});
+
+test("buildCareerInsights ranks demand gaps without inventing skills", () => {
+  const insights = buildCareerInsights({
+    doc: { skills: ["SQL", "Product management"], employment: [], education: [] },
+    preferences: {},
+    jobs: [
+      {
+        id: "1",
+        title: "PM",
+        company: "A",
+        category: "Product",
+        role: "Product Manager",
+        skills: ["Product management", "SQL", "Roadmapping"],
+        requirements: { mandatory: ["Product management", "SQL", "Roadmapping"], preferred: ["A/B testing"] },
+        description: "Product manager with SQL",
+      },
+      {
+        id: "2",
+        title: "Analyst",
+        company: "B",
+        category: "Data",
+        role: "Data Analyst",
+        skills: ["SQL", "Python"],
+        requirements: { mandatory: ["SQL", "Python"], preferred: [] },
+        description: "Analyst",
+      },
+    ],
+    applications: [{ status: "Ready" }, { status: "Applied" }, { status: "Interview" }],
+    options: { skillLimit: 5 },
+  });
+  assert.ok(insights.strengths.some((item) => item.skill === "SQL"));
+  assert.ok(insights.gaps.some((item) => /python|roadmapping/i.test(item.skill)));
+  assert.equal(insights.summary.tracked, 3);
+  assert.equal(insights.summary.responses, 1);
+  assert.ok(insights.focus.length >= 1);
+  assert.ok(!insights.gaps.some((item) => /invented/i.test(item.skill)));
 });
 
 test("fresh data dir migrates and seeds schema version", () => {

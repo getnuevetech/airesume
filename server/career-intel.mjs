@@ -1,0 +1,177 @@
+/** Deterministic career intelligence from profile facts and the job catalog. */
+
+import { matchJob } from "./match.mjs";
+
+function lower(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+function parseRequirements(job) {
+  if (job.requirements && typeof job.requirements === "object") return job.requirements;
+  try {
+    return JSON.parse(job.requirements || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function ownedSkills(doc = {}) {
+  return (doc.skills || []).map((skill) => String(skill).trim()).filter(Boolean);
+}
+
+function skillOwned(owned, skill) {
+  const needle = lower(skill);
+  return owned.some((item) => lower(item).includes(needle) || needle.includes(lower(item)));
+}
+
+function countMapIncrement(map, key, weight = 1) {
+  if (!key) return;
+  const normalized = String(key).trim();
+  if (!normalized) return;
+  const existing = map.get(lower(normalized)) || { label: normalized, count: 0 };
+  existing.count += weight;
+  if (normalized.length > existing.label.length) existing.label = normalized;
+  map.set(lower(normalized), existing);
+}
+
+function topEntries(map, limit) {
+  return [...map.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)).slice(0, limit);
+}
+
+/**
+ * Build career insights without AI. Only uses resume skills and catalog requirements.
+ */
+export function buildCareerInsights({ doc = {}, preferences = {}, jobs = [], applications = [], options = {} } = {}) {
+  const skillLimit = Math.max(3, Number(options.skillLimit) || 8);
+  const owned = ownedSkills(doc);
+  const demand = new Map();
+  const preferredDemand = new Map();
+  const categories = new Map();
+  const roles = new Map();
+
+  for (const job of jobs) {
+    const requirements = parseRequirements(job);
+    for (const skill of requirements.mandatory || []) countMapIncrement(demand, skill, 2);
+    const listedSkills = Array.isArray(job.skills) ? job.skills : [];
+    for (const skill of listedSkills) countMapIncrement(demand, skill, 1);
+    for (const skill of requirements.preferred || []) countMapIncrement(preferredDemand, skill, 1);
+    if (job.category) countMapIncrement(categories, job.category, 1);
+    if (job.role) countMapIncrement(roles, job.role, 1);
+  }
+
+  const strengths = topEntries(demand, 40)
+    .filter((item) => skillOwned(owned, item.label))
+    .slice(0, skillLimit)
+    .map((item) => ({ skill: item.label, demand: item.count, kind: "strength" }));
+
+  const gaps = topEntries(demand, 40)
+    .filter((item) => !skillOwned(owned, item.label))
+    .slice(0, skillLimit)
+    .map((item) => ({ skill: item.label, demand: item.count, kind: "gap" }));
+
+  const ranked = jobs
+    .map((job) => ({ job, ...matchJob(doc, preferences, job) }))
+    .sort((a, b) => b.score - a.score);
+  const visible = options.jobLimit ? ranked.slice(0, options.jobLimit) : ranked;
+  const strong = visible.filter((item) => item.score >= 70 || item.label === "strong" || item.label === "good");
+
+  const categoryFit = new Map();
+  for (const item of ranked) {
+    const category = item.job.category || "Other";
+    const row = categoryFit.get(category) || { category, count: 0, scoreSum: 0, strong: 0 };
+    row.count += 1;
+    row.scoreSum += item.score;
+    if (item.score >= 70) row.strong += 1;
+    categoryFit.set(category, row);
+  }
+  const categoryOutlook = [...categoryFit.values()]
+    .map((row) => ({
+      category: row.category,
+      jobs: row.count,
+      avgScore: Math.round(row.scoreSum / Math.max(1, row.count)),
+      strong: row.strong,
+    }))
+    .sort((a, b) => b.avgScore - a.avgScore || b.strong - a.strong)
+    .slice(0, 6);
+
+  const statusCounts = {};
+  for (const app of applications) {
+    const status = String(app.status || "Unknown");
+    statusCounts[status] = (statusCounts[status] || 0) + 1;
+  }
+  const tracked = applications.length;
+  const submitted = applications.filter((item) =>
+    ["Applied", "Responded", "Interview", "Offer", "Rejected", "Withdrawn"].includes(item.status),
+  ).length;
+  const responses = applications.filter((item) => ["Responded", "Interview", "Offer"].includes(item.status)).length;
+  const ready = applications.filter((item) => item.status === "Ready").length;
+  const reviewRequired = applications.filter((item) => item.status === "Review required").length;
+
+  const focus = [];
+  if (gaps[0]) {
+    focus.push({
+      id: "gap-1",
+      title: `Close the ${gaps[0].skill} gap`,
+      detail: `${gaps[0].skill} shows up often in open roles and is not on your resume yet. Only add it if it is a real fact you can support.`,
+    });
+  }
+  if (categoryOutlook[0] && categoryOutlook[0].avgScore >= 55) {
+    focus.push({
+      id: "category",
+      title: `Lean into ${categoryOutlook[0].category}`,
+      detail: `Your average match in ${categoryOutlook[0].category} is ${categoryOutlook[0].avgScore}% across ${categoryOutlook[0].jobs} roles.`,
+    });
+  }
+  if (ready + reviewRequired > 0) {
+    focus.push({
+      id: "pipeline",
+      title: "Clear the apply pipeline",
+      detail: `${ready} ready and ${reviewRequired} review-required applications are waiting on you.`,
+    });
+  } else if (strong.length) {
+    focus.push({
+      id: "prepare",
+      title: "Prepare a strong match",
+      detail: `${strong[0].job.title} at ${strong[0].job.primary_company || strong[0].job.company} scores ${strong[0].score}%.`,
+    });
+  }
+  if (!owned.length) {
+    focus.unshift({
+      id: "skills",
+      title: "Confirm skills on your profile",
+      detail: "Career insights need verified skills from your resume before demand gaps are useful.",
+    });
+  }
+
+  return {
+    summary: {
+      catalogJobs: jobs.length,
+      visibleJobs: visible.length,
+      strongMatches: strong.length,
+      tracked,
+      submitted,
+      responses,
+      responseRate: submitted ? Math.round((responses / submitted) * 100) : null,
+      skillCount: owned.length,
+    },
+    strengths,
+    gaps,
+    risingPreferred: topEntries(preferredDemand, skillLimit)
+      .filter((item) => !skillOwned(owned, item.label))
+      .slice(0, Math.min(5, skillLimit))
+      .map((item) => ({ skill: item.label, demand: item.count, kind: "preferred" })),
+    categories: topEntries(categories, 6).map((item) => ({ label: item.label, count: item.count })),
+    roles: topEntries(roles, 6).map((item) => ({ label: item.label, count: item.count })),
+    categoryOutlook,
+    tracker: statusCounts,
+    focus: focus.slice(0, 4),
+    topMatches: strong.slice(0, 5).map((item) => ({
+      id: item.job.id,
+      title: item.job.title,
+      company: item.job.primary_company || item.job.company,
+      score: item.score,
+      label: item.label,
+      missing: (item.missing || []).slice(0, 4),
+    })),
+  };
+}
