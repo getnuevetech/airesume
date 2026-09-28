@@ -907,6 +907,12 @@ button { cursor: pointer; }
 .apply-kit-steps li.ready strong { color: var(--ink); }
 .apply-kit-row { display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; padding: 8px 0; border-top: 1px solid #f0f3f6; }
 .apply-kit-resume { margin: 0; max-height: 220px; overflow: auto; white-space: pre-wrap; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; background: #f7f9fb; border-radius: 10px; padding: 12px; }
+.interview-prep { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f0f3f6; display: grid; gap: 10px; }
+.interview-prep-panel { margin-top: 8px; }
+.interview-pick { display: grid; gap: 8px; }
+.interview-pick button { text-align: left; border: 1px solid #e6ebf0; background: #fff; border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; cursor: pointer; }
+.interview-pick button.on { border-color: #67c39a; background: var(--green-soft); }
+.interview-signals { margin: 0; padding-left: 18px; color: var(--muted); display: grid; gap: 6px; }
 .version-mini { padding: 10px 0; border-top: 1px solid #f0f3f6; }
 .template-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .template-card { text-align: left; background: #fff; border: 1px solid #e6edf3; border-radius: 16px; padding: 12px; display: grid; gap: 6px; }

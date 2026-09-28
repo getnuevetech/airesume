@@ -13,6 +13,7 @@ import { matchExplainLimit, redactMatch, resumeReviewLimit, startOfUtcWeek } fro
 import { estimateCostMicros, moneyFromMicros } from "./ai-cost.mjs";
 import { buildApplyKit } from "./apply-kit.mjs";
 import { buildCareerInsights } from "./career-intel.mjs";
+import { buildInterviewPrep } from "./interview-prep.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -265,6 +266,34 @@ test("buildCareerInsights ranks demand gaps without inventing skills", () => {
   assert.equal(insights.summary.responses, 1);
   assert.ok(insights.focus.length >= 1);
   assert.ok(!insights.gaps.some((item) => /invented/i.test(item.skill)));
+});
+
+test("buildInterviewPrep uses resume bullets and does not invent metrics", () => {
+  const prep = buildInterviewPrep({
+    job: {
+      title: "Product Manager",
+      company: "Northstar",
+      primary_company: "Northstar",
+      category: "Product",
+      role: "Product Manager",
+      description: "Own activation.\nPartner with design.\nUse SQL for experiments.",
+      source_url: "https://jobs.example/pm",
+    },
+    doc: {
+      summary: "Product manager focused on activation.",
+      skills: ["Product management", "SQL"],
+      employment: [{ title: "PM", employer: "Acme", dates: "2021-2024", bullets: ["Owned activation with SQL dashboards"] }],
+    },
+    match: { score: 88, label: "strong", matched: ["Product management", "SQL"], missing: ["Roadmapping"] },
+    application: { id: "app_1", status: "Interview", target_company: "Northstar", target_url: "https://jobs.example/pm" },
+  });
+  assert.equal(prep.company, "Northstar");
+  assert.ok(prep.prompts.some((item) => item.id === "tell-me" && item.ready));
+  const challenge = prep.prompts.find((item) => item.id === "challenge");
+  assert.ok(challenge?.answer.includes("Owned activation with SQL dashboards"));
+  assert.ok(!/invented|99%|doubled revenue/i.test(JSON.stringify(prep)));
+  assert.ok(prep.talkingPoints.some((item) => item.skill === "SQL"));
+  assert.equal(prep.askEmployer.length, 3);
 });
 
 test("fresh data dir migrates and seeds schema version", () => {

@@ -28,6 +28,11 @@ const features = [
     text: "Copy contact, tailored resume, and answers beside the employer form. Mark Applied when you finish — nothing is sent on a guess.",
   },
   {
+    icon: <FileText />,
+    title: "Interview prep",
+    text: "Practice prompts and STAR drafts built from resume bullets. Gaps stay honest — no invented metrics.",
+  },
+  {
     icon: <Shield />,
     title: "Private by design",
     text: "Your file is read in this browser. It is not uploaded to a server.",
