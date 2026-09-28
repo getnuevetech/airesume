@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Link, NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
 
@@ -30,6 +30,42 @@ type PipelineEntry = {
   candidate: Candidate;
 };
 
+type VoiceFeedback = {
+  score: number;
+  label: string;
+  usedSkills: string[];
+  usedEmployers: string[];
+  usedTitles: string[];
+  usedNumbers: string[];
+  unverifiedNumbers: string[];
+  notes: string[];
+  suggestion: string;
+};
+
+type VoiceSession = {
+  id: string;
+  pipelineId: string;
+  roleTitle: string;
+  joinCode: string;
+  joinPath: string;
+  status: string;
+  notes: string;
+  questions: { id: string; prompt: string; kind: string }[];
+  turns: {
+    promptId: string;
+    prompt: string;
+    kind: string;
+    answer: string;
+    mode: string;
+    feedback: VoiceFeedback | null;
+    answeredAt: number | null;
+  }[];
+  summary: { answered: number; total: number; averageScore: number; inventedMetricFlags: number; status: string };
+  candidate: Candidate;
+  employerName?: string;
+  companyName?: string;
+};
+
 const PIPELINE_STATUSES = ["Saved", "Reviewing", "Interviewing", "Offer", "Hired", "Passed"];
 
 export function EmployerShell() {
@@ -51,6 +87,7 @@ export function EmployerShell() {
         <nav>
           <NavLink to="/employer" end className={({ isActive }) => (isActive ? "on" : "")}>Candidates</NavLink>
           <NavLink to="/employer/pipeline" className={({ isActive }) => (isActive ? "on" : "")}>Pipeline</NavLink>
+          <NavLink to="/employer/interviews" className={({ isActive }) => (isActive ? "on" : "")}>Interviews</NavLink>
           <NavLink to="/employer/company" className={({ isActive }) => (isActive ? "on" : "")}>Company</NavLink>
         </nav>
         <div className="account-user">
@@ -109,7 +146,7 @@ export function EmployerLandingPage() {
       {mode === "intro" ? (
         <section className="account-card">
           <h2>Employer workspace</h2>
-          <p className="lede">Create a company account, search the public pool, and move shortlisted candidates through a hiring pipeline.</p>
+          <p className="lede">Create a company account, search the public pool, run a hiring pipeline, and host live voice interviews with a join code.</p>
           <div className="job-actions" style={{ justifyContent: "flex-start" }}>
             <button className="btn btn-primary" type="button" onClick={() => setMode("register")}>Create employer account</button>
             <Link className="btn btn-ghost" to="/signin">Sign in</Link>
@@ -235,11 +272,13 @@ export function EmployerCandidatesPage() {
 }
 
 export function EmployerPipelinePage() {
+  const navigate = useNavigate();
   const [entries, setEntries] = useState<PipelineEntry[]>([]);
   const [summary, setSummary] = useState<{ total: number; active: number; counts: Record<string, number> } | null>(null);
   const [filter, setFilter] = useState("");
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [startingId, setStartingId] = useState("");
 
   async function load(status = filter) {
     setError("");
@@ -283,6 +322,22 @@ export function EmployerPipelinePage() {
       await load(filter);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not remove candidate.");
+    }
+  }
+
+  async function startVoice(entry: PipelineEntry) {
+    setStartingId(entry.id);
+    setError("");
+    try {
+      const data = await api<{ session: VoiceSession }>("/api/employer/voice-sessions", {
+        method: "POST",
+        body: JSON.stringify({ pipelineId: entry.id, roleTitle: entry.roleTitle }),
+      });
+      navigate(`/employer/interviews/${data.session.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start voice interview.");
+    } finally {
+      setStartingId("");
     }
   }
 
@@ -375,6 +430,14 @@ export function EmployerPipelinePage() {
               {entry.candidate.resumeUrl ? (
                 <Link className="btn btn-primary btn-sm" to={entry.candidate.resumeUrl} target="_blank">View resume</Link>
               ) : null}
+              <button
+                className="btn btn-ghost btn-sm"
+                type="button"
+                disabled={startingId === entry.id || ["Hired", "Passed"].includes(entry.status)}
+                onClick={() => void startVoice(entry)}
+              >
+                {startingId === entry.id ? "Starting…" : "Voice interview"}
+              </button>
               <button className="btn btn-ghost btn-sm" type="button" onClick={() => void removeEntry(entry)}>Remove</button>
             </div>
           </div>
@@ -433,6 +496,442 @@ export function EmployerCompanyPage() {
         <label className="field"><span>About the team</span><textarea rows={4} value={employer.blurb} onChange={(event) => setEmployer({ ...employer, blurb: event.target.value })} /></label>
         <button className="btn btn-primary btn-sm" type="submit">Save</button>
       </form>
+    </div>
+  );
+}
+
+export function EmployerInterviewsPage() {
+  const [sessions, setSessions] = useState<VoiceSession[]>([]);
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    void api<{ sessions: VoiceSession[] }>("/api/employer/voice-sessions")
+      .then((data) => {
+        setSessions(data.sessions);
+        setLoaded(true);
+      })
+      .catch((err: Error) => {
+        setError(err.message);
+        setLoaded(true);
+      });
+  }, []);
+
+  return (
+    <div className="account-page">
+      <header className="account-head">
+        <div>
+          <p className="eyebrow">Interviews</p>
+          <h1>Live voice interviews</h1>
+          <p className="lede">Start from a pipeline candidate, share the join code, and capture answers with fact-safe coaching notes.</p>
+        </div>
+        <Link className="btn btn-ghost btn-sm" to="/employer/pipeline">Open pipeline</Link>
+      </header>
+      {error ? <p className="form-error">{error}</p> : null}
+      {!loaded ? <p className="lede">Loading interviews…</p> : null}
+      {loaded && !sessions.length ? (
+        <section className="account-card">
+          <h2>No interviews yet</h2>
+          <p className="lede">Save a public candidate, then choose Voice interview from the pipeline.</p>
+        </section>
+      ) : null}
+      {sessions.map((session) => (
+        <article className="account-card" key={session.id}>
+          <div className="job-card" style={{ padding: 0, boxShadow: "none", background: "transparent" }}>
+            <div>
+              <h2>{session.candidate.name || "Candidate"}</h2>
+              <p className="role">
+                {session.roleTitle || session.candidate.headline || "Role"} · {session.status}
+                {session.summary.answered ? ` · ${session.summary.answered}/${session.summary.total} answered` : ""}
+              </p>
+              <p className="role">Join code {session.joinCode}</p>
+            </div>
+            <div className="job-side">
+              <Link className="btn btn-primary btn-sm" to={`/employer/interviews/${session.id}`}>Open</Link>
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+};
+
+function useVoiceCapture(onError: (message: string) => void) {
+  const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
+
+  useEffect(() => () => {
+    recognitionRef.current?.stop();
+    window.speechSynthesis?.cancel();
+  }, []);
+
+  function speak(text: string) {
+    if (!text || !window.speechSynthesis) {
+      onError("Speech synthesis is not available in this browser.");
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.onstart = () => setSpeaking(true);
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function stopListening() {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setListening(false);
+  }
+
+  function startListening(setAnswer: (value: string) => void) {
+    const SpeechRecognition = (window as unknown as {
+      SpeechRecognition?: new () => SpeechRecognitionLike;
+      webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+    }).SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike }).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      onError("Speech recognition is not available. Type the answer instead.");
+      return;
+    }
+    stopListening();
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onresult = (event) => {
+      let text = "";
+      for (let i = 0; i < event.results.length; i += 1) {
+        text += event.results[i][0].transcript;
+      }
+      setAnswer(text.trim());
+    };
+    recognition.onerror = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+    recognition.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  }
+
+  return { listening, speaking, speak, startListening, stopListening };
+}
+
+export function EmployerVoiceSessionPage() {
+  const { id = "" } = useParams();
+  const [session, setSession] = useState<VoiceSession | null>(null);
+  const [index, setIndex] = useState(0);
+  const [answer, setAnswer] = useState("");
+  const [notes, setNotes] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const voice = useVoiceCapture((message) => setError(message));
+
+  async function load() {
+    const data = await api<{ session: VoiceSession }>(`/api/employer/voice-sessions/${id}`);
+    setSession(data.session);
+    setNotes(data.session.notes || "");
+    setAnswer(data.session.turns[index]?.answer || "");
+  }
+
+  useEffect(() => {
+    void load().catch((err: Error) => setError(err.message));
+  }, [id]);
+
+  useEffect(() => {
+    if (!session) return;
+    setAnswer(session.turns[index]?.answer || "");
+  }, [index, session?.id]);
+
+  const turn = session?.turns[index] || null;
+  const prompt = session?.questions[index] || null;
+
+  async function start() {
+    setBusy(true);
+    setError("");
+    try {
+      const data = await api<{ session: VoiceSession }>(`/api/employer/voice-sessions/${id}/start`, { method: "POST", body: "{}" });
+      setSession(data.session);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start interview.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitAnswer(mode: "typed" | "speech") {
+    if (!session || !prompt) return;
+    setBusy(true);
+    voice.stopListening();
+    try {
+      const data = await api<{ session: VoiceSession }>(`/api/employer/voice-sessions/${session.id}/answer`, {
+        method: "POST",
+        body: JSON.stringify({ promptId: prompt.id, answer, mode }),
+      });
+      setSession(data.session);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save answer.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function complete() {
+    setBusy(true);
+    setError("");
+    try {
+      const data = await api<{ session: VoiceSession }>(`/api/employer/voice-sessions/${id}/complete`, {
+        method: "POST",
+        body: JSON.stringify({ notes }),
+      });
+      setSession(data.session);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not complete interview.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyJoin() {
+    if (!session) return;
+    try {
+      const url = `${window.location.origin}${session.joinPath}`;
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setError("Clipboard access was blocked.");
+    }
+  }
+
+  if (!session) {
+    return (
+      <div className="account-page">
+        {error ? <p className="form-error">{error}</p> : <p className="lede">Loading interview…</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="account-page">
+      <header className="account-head">
+        <div>
+          <p className="eyebrow">Live interview</p>
+          <h1>{session.candidate.name}</h1>
+          <p className="lede">
+            {session.roleTitle || "Role"} · {session.status}
+            {session.summary.answered ? ` · ${session.summary.answered}/${session.summary.total} answered` : ""}
+            {session.summary.averageScore ? ` · avg ${session.summary.averageScore}` : ""}
+          </p>
+        </div>
+        <Link className="btn btn-ghost btn-sm" to="/employer/interviews">All interviews</Link>
+      </header>
+      {error ? <p className="form-error">{error}</p> : null}
+      <section className="account-card">
+        <h2>Share with candidate</h2>
+        <p className="role">Join code <strong>{session.joinCode}</strong> · path {session.joinPath}</p>
+        <div className="job-actions" style={{ justifyContent: "flex-start" }}>
+          <button className="btn btn-primary btn-sm" type="button" onClick={() => void copyJoin()}>{copied ? "Copied" : "Copy join link"}</button>
+          {session.status === "scheduled" ? (
+            <button className="btn btn-ghost btn-sm" type="button" disabled={busy} onClick={() => void start()}>Mark live</button>
+          ) : null}
+          {session.status !== "complete" && session.status !== "cancelled" ? (
+            <button className="btn btn-ghost btn-sm" type="button" disabled={busy} onClick={() => void complete()}>Complete</button>
+          ) : null}
+        </div>
+      </section>
+      {prompt && turn ? (
+        <section className="account-card voice-practice">
+          <div className="voice-prompt">
+            <p className="eyebrow">Question {index + 1} of {session.questions.length}</p>
+            <h3>{prompt.prompt}</h3>
+            <div className="job-actions" style={{ justifyContent: "flex-start" }}>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => voice.speak(prompt.prompt)} disabled={voice.speaking}>
+                {voice.speaking ? "Speaking…" : "Hear question"}
+              </button>
+              {voice.listening ? (
+                <button className="btn btn-ghost btn-sm" type="button" onClick={voice.stopListening}>Stop mic</button>
+              ) : (
+                <button className="btn btn-ghost btn-sm" type="button" onClick={() => voice.startListening(setAnswer)}>Capture answer</button>
+              )}
+            </div>
+          </div>
+          <label className="field">
+            <span>Answer {voice.listening ? "(listening…)" : turn.mode ? `(${turn.mode})` : ""}</span>
+            <textarea rows={5} value={answer} onChange={(event) => setAnswer(event.target.value)} />
+          </label>
+          <div className="job-actions" style={{ justifyContent: "flex-start" }}>
+            <button className="btn btn-primary btn-sm" type="button" disabled={busy || !answer.trim() || session.status === "complete"} onClick={() => void submitAnswer(voice.listening || turn.mode === "speech" ? "speech" : "typed")}>
+              {busy ? "Saving…" : "Save & score"}
+            </button>
+            <button className="btn btn-ghost btn-sm" type="button" disabled={index <= 0} onClick={() => setIndex((value) => Math.max(0, value - 1))}>Previous</button>
+            <button className="btn btn-ghost btn-sm" type="button" disabled={index >= session.questions.length - 1} onClick={() => setIndex((value) => Math.min(session.questions.length - 1, value + 1))}>Next</button>
+          </div>
+          {turn.feedback ? (
+            <div className="voice-feedback">
+              <p className="role"><strong>{turn.feedback.label}</strong> · score {turn.feedback.score}</p>
+              <ul className="interview-signals">
+                {turn.feedback.notes.map((note) => <li key={note}>{note}</li>)}
+              </ul>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+      <section className="account-card">
+        <label className="field">
+          <span>Employer notes</span>
+          <textarea rows={4} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Hiring decision notes…" />
+        </label>
+        <button
+          className="btn btn-ghost btn-sm"
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            void api<{ session: VoiceSession }>(`/api/employer/voice-sessions/${id}`, {
+              method: "PUT",
+              body: JSON.stringify({ notes }),
+            })
+              .then((data) => setSession(data.session))
+              .catch((err: Error) => setError(err.message));
+          }}
+        >
+          Save notes
+        </button>
+      </section>
+    </div>
+  );
+}
+
+export function VoiceJoinPage() {
+  const { code = "" } = useParams();
+  const [session, setSession] = useState<VoiceSession | null>(null);
+  const [index, setIndex] = useState(0);
+  const [answer, setAnswer] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const voice = useVoiceCapture((message) => setError(message));
+
+  useEffect(() => {
+    void api<{ session: VoiceSession }>(`/api/voice-join/${code}`)
+      .then((data) => {
+        setSession(data.session);
+        setAnswer(data.session.turns[0]?.answer || "");
+      })
+      .catch((err: Error) => setError(err.message));
+  }, [code]);
+
+  useEffect(() => {
+    if (!session) return;
+    setAnswer(session.turns[index]?.answer || "");
+  }, [index, session?.id]);
+
+  const turn = session?.turns[index] || null;
+  const prompt = session?.questions[index] || null;
+
+  async function submitAnswer(mode: "typed" | "speech") {
+    if (!session || !prompt) return;
+    setBusy(true);
+    voice.stopListening();
+    try {
+      const data = await api<{ session: VoiceSession }>(`/api/voice-join/${code}/answer`, {
+        method: "POST",
+        body: JSON.stringify({ promptId: prompt.id, answer, mode }),
+      });
+      setSession(data.session);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save answer.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (error && !session) {
+    return (
+      <div className="container narrow-page">
+        <header className="page-hero">
+          <h1>Interview unavailable</h1>
+          <p className="lede">{error}</p>
+        </header>
+      </div>
+    );
+  }
+
+  if (!session || !prompt || !turn) {
+    return (
+      <div className="container narrow-page">
+        <p className="lede">Loading interview…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container narrow-page">
+      <header className="page-hero">
+        <p className="eyebrow">Live interview</p>
+        <h1>{session.companyName || session.employerName || "Employer"}</h1>
+        <p className="lede">
+          {session.roleTitle || "Role"} · {session.status}. Answer by mic or keyboard. Coaching only trusts facts already on your public resume.
+        </p>
+      </header>
+      {error ? <p className="form-error">{error}</p> : null}
+      <section className="account-card voice-practice">
+        <div className="voice-prompt">
+          <p className="eyebrow">Question {index + 1} of {session.questions.length}</p>
+          <h3>{prompt.prompt}</h3>
+          <div className="job-actions" style={{ justifyContent: "flex-start" }}>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => voice.speak(prompt.prompt)} disabled={voice.speaking}>
+              {voice.speaking ? "Speaking…" : "Hear question"}
+            </button>
+            {voice.listening ? (
+              <button className="btn btn-ghost btn-sm" type="button" onClick={voice.stopListening}>Stop mic</button>
+            ) : (
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => voice.startListening(setAnswer)}>Use mic</button>
+            )}
+          </div>
+        </div>
+        <label className="field">
+          <span>Your answer</span>
+          <textarea
+            rows={5}
+            value={answer}
+            onChange={(event) => setAnswer(event.target.value)}
+            disabled={session.status === "complete"}
+            placeholder="Speak from verified resume facts."
+          />
+        </label>
+        <div className="job-actions" style={{ justifyContent: "flex-start" }}>
+          <button className="btn btn-primary btn-sm" type="button" disabled={busy || !answer.trim() || session.status === "complete"} onClick={() => void submitAnswer(voice.listening || turn.mode === "speech" ? "speech" : "typed")}>
+            {busy ? "Saving…" : "Submit answer"}
+          </button>
+          <button className="btn btn-ghost btn-sm" type="button" disabled={index <= 0} onClick={() => setIndex((value) => Math.max(0, value - 1))}>Previous</button>
+          <button className="btn btn-ghost btn-sm" type="button" disabled={index >= session.questions.length - 1} onClick={() => setIndex((value) => Math.min(session.questions.length - 1, value + 1))}>Next</button>
+        </div>
+        {turn.feedback ? (
+          <div className="voice-feedback">
+            <p className="role"><strong>{turn.feedback.label}</strong> · score {turn.feedback.score}</p>
+            <ul className="interview-signals">
+              {turn.feedback.notes.map((note) => <li key={note}>{note}</li>)}
+            </ul>
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }
