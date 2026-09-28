@@ -5,6 +5,7 @@ import { matchJob } from "./match.mjs";
 import { TRACKER_STATUSES } from "./apply-rules.mjs";
 import { allowExplanation, explanationQuota, redactMatch, reviewQuota } from "./quota.mjs";
 import { publicPlan, resolveTemplate, templateLimitOf, RESUME_TEMPLATES } from "./schema.mjs";
+import { applyKitMetrics } from "./apply-kit-metrics.mjs";
 
 function publicVersion(row) {
   return { id: row.id, label: row.label, kind: row.kind, active: Boolean(row.active), rendered: row.rendered, createdAt: row.created_at };
@@ -103,6 +104,8 @@ export function registerDashboard(app, ctx) {
     const submitted = applications.filter((item) => item.status === "Applied" || ["Responded", "Interview", "Offer", "Rejected", "Withdrawn"].includes(item.status)).length;
     const readyCount = applications.filter((item) => item.status === "Ready").length;
     const reviewCount = applications.filter((item) => item.status === "Review required").length;
+    const kitStats = applyKitMetrics({ userId: user.id });
+    const versionLabels = new Map(versions.map((item) => [item.id, item.label]));
     res.json({
       profile: profilePayload(profile, user, parse),
       plan: access.plan,
@@ -139,6 +142,9 @@ export function registerDashboard(app, ctx) {
         available: ranked.length,
         recommended: ranked.filter((item) => item.score >= 70 || item.label === "strong" || item.label === "good").length,
         versions: versions.length,
+        kitOpened: kitStats.kitsOpened,
+        kitCompleted: kitStats.kitsCompleted,
+        kitCompletionRate: kitStats.completionRate,
       },
       jobs: ranked.map((item) => jobCard(item.job, item, sourceNames, appliedIds.has(item.job.id))),
       applications: applications.map((item) => {
@@ -158,6 +164,7 @@ export function registerDashboard(app, ctx) {
           mode: item.mode,
           match: item.match_score,
           versionId: item.version_id,
+          versionLabel: versionLabels.get(item.version_id) || "",
           questions: parse(item.questions, []),
         };
       }),

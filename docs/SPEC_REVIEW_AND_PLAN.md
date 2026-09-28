@@ -41,7 +41,7 @@ This plan is candidate-product focused. Employer-side work is Phase 3 in the spe
 - Job authenticity / duplicate flags on ingest
 - Application readiness engine gates
 
-### Slice D — Application quality loop
+### Slice D — Application quality loop — shipping
 
 - Review-first Assisted Apply as default
 - Application readiness engine gates

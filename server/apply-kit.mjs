@@ -11,6 +11,7 @@ const CONTACT_FIELDS = [
 /**
  * Build a browser apply kit from an application row and related records.
  * Does not invent answers — only surfaces profile, tailored resume, and saved drafts.
+ * Review-first Assisted Apply is the default path — the kit is the primary submit surface.
  */
 export function buildApplyKit({ user, profile, job, application, version, preferences = {} }) {
   const shareContact = preferences.shareContact !== false;
@@ -91,6 +92,7 @@ export function buildApplyKit({ user, profile, job, application, version, prefer
   return {
     applicationId: application.id,
     status,
+    mode: String(application.mode || "assisted"),
     eligible,
     title: job?.title || "Role",
     company: application.target_company || job?.primary_company || job?.company || "",
@@ -100,6 +102,9 @@ export function buildApplyKit({ user, profile, job, application, version, prefer
     listingUrl,
     contact,
     resumeText,
+    versionId: version?.id || application.version_id || "",
+    versionLabel: version?.label || "",
+    versionPinned: Boolean(version?.id || application.version_id),
     answers,
     blankCount: blankAnswers.length,
     steps,

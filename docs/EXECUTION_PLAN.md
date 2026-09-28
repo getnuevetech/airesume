@@ -80,11 +80,14 @@ Browser
 7. ~~Requirement-extraction AI before matching~~
 8. ~~Threshold match labels (Strong / Good / Possible / Weak)~~
 9. ~~Application readiness engine gates~~
+10. ~~Review-first Assisted Apply as default~~ (done on `cursor/apply-quality-loop-b068`)
+11. ~~Browser apply kit completion metrics~~
+12. ~~Resume version pinned per application~~
 
-Next after Slice C (Slice D — application quality loop):
-1. Review-first Assisted Apply as default
-2. Browser apply kit completion metrics
-3. Resume version pinned per application
+Next after Slice D (Slice E — intelligence & interview):
+1. Career insights tied to outcomes
+2. Interview prep + voice practice hardening
+3. Follow-up reminders
 
 ### Deferred unless explicitly requested
 

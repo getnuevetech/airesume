@@ -540,22 +540,27 @@ function applyPlan(user, plan, gateway, cycle, externalId, amount, credit) {
 
 async function createApplication(user, job, mode, doc, preferences, facts = [], options = {}) {
   const match = matchJob(doc, preferences, job);
-  let status = TRACKER_STATUSES.includes(options.status) ? options.status : "Ready";
+  let status = TRACKER_STATUSES.includes(options.status) ? options.status : "Review required";
   const shouldDeliver = Boolean(options.deliver) || status === "Applied";
-  const needsVersion = !["Found", "Skipped"].includes(status);
-  let versionId = null;
+  const existing = db.prepare("SELECT * FROM applications WHERE user_id = ? AND job_id = ?").get(user.id, job.id);
+  const keepPinned = Boolean(existing?.version_id) && !options.repin;
+  const needsVersion = !["Found", "Skipped"].includes(status) && !keepPinned;
+  let versionId = keepPinned ? existing.version_id : null;
   let rendered = "";
   let delivery = "";
   const targetCompany = job.primary_company || job.company;
-  if (needsVersion) {
+  const applyMode = mode === "auto" ? "auto" : "assisted";
+  if (keepPinned) {
+    const pinned = db.prepare("SELECT * FROM resume_versions WHERE id = ? AND user_id = ?").get(versionId, user.id);
+    rendered = String(pinned?.rendered || "");
+  } else if (needsVersion) {
     const versionDoc = tailoredDocument(doc, job, match, facts);
     rendered = renderDocument(versionDoc);
     versionId = id("ver");
-    const kind = status === "Resume preparing" ? "application" : "application";
     db.prepare(
       `INSERT INTO resume_versions (id, user_id, label, kind, document, rendered, parent_id, active, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-    ).run(versionId, user.id, `For ${targetCompany} — ${job.title}`, kind, JSON.stringify(versionDoc), rendered, activeVersion(user.id)?.id || null, Date.now());
+    ).run(versionId, user.id, `For ${targetCompany} — ${job.title}`, "application", JSON.stringify(versionDoc), rendered, activeVersion(user.id)?.id || null, Date.now());
   }
   const questions = draftQuestions(job, doc, preferences, match);
   const readiness = computeApplicationReadiness({
@@ -565,15 +570,16 @@ async function createApplication(user, job, mode, doc, preferences, facts = [], 
     preferences,
     verification: job.verification || "",
   });
-  if (status === "Ready" && readiness.state === "USER_ACTION_REQUIRED" && !options.forceReady) {
+  // Review-first Assisted Apply: never mark Ready while blockers remain.
+  if ((status === "Ready" || status === "Resume preparing") && readiness.state === "USER_ACTION_REQUIRED" && !options.forceReady) {
     status = "Review required";
   }
   if (shouldDeliver && rendered) {
     delivery = await employerDelivery(user, job, rendered);
   } else if (status === "Ready") {
-    delivery = "Tailored resume ready for your review. Submit when you want it sent.";
+    delivery = "Assisted Apply packet ready. Review in browser, then mark Applied after you submit on the employer site.";
   } else if (status === "Review required") {
-    delivery = options.reason || readiness.blockers[0] || "Needs your review before submit.";
+    delivery = options.reason || readiness.blockers[0] || "Needs your review before Assisted Apply can finish.";
   } else if (status === "Found") {
     delivery = "Saved to your tracker.";
   } else if (status === "Skipped") {
@@ -582,17 +588,31 @@ async function createApplication(user, job, mode, doc, preferences, facts = [], 
   if (options.reason && status === "Review required") {
     delivery = options.reason;
   }
+  if (keepPinned && existing?.delivery && status === existing.status) {
+    delivery = existing.delivery;
+  }
   const now = Date.now();
   db.prepare(
     `INSERT INTO applications (id, user_id, job_id, version_id, mode, status, match_score, target_company, target_url, target_email, delivery, questions, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(user_id, job_id) DO UPDATE SET version_id = COALESCE(excluded.version_id, applications.version_id), mode = excluded.mode, status = excluded.status, match_score = excluded.match_score, target_company = excluded.target_company, target_url = excluded.target_url, target_email = excluded.target_email, delivery = excluded.delivery, questions = excluded.questions, updated_at = excluded.updated_at`,
+     ON CONFLICT(user_id, job_id) DO UPDATE SET
+       version_id = CASE WHEN length(COALESCE(applications.version_id, '')) > 0 AND ? = 0
+         THEN applications.version_id ELSE COALESCE(excluded.version_id, applications.version_id) END,
+       mode = excluded.mode,
+       status = excluded.status,
+       match_score = excluded.match_score,
+       target_company = excluded.target_company,
+       target_url = excluded.target_url,
+       target_email = excluded.target_email,
+       delivery = excluded.delivery,
+       questions = excluded.questions,
+       updated_at = excluded.updated_at`,
   ).run(
     id("app"),
     user.id,
     job.id,
     versionId,
-    mode,
+    applyMode,
     status,
     match.score,
     targetCompany,
@@ -602,8 +622,23 @@ async function createApplication(user, job, mode, doc, preferences, facts = [], 
     JSON.stringify(questions),
     now,
     now,
+    options.repin ? 1 : 0,
   );
-  return { score: match.score, status, match, questions, readiness };
+  const row = db.prepare("SELECT * FROM applications WHERE user_id = ? AND job_id = ?").get(user.id, job.id);
+  const version = row?.version_id
+    ? db.prepare("SELECT id, label FROM resume_versions WHERE id = ?").get(row.version_id)
+    : null;
+  return {
+    id: row?.id,
+    score: match.score,
+    status: row?.status || status,
+    match,
+    questions: parse(row?.questions || "[]", questions),
+    readiness,
+    versionId: row?.version_id || versionId,
+    versionLabel: version?.label || "",
+    mode: row?.mode || applyMode,
+  };
 }
 
 function canAutoApply(job) {
