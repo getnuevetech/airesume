@@ -151,7 +151,15 @@ export function registerProfile(app, ctx) {
       return;
     }
     db.prepare("UPDATE profiles SET photo_url = ?, updated_at = ? WHERE user_id = ?").run(`/uploads/${nextName}`, Date.now(), user.id);
-    audit({ userId: user.id, functionName: "image_enhance", provider: ai.provider, model: ai.model, status: "applied", detail: `${contrast},${color},${sharpness}` });
+    audit({
+      userId: user.id,
+      functionName: "image_enhance",
+      provider: ai.provider,
+      model: ai.model,
+      status: "applied",
+      detail: `${contrast},${color},${sharpness}`,
+      costMicros: ai.costMicros || 0,
+    });
     res.json({ photoUrl: `/uploads/${nextName}`, provider: ai.provider, model: ai.model });
   });
 

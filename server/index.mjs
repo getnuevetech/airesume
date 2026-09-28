@@ -17,6 +17,7 @@ import {
 import { extractCareerProfile, readResumeFile } from "./extract.mjs";
 import { registerPlatform, syncProfileVersion } from "./platform.mjs";
 import { deliverMail, publicMailSettings, saveMailSettings } from "./mail.mjs";
+import { auditCostSummary, moneyFromMicros } from "./ai-cost.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const homepageFile = join(here, "..", "shared", "homepage.json");
@@ -148,8 +149,8 @@ function requireAdmin(req, res) {
 
 function audit(entry) {
   db.prepare(
-    `INSERT INTO ai_audit (id, user_id, function_name, provider, model, status, detail, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO ai_audit (id, user_id, function_name, provider, model, status, detail, created_at, cost_micros)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id("ai"),
     entry.userId || null,
@@ -159,6 +160,7 @@ function audit(entry) {
     entry.status,
     entry.detail || "",
     Date.now(),
+    Math.max(0, Number(entry.costMicros) || 0),
   );
 }
 
@@ -369,6 +371,7 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
     model: extracted.model,
     status: extracted.review?.status || "pass",
     detail: filename,
+    costMicros: extracted.costMicros || 0,
   });
   res.json({
     draftId,
@@ -629,8 +632,22 @@ app.get("/api/admin/outbox", (req, res) => {
 
 app.get("/api/admin/audit", (req, res) => {
   if (!requireAdmin(req, res)) return;
-  const entries = db.prepare("SELECT * FROM ai_audit ORDER BY created_at DESC LIMIT 50").all();
-  res.json({ entries });
+  const entries = db
+    .prepare("SELECT * FROM ai_audit ORDER BY created_at DESC LIMIT 100")
+    .all()
+    .map((entry) => ({
+      id: entry.id,
+      userId: entry.user_id,
+      functionName: entry.function_name,
+      provider: entry.provider,
+      model: entry.model,
+      status: entry.status,
+      detail: entry.detail || "",
+      createdAt: entry.created_at,
+      costMicros: entry.cost_micros || 0,
+      costLabel: moneyFromMicros(entry.cost_micros || 0),
+    }));
+  res.json({ entries, summary: auditCostSummary() });
 });
 
 app.post("/api/account/password", (req, res) => {

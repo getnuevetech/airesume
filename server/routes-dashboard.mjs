@@ -3,7 +3,7 @@
 import { db } from "./db.mjs";
 import { matchJob } from "./match.mjs";
 import { TRACKER_STATUSES } from "./apply-rules.mjs";
-import { allowExplanation, explanationQuota, redactMatch } from "./quota.mjs";
+import { allowExplanation, explanationQuota, redactMatch, reviewQuota } from "./quota.mjs";
 import { publicPlan, resolveTemplate, templateLimitOf, RESUME_TEMPLATES } from "./schema.mjs";
 
 function publicVersion(row) {
@@ -96,6 +96,7 @@ export function registerDashboard(app, ctx) {
     if (!access.features.job_browse) ranked = [];
     const quota = explanationQuota(user.id, access.features);
     ranked = ranked.map((item) => (allowExplanation(user.id, item.job.id, quota) ? item : redactMatch(item)));
+    const reviews = reviewQuota(user.id, access.features);
     const review = db.prepare("SELECT * FROM resume_reviews WHERE user_id = ? ORDER BY created_at DESC LIMIT 1").get(user.id);
     const versions = db.prepare("SELECT * FROM resume_versions WHERE user_id = ? ORDER BY created_at DESC").all(user.id).map(publicVersion);
     const responded = applications.filter((item) => ["Responded", "Interview", "Offer"].includes(item.status)).length;
@@ -119,6 +120,13 @@ export function registerDashboard(app, ctx) {
         remaining: quota.unlimited ? null : quota.remaining,
         unlimited: quota.unlimited,
         resetsAt: quota.resetsAt,
+      },
+      reviewQuota: {
+        limit: reviews.limit,
+        used: reviews.used,
+        remaining: reviews.unlimited ? null : reviews.remaining,
+        unlimited: reviews.unlimited,
+        resetsAt: reviews.resetsAt,
       },
       statuses: TRACKER_STATUSES,
       stats: {

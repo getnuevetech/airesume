@@ -217,7 +217,7 @@ async function reviewDocument(user, version) {
     `INSERT INTO resume_reviews (id, user_id, version_id, rating, feedback, recommendations, provider, model, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(reviewId, user.id, version.id, result.rating, JSON.stringify(result.feedback), JSON.stringify(result.recommendations), ai.provider, ai.model, Date.now());
-  return { id: reviewId, ...result, provider: ai.provider, model: ai.model, versionId: version.id };
+  return { id: reviewId, ...result, provider: ai.provider, model: ai.model, versionId: version.id, costMicros: ai.costMicros || 0 };
 }
 
 function setPath(doc, path, value) {
@@ -275,7 +275,13 @@ async function categorizeAndVerify(job, siblings) {
   );
   const allowed = ["Active", "Possible duplicate", "Needs review", "Third-party recruiter"];
   const verification = allowed.includes(check.json?.verification) ? check.json.verification : local.verification;
-  return { category, role, verification, note: String(check.json?.note || local.note) };
+  return {
+    category,
+    role,
+    verification,
+    note: String(check.json?.note || local.note),
+    costMicros: (ai.costMicros || 0) + (check.costMicros || 0),
+  };
 }
 
 function jobKey(raw) {
@@ -546,6 +552,7 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
   registerResume(app, {
     requireUser,
     requireFeature,
+    featuresOf,
     syncProfileVersion,
     activeVersion,
     reviewDocument,

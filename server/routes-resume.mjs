@@ -1,11 +1,13 @@
 /** Resume review, upscale apply, and version activation routes. */
 
 import { db, id } from "./db.mjs";
+import { reviewQuota } from "./quota.mjs";
 
 export function registerResume(app, ctx) {
   const {
     requireUser,
     requireFeature,
+    featuresOf,
     syncProfileVersion,
     activeVersion,
     reviewDocument,
@@ -21,6 +23,21 @@ export function registerResume(app, ctx) {
     const user = requireUser(req, res);
     if (!user) return;
     if (!requireFeature(user, "resume_review", res)) return;
+    const access = featuresOf(user);
+    const quota = reviewQuota(user.id, access.features);
+    if (!quota.unlimited && quota.remaining <= 0) {
+      res.status(403).json({
+        error: `Weekly resume review limit reached (${quota.limit}/week). Resets ${new Date(quota.resetsAt).toISOString().slice(0, 10)}.`,
+        reviewQuota: {
+          limit: quota.limit,
+          used: quota.used,
+          remaining: 0,
+          unlimited: false,
+          resetsAt: quota.resetsAt,
+        },
+      });
+      return;
+    }
     syncProfileVersion(user.id);
     const version = activeVersion(user.id);
     if (!version) {
@@ -35,8 +52,19 @@ export function registerResume(app, ctx) {
       model: review.model,
       status: "ready",
       detail: String(review.rating),
+      costMicros: review.costMicros || 0,
     });
-    res.json({ review });
+    const nextQuota = reviewQuota(user.id, access.features);
+    res.json({
+      review,
+      reviewQuota: {
+        limit: nextQuota.limit,
+        used: nextQuota.used,
+        remaining: nextQuota.unlimited ? null : nextQuota.remaining,
+        unlimited: nextQuota.unlimited,
+        resetsAt: nextQuota.resetsAt,
+      },
+    });
   });
 
   app.post("/api/resume/apply", async (req, res) => {

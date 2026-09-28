@@ -15,6 +15,9 @@ function featuresFrom(input, base) {
   if (input && Object.prototype.hasOwnProperty.call(input, "match_explain_limit")) {
     features.match_explain_limit = Math.max(0, Number(input.match_explain_limit) || 0);
   }
+  if (input && Object.prototype.hasOwnProperty.call(input, "resume_review_limit")) {
+    features.resume_review_limit = Math.max(0, Number(input.resume_review_limit) || 0);
+  }
   return features;
 }
 

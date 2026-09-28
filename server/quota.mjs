@@ -1,4 +1,4 @@
-/** Weekly match-explanation quotas by plan. */
+/** Weekly match-explanation and resume-review quotas by plan. */
 
 import { db } from "./db.mjs";
 
@@ -9,19 +9,22 @@ export function startOfUtcWeek(now = Date.now()) {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - diff);
 }
 
-export function matchExplainLimit(features = {}) {
-  if (!Object.prototype.hasOwnProperty.call(features, "match_explain_limit")) return 5;
-  const value = Number(features.match_explain_limit);
-  if (!Number.isFinite(value)) return 5;
+function weeklyLimit(features = {}, key, fallback) {
+  if (!Object.prototype.hasOwnProperty.call(features, key)) return fallback;
+  const value = Number(features[key]);
+  if (!Number.isFinite(value)) return fallback;
   return Math.max(0, Math.round(value));
 }
 
-export function explanationQuota(userId, features, now = Date.now()) {
-  const limit = matchExplainLimit(features);
-  const weekStart = startOfUtcWeek(now);
-  const used = db
-    .prepare("SELECT COUNT(*) AS count FROM match_explanation_views WHERE user_id = ? AND week_start = ?")
-    .get(userId, weekStart).count;
+export function matchExplainLimit(features = {}) {
+  return weeklyLimit(features, "match_explain_limit", 5);
+}
+
+export function resumeReviewLimit(features = {}) {
+  return weeklyLimit(features, "resume_review_limit", 3);
+}
+
+function weeklyQuota(limit, used, weekStart) {
   return {
     limit,
     used,
@@ -30,6 +33,24 @@ export function explanationQuota(userId, features, now = Date.now()) {
     weekStart,
     resetsAt: weekStart + 7 * 24 * 60 * 60 * 1000,
   };
+}
+
+export function explanationQuota(userId, features, now = Date.now()) {
+  const limit = matchExplainLimit(features);
+  const weekStart = startOfUtcWeek(now);
+  const used = db
+    .prepare("SELECT COUNT(*) AS count FROM match_explanation_views WHERE user_id = ? AND week_start = ?")
+    .get(userId, weekStart).count;
+  return weeklyQuota(limit, used, weekStart);
+}
+
+export function reviewQuota(userId, features, now = Date.now()) {
+  const limit = resumeReviewLimit(features);
+  const weekStart = startOfUtcWeek(now);
+  const used = db
+    .prepare("SELECT COUNT(*) AS count FROM resume_reviews WHERE user_id = ? AND created_at >= ?")
+    .get(userId, weekStart).count;
+  return weeklyQuota(limit, used, weekStart);
 }
 
 export function hasExplanationView(userId, jobId, weekStart) {

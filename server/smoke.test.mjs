@@ -9,7 +9,8 @@ import { autoDecision, TRACKER_STATUSES } from "./apply-rules.mjs";
 import { parseJobPaste } from "./job-import.mjs";
 import { extractRequirements, matchJob, matchLabel } from "./match.mjs";
 import { draftQuestions } from "./questions.mjs";
-import { matchExplainLimit, redactMatch, startOfUtcWeek } from "./quota.mjs";
+import { matchExplainLimit, redactMatch, resumeReviewLimit, startOfUtcWeek } from "./quota.mjs";
+import { estimateCostMicros, moneyFromMicros } from "./ai-cost.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -178,10 +179,26 @@ test("draftQuestions leaves salary and authorization blank", () => {
 test("matchExplainLimit treats 0 as unlimited and redacts locked matches", () => {
   assert.equal(matchExplainLimit({ match_explain_limit: 5 }), 5);
   assert.equal(matchExplainLimit({ match_explain_limit: 0 }), 0);
+  assert.equal(resumeReviewLimit({ resume_review_limit: 3 }), 3);
+  assert.equal(resumeReviewLimit({ resume_review_limit: 0 }), 0);
+  assert.equal(resumeReviewLimit({}), 3);
   const redacted = redactMatch({ score: 90, label: "strong", explanation: "hi", matched: ["SQL"], missing: [], preferredMatched: [] });
   assert.equal(redacted.explanation, "");
   assert.equal(redacted.explanationLocked, true);
   assert.ok(startOfUtcWeek() > 0);
+});
+
+test("estimateCostMicros is zero for deterministic and positive for mini models", () => {
+  assert.equal(estimateCostMicros({ kind: "deterministic", model: "rules-v1", system: "a", user: "b" }), 0);
+  const paid = estimateCostMicros({
+    kind: "openai",
+    model: "gpt-4o-mini",
+    system: "Review this resume. ".repeat(200),
+    user: "Profile JSON goes here. ".repeat(400),
+    response: '{"rating":80}'.repeat(20),
+  });
+  assert.ok(paid > 0);
+  assert.ok(moneyFromMicros(paid).startsWith("$"));
 });
 
 test("fresh data dir migrates and seeds schema version", () => {
@@ -207,6 +224,8 @@ test("fresh data dir migrates and seeds schema version", () => {
     if (!views) process.exit(7);
     const free = JSON.parse(db.prepare("SELECT features FROM plans WHERE id='free'").get().features);
     if (free.match_explain_limit !== 5) process.exit(8);
+    if (free.resume_review_limit !== 3) process.exit(9);
+    if (!db.prepare("PRAGMA table_info(ai_audit)").all().some((row) => row.name === "cost_micros")) process.exit(10);
   `;
   try {
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {

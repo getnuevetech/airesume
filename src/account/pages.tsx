@@ -278,6 +278,9 @@ export function ResumePage() {
             <p className="eyebrow">Resume</p>
             <h1>Review and versions</h1>
             <p className="lede">Feedback stays here. A rewrite you accept becomes a new version. Your public resume does not change until you choose one.</p>
+            {data.reviewQuota && !data.reviewQuota.unlimited ? (
+              <p className="role">Resume reviews this week: {data.reviewQuota.used} used, {data.reviewQuota.remaining} left on {data.plan.name}.</p>
+            ) : null}
           </div>
           <button className="btn btn-primary" type="button" onClick={() => void api("/api/resume/review", { method: "POST" }).then(reload).catch((err: Error) => setError(err.message))}>Analyze resume</button>
         </header>
