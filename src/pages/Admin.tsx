@@ -303,6 +303,27 @@ function HomepageEditor() {
           <input value={content.hero.uploadLabel} onChange={(event) => update("hero", { ...content.hero, uploadLabel: event.target.value })} />
         </label>
         <label className="field">
+          <span>Continue button</span>
+          <input
+            value={content.hero.continueLabel}
+            onChange={(event) => update("hero", { ...content.hero, continueLabel: event.target.value })}
+          />
+        </label>
+        <label className="field">
+          <span>Change-file button</span>
+          <input
+            value={content.hero.changeFileLabel}
+            onChange={(event) => update("hero", { ...content.hero, changeFileLabel: event.target.value })}
+          />
+        </label>
+        <label className="field">
+          <span>Continue-with-file button</span>
+          <input
+            value={content.hero.continueSelectedLabel}
+            onChange={(event) => update("hero", { ...content.hero, continueSelectedLabel: event.target.value })}
+          />
+        </label>
+        <label className="field">
           <span>Google button</span>
           <input value={content.hero.googleLabel} onChange={(event) => update("hero", { ...content.hero, googleLabel: event.target.value })} />
         </label>

@@ -140,11 +140,11 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
       ) : null}
       <TermsAgreement checked={consent} onChange={setConsent} includeResume />
       <div className="drop-actions">
-        <button className="btn btn-ghost btn-block" type="button" disabled={busy} onClick={() => document.getElementById(inputId)?.click()}>
-          {selected ? "Choose a different file" : hero.uploadLabel}
+        <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => document.getElementById(inputId)?.click()}>
+          {selected ? hero.changeFileLabel || "Choose a different file" : hero.uploadLabel}
         </button>
-        <button className="btn btn-primary btn-block" type="button" disabled={busy || !selected || !consent} onClick={() => void uploadSelected()}>
-          {busy ? "Reading..." : selected ? "Continue with this resume" : "Select a resume to continue"}
+        <button className="btn btn-primary" type="button" disabled={busy || !selected || !consent} onClick={() => void uploadSelected()}>
+          {busy ? "Reading..." : selected ? hero.continueSelectedLabel || "Continue with this resume" : hero.continueLabel || "Select a resume to continue"}
         </button>
       </div>
       <p className="or-text">{hero.orLabel}</p>

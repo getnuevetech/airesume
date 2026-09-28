@@ -18,16 +18,19 @@
     "dropTitle": "Drag & drop your resume here",
     "dropHint": "PDF, DOCX or TXT (up to 10MB)",
     "uploadLabel": "Upload Resume",
+    "continueLabel": "Select a resume to continue",
+    "changeFileLabel": "Choose a different file",
+    "continueSelectedLabel": "Continue with this resume",
     "orLabel": "or",
     "googleLabel": "Continue with Google",
     "finePrint": "Your resume stays under your control. Free to start.",
     "secondaryCta": "See how it works",
     "secondaryCtaTo": "#how-it-works",
-    "aiCard": "Preparing strong-fit roles from your verified facts…",
+    "aiCard": "AI is finding and applying to jobs for you...",
     "jobs": [
-      { "id": "pm", "title": "Product Manager", "company": "Northstar", "logo": "spotify", "status": "match", "match": 92 },
-      { "id": "se", "title": "Software Engineer", "company": "Harbor Labs", "logo": "hubspot", "status": "applying", "match": 87 },
-      { "id": "da", "title": "Data Analyst", "company": "Signal Co", "logo": "notion", "status": "applied", "match": 84 }
+      { "id": "pm", "title": "Product Manager", "company": "Spotify", "logo": "spotify", "status": "applied", "match": 92 },
+      { "id": "se", "title": "Software Engineer", "company": "HubSpot", "logo": "hubspot", "status": "applying", "match": 87 },
+      { "id": "da", "title": "Data Analyst", "company": "Notion", "logo": "notion", "status": "match", "match": 92 }
     ]
   },
   "trust": {

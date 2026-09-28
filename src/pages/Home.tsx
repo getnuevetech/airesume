@@ -61,7 +61,28 @@ export function HomePage() {
 
   return (
     <>
-      <section className="container hero hero-convert">
+      <section className="container hero">
+        <div className="hero-visual">
+          <img className="hero-photo" src={hero.image} alt={hero.imageAlt} />
+          <div className="float-cards">
+            {hero.jobs.map((job) => (
+              <article className="job-card" key={job.id}>
+                <LogoMark logo={job.logo} />
+                <div className="job-meta">
+                  <strong>{job.title}</strong>
+                  <span>{job.company}</span>
+                </div>
+                <span className={`pill pill-${job.status}`}>{statusLabel(job.status, job.match)}</span>
+              </article>
+            ))}
+            <article className="ai-card">
+              <p>{hero.aiCard}</p>
+              <div className="ai-track" aria-hidden="true">
+                <span className="ai-fill" />
+              </div>
+            </article>
+          </div>
+        </div>
         <div className="hero-copy">
           <p className="eyebrow">
             <Bolt /> {hero.eyebrow}
@@ -82,26 +103,6 @@ export function HomePage() {
               </a>
             </p>
           ) : null}
-          <div className="hero-demo" aria-hidden="true">
-            {hero.jobs.slice(0, 2).map((job) => (
-              <article className="job-card" key={job.id}>
-                <LogoMark logo={job.logo} />
-                <div className="job-meta">
-                  <strong>{job.title}</strong>
-                  <span>{job.company}</span>
-                </div>
-                <span className={`pill pill-${job.status}`}>{statusLabel(job.status, job.match)}</span>
-              </article>
-            ))}
-            <article className="ai-card">
-              <p>{hero.aiCard}</p>
-              <div className="ai-track">
-                <span className="ai-fill" />
-              </div>
-            </article>
-          </div>
-        </div>
-        <div className="hero-action">
           <UploadPanel />
         </div>
       </section>

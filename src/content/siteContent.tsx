@@ -17,6 +17,9 @@ export type HomepageContent = {
     dropTitle: string;
     dropHint: string;
     uploadLabel: string;
+    continueLabel: string;
+    changeFileLabel: string;
+    continueSelectedLabel: string;
     orLabel: string;
     googleLabel: string;
     finePrint: string;
