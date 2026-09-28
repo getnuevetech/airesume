@@ -50,6 +50,8 @@ export function buildRoomParticipants({
       userId: hostUserId || "",
       present: false,
       lastSeenAt: null,
+      audioConnected: false,
+      audioMuted: false,
     },
     {
       id: "candidate",
@@ -58,6 +60,8 @@ export function buildRoomParticipants({
       userId: candidateUserId || "",
       present: false,
       lastSeenAt: null,
+      audioConnected: false,
+      audioMuted: false,
     },
   ];
   const extras = (interviewers || [])
@@ -68,6 +72,8 @@ export function buildRoomParticipants({
       userId: String(person.userId || ""),
       present: false,
       lastSeenAt: null,
+      audioConnected: false,
+      audioMuted: false,
     }))
     .filter((person) => person.displayName)
     .slice(0, 3);
@@ -75,14 +81,17 @@ export function buildRoomParticipants({
 }
 
 export function markPresence(participants = [], participantId, at = Date.now()) {
-  return (participants || []).map((person) =>
-    person.id === participantId
-      ? { ...person, present: true, lastSeenAt: at }
-      : {
-          ...person,
-          present: person.lastSeenAt ? at - Number(person.lastSeenAt) < 20000 : false,
-        },
-  );
+  return (participants || []).map((person) => {
+    if (person.id === participantId) {
+      return { ...person, present: true, lastSeenAt: at };
+    }
+    const fresh = person.lastSeenAt ? at - Number(person.lastSeenAt) < 20000 : false;
+    return {
+      ...person,
+      present: fresh,
+      audioConnected: Boolean(person.audioConnected) && fresh,
+    };
+  });
 }
 
 export function appendRoomTurn(turns = [], turn = {}) {
