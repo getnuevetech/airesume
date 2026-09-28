@@ -89,6 +89,9 @@ export type AccountData = {
     available: number;
     recommended: number;
     versions: number;
+    kitOpened?: number;
+    kitCompleted?: number;
+    kitCompletionRate?: number;
   };
   jobs: AccountJob[];
   applications: {
@@ -103,6 +106,7 @@ export type AccountData = {
     mode: string;
     match: number;
     versionId?: string;
+    versionLabel?: string;
     questions?: ApplicationQuestion[];
   }[];
   review: { id: string; rating: number; feedback: string[]; recommendations: Recommendation[]; provider: string; model: string } | null;

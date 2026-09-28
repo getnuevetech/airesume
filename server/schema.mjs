@@ -1,7 +1,7 @@
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -368,6 +368,14 @@ export function migrate() {
       week_start INTEGER NOT NULL,
       created_at INTEGER NOT NULL,
       PRIMARY KEY (user_id, job_id, week_start)
+    );
+    CREATE TABLE IF NOT EXISTS apply_kit_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      application_id TEXT NOT NULL,
+      event TEXT NOT NULL,
+      detail TEXT DEFAULT '',
+      created_at INTEGER NOT NULL
     );
   `);
 

@@ -1124,7 +1124,7 @@ export function JobsPage() {
             <button className="btn btn-primary btn-sm" type="button" disabled={busy || (!pasteText.trim() && !pasteUrl.trim())} onClick={() => void importJob("")}>Import</button>
             {data.features.manual_apply ? (
               <>
-                <button className="btn btn-ghost btn-sm" type="button" disabled={busy || (!pasteText.trim() && !pasteUrl.trim())} onClick={() => void importJob("prepare")}>Import & prepare</button>
+                <button className="btn btn-ghost btn-sm" type="button" disabled={busy || (!pasteText.trim() && !pasteUrl.trim())} onClick={() => void importJob("prepare")}>Import & Assisted Apply</button>
                 <button className="btn btn-ghost btn-sm" type="button" disabled={busy || (!pasteText.trim() && !pasteUrl.trim())} onClick={() => void importJob("track")}>Import & track</button>
               </>
             ) : null}
@@ -1148,7 +1148,7 @@ export function JobsPage() {
               {job.applied ? <p className="role">In your tracker</p> : (
                 <div className="job-actions">
                   <button className="btn btn-primary btn-sm" type="button" disabled={!data.features.manual_apply} onClick={() => void api("/api/applications", { method: "POST", body: JSON.stringify({ jobId: job.id, action: "prepare" }) }).then(reload).catch((err: Error) => setError(err.message))}>
-                    {data.features.manual_apply ? "Prepare" : "Upgrade to apply"}
+                    {data.features.manual_apply ? "Assisted Apply" : "Upgrade to apply"}
                   </button>
                   {data.features.manual_apply ? (
                     <button className="btn btn-ghost btn-sm" type="button" onClick={() => void api("/api/applications", { method: "POST", body: JSON.stringify({ jobId: job.id, action: "track" }) }).then(reload).catch((err: Error) => setError(err.message))}>
@@ -1176,7 +1176,13 @@ export function ApplicationsPage() {
           <div>
             <p className="eyebrow">Applications</p>
             <h1>Tracker</h1>
-            <p className="lede">{data.stats.tracked ?? data.stats.applied} in your tracker. {data.stats.ready || 0} ready to submit. {data.stats.reviewRequired || 0} need review. {data.stats.responded} have a response, interview, or offer. Use Apply in browser to copy answers into the employer form.</p>
+            <p className="lede">
+              {data.stats.tracked ?? data.stats.applied} in your tracker. {data.stats.ready || 0} ready. {data.stats.reviewRequired || 0} need review.
+              Assisted Apply is the default — review the kit, paste into the employer form, then mark Applied.
+              {typeof data.stats.kitCompletionRate === "number"
+                ? ` Kit completion ${data.stats.kitCompletionRate}% (${data.stats.kitCompleted || 0}/${data.stats.kitOpened || 0}).`
+                : ""}
+            </p>
           </div>
         </header>
         {data.features.auto_apply ? (
@@ -1191,31 +1197,54 @@ export function ApplicationsPage() {
           />
         ) : (
           <section className="account-card">
-            <h2>Review-first applications</h2>
-            <p>Prepare a tailored resume from Jobs, then submit when you are ready. Autopilot queueing is not on the {data.plan.name} plan.</p>
+            <h2>Review-first Assisted Apply</h2>
+            <p>Assisted Apply prepares a tailored resume and copy kit. You review everything, submit on the employer site, then mark Applied here. Email submit stays available only when readiness clears.</p>
           </section>
         )}
-        {data.applications.map((item) => (
+        {data.applications.map((item, index) => {
+          const assistedOpen =
+            index === data.applications.findIndex((row) =>
+              ["Ready", "Review required", "Resume preparing"].includes(row.status),
+            );
+          return (
           <article className="account-card" key={item.id}>
             <div className="job-card" style={{ padding: 0, boxShadow: "none", background: "transparent" }}>
               <div>
                 <h2>{item.title}</h2>
                 <p className="role">{item.company} · {item.mode} · {item.match}% match · {item.status}</p>
+                {item.versionLabel ? <p className="role">Pinned resume: {item.versionLabel}</p> : null}
                 {item.viaCompany ? <p className="role">Found through {item.viaCompany}{item.sourceName ? ` on ${item.sourceName}` : ""}</p> : null}
                 {item.delivery ? <p className="role">{item.delivery}</p> : null}
                 {item.targetUrl ? <a href={item.targetUrl} target="_blank" rel="noreferrer">Open employer listing</a> : null}
               </div>
               <div className="job-side">
+                {["Ready", "Review required", "Resume preparing", "Found"].includes(item.status) && data.features.manual_apply && data.versions.length ? (
+                  <select
+                    aria-label="Pinned resume version"
+                    value={item.versionId || ""}
+                    onChange={(event) =>
+                      void api(`/api/applications/${item.id}/version`, {
+                        method: "PUT",
+                        body: JSON.stringify({ versionId: event.target.value }),
+                      })
+                        .then(() => { setMessage("Resume version pinned."); return reload(); })
+                        .catch((err: Error) => setError(err.message))
+                    }
+                  >
+                    <option value="" disabled>Pin resume version</option>
+                    {data.versions.map((version) => (
+                      <option key={version.id} value={version.id}>{version.label}</option>
+                    ))}
+                  </select>
+                ) : null}
                 {["Ready", "Review required", "Resume preparing"].includes(item.status) && data.features.manual_apply ? (
-                  <>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      type="button"
-                      onClick={() => void api(`/api/applications/${item.id}/submit`, { method: "POST" }).then(() => { setMessage("Application submitted."); return reload(); }).catch((err: Error) => setError(err.message))}
-                    >
-                      Email submit
-                    </button>
-                  </>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    type="button"
+                    onClick={() => void api(`/api/applications/${item.id}/submit`, { method: "POST" }).then(() => { setMessage("Application submitted."); return reload(); }).catch((err: Error) => setError(err.message))}
+                  >
+                    Email submit
+                  </button>
                 ) : null}
                 <select value={item.status} onChange={(event) => void api(`/api/applications/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: event.target.value }) }).then(reload)}>
                   {statuses.map((status) => <option key={status}>{status}</option>)}
@@ -1225,7 +1254,10 @@ export function ApplicationsPage() {
             {["Ready", "Review required", "Resume preparing"].includes(item.status) && data.features.manual_apply ? (
               <BrowserApplyAssistant
                 applicationId={item.id}
-                onDone={() => { setMessage("Marked Applied after browser apply."); void reload(); }}
+                defaultOpen={assistedOpen}
+                versions={data.versions}
+                versionId={item.versionId}
+                onDone={() => { setMessage("Marked Applied after Assisted Apply."); void reload(); }}
                 onError={(message) => setError(message)}
               />
             ) : null}
@@ -1244,7 +1276,8 @@ export function ApplicationsPage() {
               />
             ) : null}
           </article>
-        ))}
+          );
+        })}
       </div>
     </Gate>
   );
@@ -1253,6 +1286,7 @@ export function ApplicationsPage() {
 type ApplyKit = {
   applicationId: string;
   status: string;
+  mode?: string;
   eligible: boolean;
   title: string;
   company: string;
@@ -1260,6 +1294,9 @@ type ApplyKit = {
   listingUrl: string;
   contact: { key: string; label: string; value: string; ready: boolean; note: string }[];
   resumeText: string;
+  versionId?: string;
+  versionLabel?: string;
+  versionPinned?: boolean;
   answers: { id: string; prompt: string; answer: string; kind: string; blankReason: string; hint: string; ready: boolean }[];
   blankCount: number;
   steps: { id: string; title: string; detail: string; ready: boolean }[];
@@ -1272,21 +1309,39 @@ type ApplyKit = {
     documentsComplete: number;
     blockers: string[];
   };
+  metrics?: {
+    opened: number;
+    copied: number;
+    completed: number;
+    completionRate: number;
+  };
 };
 
 function BrowserApplyAssistant({
   applicationId,
+  defaultOpen = false,
   onDone,
   onError,
 }: {
   applicationId: string;
+  defaultOpen?: boolean;
+  versions?: { id: string; label: string }[];
+  versionId?: string;
   onDone: () => void;
   onError: (message: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [kit, setKit] = useState<ApplyKit | null>(null);
   const [copied, setCopied] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (defaultOpen) {
+      setOpen(true);
+      void load().catch((err: Error) => onError(err.message));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applicationId, defaultOpen]);
 
   async function load() {
     const data = await api<{ kit: ApplyKit }>(`/api/applications/${applicationId}/apply-kit`);
@@ -1299,6 +1354,10 @@ function BrowserApplyAssistant({
       await navigator.clipboard.writeText(value);
       setCopied(label);
       window.setTimeout(() => setCopied((current) => (current === label ? "" : current)), 1600);
+      void api(`/api/applications/${applicationId}/apply-kit/event`, {
+        method: "POST",
+        body: JSON.stringify({ event: "copied", detail: label }),
+      }).catch(() => undefined);
     } catch {
       onError("Clipboard access was blocked. Select and copy the text manually.");
     }
@@ -1307,7 +1366,7 @@ function BrowserApplyAssistant({
   return (
     <div className="apply-kit">
       <button
-        className="text-btn"
+        className="btn btn-primary btn-sm"
         type="button"
         onClick={() => {
           const next = !open;
@@ -1315,7 +1374,7 @@ function BrowserApplyAssistant({
           if (next) void load().catch((err: Error) => onError(err.message));
         }}
       >
-        {open ? "Hide browser apply assistant" : "Apply in browser"}
+        {open ? "Hide Assisted Apply kit" : "Assisted Apply kit"}
       </button>
       {open ? (
         <div className="apply-kit-panel">
@@ -1325,12 +1384,16 @@ function BrowserApplyAssistant({
                 Keep this open beside the employer form. Copy contact, resume, and answers — JobPilot never invents values.
                 {kit.blankCount ? ` ${kit.blankCount} answer${kit.blankCount === 1 ? "" : "s"} still need you.` : ""}
               </p>
+              {kit.versionLabel ? <p className="role">Pinned resume: {kit.versionLabel}</p> : null}
               {kit.readiness ? (
                 <p className={kit.readiness.state === "APPLICATION_READY" ? "role" : "form-error"} role="status">
                   {kit.readiness.state === "APPLICATION_READY"
                     ? `Application ready · match ${kit.readiness.matchScore}% · resume alignment ${kit.readiness.resumeAlignment}%`
                     : `User action required · ${(kit.readiness.blockers || []).slice(0, 2).join(" ")}`}
                 </p>
+              ) : null}
+              {kit.metrics ? (
+                <p className="role">Kit opens {kit.metrics.opened} · copies {kit.metrics.copied} · completed {kit.metrics.completed}</p>
               ) : null}
               <ol className="apply-kit-steps">
                 {kit.steps.map((step) => (
