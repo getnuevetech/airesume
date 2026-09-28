@@ -79,9 +79,13 @@ Browser (+ optional extension)
 2. `POST /api/resume/clarify` stores verified ledger facts and unlocks Upscale claims checks — **shipped**
 3. Resume UI answer → Save to Fact Ledger loop — **shipped**
 
-### Done (Slices A–O) — do not reopen unless regressing
+### Slice P — Producer/reviewer disagreement reconciliation
+1. Rules-based reconciliation when career extraction and career review disagree — **shipped**
+2. Keep only resume-supported claims; drop or confirm the rest; attach decision report on extraction — **shipped**
 
-Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply quality loop, outcomes/interview/follow-ups, extension capture MVP, Auto-Apply auth, TURN env, security headers/rate limits, hide model names, launch readiness panel, richer tracker outcomes, Upscale clarification → Fact Ledger loop.
+### Done (Slices A–P) — do not reopen unless regressing
+
+Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply quality loop, outcomes/interview/follow-ups, extension capture MVP, Auto-Apply auth, TURN env, security headers/rate limits, hide model names, launch readiness panel, richer tracker outcomes, Upscale clarification → Fact Ledger loop, producer/reviewer reconciliation.
 
 ### Deferred unless explicitly requested
 
@@ -91,7 +95,7 @@ Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply
 - Employer feature expansion
 - Salary negotiation / recruiter outreach agents
 - SFU media stack
-- Producer/reviewer disagreement reconciliation
+- Versioned admin prompt registry with rollback
 
 ## Pricing gates (implemented in admin plan matrix)
 

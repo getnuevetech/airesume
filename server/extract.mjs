@@ -1,5 +1,6 @@
 import { prompts } from "./ai.mjs";
 import { completeJson } from "./ai-run.mjs";
+import { reconcileProducerReviewer } from "./ai-reconcile.mjs";
 
 const SKILL_WORDS = [
   "Product management",
@@ -544,29 +545,54 @@ export async function extractCareerProfile(text) {
       ? reviewAi.json.unsupported.map(String).filter(Boolean)
       : [];
     const notes = Array.isArray(reviewAi.json.notes) ? reviewAi.json.notes.map(String).filter(Boolean) : [];
-    if (unsupported.length) {
+    const reconciliation = reconcileProducerReviewer({
+      source,
+      profile: reviewed,
+      reviewer: {
+        status: reviewAi.json.status,
+        unsupported,
+        notes,
+      },
+    });
+    Object.assign(reviewed, reconciliation.profile);
+    reviewed.reconciliation = {
+      status: reconciliation.status,
+      decisions: reconciliation.decisions,
+      dropped: reconciliation.dropped,
+      kept: reconciliation.kept,
+      confirmed: reconciliation.confirmed,
+      producer: { provider: ai.provider, model: ai.model },
+      reviewer: { provider: reviewAi.provider, model: reviewAi.model },
+    };
+    if (unsupported.length || reconciliation.dropped.length || reconciliation.confirmed.length) {
       reviewed.warnings = [
-        ...(reviewed.warnings || []),
-        "A second review flagged some extracted details for your confirmation.",
-      ];
-      reviewed.review = {
-        ...(reviewed.review || {}),
-        status: "adjusted",
-        unsupported: [...new Set([...(reviewed.review?.unsupported || []), ...unsupported])],
-        reviewerPrompt: "CAREER_REVIEW_V1",
-      };
-    }
-    for (const note of notes.slice(0, 4)) {
-      if (!reviewed.questions.includes(note)) reviewed.questions.push(note);
-    }
-    if (String(reviewAi.json.status || "").toLowerCase() === "fail" && !unsupported.length) {
-      reviewed.warnings = [
-        ...(reviewed.warnings || []),
-        "A second review asked for confirmation before using every extracted detail.",
+        ...new Set([
+          ...(reviewed.warnings || []),
+          "Producer and reviewer disagreed on some claims; rules kept only resume-supported details.",
+        ]),
       ];
     }
   } else if (reviewAi.error) {
     reviewed.warnings = [...(reviewed.warnings || []), "A second review pass was unavailable; basic checks were used instead."];
+    reviewed.reconciliation = {
+      status: "reviewer_unavailable",
+      decisions: [{ field: "*", action: "agree", reason: "Reviewer unavailable; rules-only profile kept." }],
+      dropped: [],
+      kept: [],
+      confirmed: [],
+      producer: { provider: ai.provider, model: ai.model },
+      reviewer: { provider: reviewAi.provider, model: reviewAi.model, error: reviewAi.error },
+    };
+  } else {
+    reviewed.reconciliation = {
+      status: "agree",
+      decisions: [{ field: "*", action: "agree", reason: "No reviewer disagreements reported." }],
+      dropped: [],
+      kept: [],
+      confirmed: [],
+      producer: { provider: ai.provider, model: ai.model },
+      reviewer: { provider: reviewAi.provider, model: reviewAi.model },
+    };
   }
 
   return reviewed;
