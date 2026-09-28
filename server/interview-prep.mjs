@@ -7,6 +7,7 @@ const BEHAVIORAL = [
   { id: "conflict", prompt: "Describe a time you worked through disagreement.", kind: "star" },
   { id: "impact", prompt: "What impact are you most proud of?", kind: "star" },
   { id: "weakness", prompt: "What is a growth area for you?", kind: "growth" },
+  { id: "follow-up", prompt: "How would you follow up after this interview?", kind: "followup" },
 ];
 
 function lower(value) {
@@ -99,6 +100,16 @@ function growthAnswer(missing = []) {
   };
 }
 
+function followUpAnswer(job, application) {
+  const company = application?.target_company || job.primary_company || job.company || "the team";
+  const title = job.title || "this role";
+  return {
+    ready: true,
+    answer: `Thank you for discussing ${title} at ${company}. I remain interested and can share a tailored resume or clarifying examples from my background if useful. I will follow up once if I have not heard back within a few business days.`,
+    note: "Polite follow-up template — do not invent new claims about the interview.",
+  };
+}
+
 function askEmployer(job, match) {
   const company = job.primary_company || job.company || "the team";
   const asks = [
@@ -140,6 +151,10 @@ export function buildInterviewPrep({ job, doc = {}, match = {}, application = nu
       const draft = growthAnswer(missing);
       return { ...item, ...draft };
     }
+    if (item.kind === "followup") {
+      const draft = followUpAnswer(job, application);
+      return { ...item, ...draft };
+    }
     const bullet = pickBullet(pool, [...matched, job.role, job.title, job.category]);
     const draft = starAnswer(bullet, job);
     return {
@@ -162,6 +177,15 @@ export function buildInterviewPrep({ job, doc = {}, match = {}, application = nu
     };
   });
 
+  const readyPrompts = prompts.filter((item) => item.ready).length;
+  const readyTalking = talkingPoints.filter((item) => item.ready).length;
+  const starReady = prompts.filter((item) => item.kind === "star" && item.ready && item.sourceBullet).length;
+  const starTotal = prompts.filter((item) => item.kind === "star").length;
+  const coverage = Math.round(
+    ((readyPrompts + readyTalking) / Math.max(1, prompts.length + talkingPoints.length)) * 100,
+  );
+  const practiceReady = readyPrompts >= 4 && starReady >= Math.min(2, starTotal) && Boolean(pool.length);
+
   return {
     applicationId: application?.id || null,
     status: application?.status || "",
@@ -182,10 +206,21 @@ export function buildInterviewPrep({ job, doc = {}, match = {}, application = nu
     prompts,
     talkingPoints,
     askEmployer: askEmployer(job, match),
+    coverage: {
+      percent: coverage,
+      promptsReady: readyPrompts,
+      promptsTotal: prompts.length,
+      talkingPointsReady: readyTalking,
+      starWithSource: starReady,
+      practiceReady,
+    },
     reminders: [
       "Only use employers, skills, and numbers that appear in your resume or fact ledger.",
       "If a gap is listed, say how you would ramp — do not claim mastery you do not have.",
       "Sensitive topics (salary, visa, disability, veteran, EEO) stay your call.",
+      practiceReady
+        ? "Coverage looks solid — run a voice practice pass before the interview."
+        : "Hardening needed: fill STAR prompts from resume bullets before practicing aloud.",
     ],
   };
 }

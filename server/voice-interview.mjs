@@ -47,7 +47,15 @@ function extractFacts(doc = {}, match = {}) {
       .join(" ")
       .match(/\d+(\.\d+)?%?|\b\d{4}\b/g) || [],
   );
-  return { skills, employers, titles, phrases, numbers, pool };
+  return {
+    skills,
+    employers,
+    titles,
+    phrases,
+    numbers,
+    pool,
+    missing: unique(match.missing || []).slice(0, 8),
+  };
 }
 
 /**
@@ -74,11 +82,16 @@ export function buildVoicePractice({ prep, doc = {}, match = {} } = {}) {
       employers: facts.employers,
       titles: facts.titles,
       knownNumbers: facts.numbers,
+      missing: facts.missing,
     },
+    coverage: prep?.coverage || null,
     reminders: [
       "Speak from resume facts only — employers, skills, and numbers you can verify.",
       "Browser speech is optional; typed answers work the same for coaching.",
       "Do not invent metrics during practice. Gaps stay honest.",
+      prep?.coverage?.practiceReady
+        ? "Prep coverage is ready — aim for STAR structure without new numbers."
+        : "Finish interview prep coverage before treating this as interview-ready.",
     ],
   };
 }
@@ -160,6 +173,34 @@ export function scoreVoiceAnswer({ prompt, answer = "", facts = {}, coachAnswer 
     notes.push("Growth answers should stay honest about gaps — avoid claiming mastery you have not listed.");
   }
 
+  if (prompt?.kind === "star" || prompt?.kind === "impact") {
+    const hasStarShape =
+      /\b(situation|task|action|result|owned|led|delivered|built|shipped)\b/i.test(text) ||
+      text.split(/\s+/).length >= 24;
+    if (hasStarShape) score += 8;
+    else notes.push("Shape the story as Situation → Action → Result using one resume bullet.");
+  }
+
+  if (prompt?.kind === "followup" && /guarantee|offer|salary|visa/i.test(text)) {
+    score = Math.max(0, score - 15);
+    notes.push("Follow-ups should stay polite and factual — avoid salary, visa, or outcome promises.");
+  }
+
+  // Reject claiming employers/skills not in the fact ledger.
+  const claimedEmployerish = text.match(/\bat\s+([A-Z][A-Za-z0-9&.\- ]{1,40})/g) || [];
+  for (const claim of claimedEmployerish.slice(0, 3)) {
+    const name = claim.replace(/^\bat\s+/i, "").trim();
+    if (name.length < 3) continue;
+    const known = employers.some((employer) => lower(employer).includes(lower(name)) || lower(name).includes(lower(employer)));
+    if (!known && !titles.some((title) => lower(title).includes(lower(name)))) {
+      // Soft flag only when name looks like a company token and is not in resume.
+      if (/[A-Z]/.test(name[0]) && !/^(the|this|that|my|our)$/i.test(name)) {
+        notes.push(`“${name}” is not on your resume employers list — stick to verified workplaces.`);
+        score = Math.max(0, score - 8);
+      }
+    }
+  }
+
   if (prompt?.sourceBullet?.bullet && answerLower.includes(lower(prompt.sourceBullet.bullet).slice(0, 24))) {
     score += 10;
     notes.push("Echoed your source resume bullet.");
@@ -199,11 +240,16 @@ export function summarizeVoiceSession(turns = []) {
       ? 0
       : Math.round(answered.reduce((sum, turn) => sum + Number(turn.feedback?.score || 0), 0) / answered.length);
   const invented = answered.filter((turn) => (turn.feedback?.unverifiedNumbers || []).length > 0).length;
+  const strong = answered.filter((turn) => Number(turn.feedback?.score || 0) >= 75).length;
+  const coverage = turns.length ? Math.round((answered.length / turns.length) * 100) : 0;
   return {
     answered: answered.length,
     total: turns.length,
     averageScore: avg,
     inventedMetricFlags: invented,
+    strongAnswers: strong,
+    coveragePercent: coverage,
+    practiceHardened: invented === 0 && coverage >= 70 && avg >= 45,
     status: answered.length >= turns.length && turns.length ? "complete" : answered.length ? "in_progress" : "started",
   };
 }

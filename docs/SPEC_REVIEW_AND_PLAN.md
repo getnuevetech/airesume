@@ -48,7 +48,7 @@ This plan is candidate-product focused. Employer-side work is Phase 3 in the spe
 - Browser apply kit completion metrics
 - Resume version pinned per application
 
-### Slice E — Intelligence & interview (Phase 2)
+### Slice E — Intelligence & interview (Phase 2) — shipping
 
 - Career insights tied to outcomes
 - Interview prep + voice practice hardening

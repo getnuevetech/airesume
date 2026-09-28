@@ -6,8 +6,8 @@ import { computeApplicationReadiness } from "./readiness.mjs";
 import { migrate, SCHEMA_VERSION } from "./schema.mjs";
 import { db, id } from "./db.mjs";
 
-test("schema version is 17 for apply kit events", () => {
-  assert.equal(SCHEMA_VERSION, 17);
+test("schema includes apply kit events table", () => {
+  assert.ok(SCHEMA_VERSION >= 17);
   migrate();
   const columns = db.prepare("PRAGMA table_info(apply_kit_events)").all();
   assert.ok(columns.some((column) => column.name === "event"));

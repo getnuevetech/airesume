@@ -83,11 +83,13 @@ Browser
 10. ~~Review-first Assisted Apply as default~~ (done on `cursor/apply-quality-loop-b068`)
 11. ~~Browser apply kit completion metrics~~
 12. ~~Resume version pinned per application~~
+13. ~~Career insights tied to outcomes~~ (done on `cursor/outcome-followups-b068`)
+14. ~~Interview prep + voice practice hardening~~
+15. ~~Follow-up reminders~~
 
-Next after Slice D (Slice E — intelligence & interview):
-1. Career insights tied to outcomes
-2. Interview prep + voice practice hardening
-3. Follow-up reminders
+Next after Slice E:
+1. Browser extension capture (later / deferred)
+2. Controlled Auto Apply authorization UX (explicit request only)
 
 ### Deferred unless explicitly requested
 

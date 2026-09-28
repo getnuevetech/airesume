@@ -7,6 +7,7 @@ import { fetchJobUrl, parseJobPaste } from "./job-import.mjs";
 import { buildApplyKit } from "./apply-kit.mjs";
 import { applyKitMetrics, recordApplyKitEvent } from "./apply-kit-metrics.mjs";
 import { computeApplicationReadiness } from "./readiness.mjs";
+import { ensureFollowUpReminder } from "./follow-ups.mjs";
 
 export function registerApplications(app, ctx) {
   const {
@@ -316,6 +317,14 @@ export function registerApplications(app, ctx) {
     const delivery = "You applied on the employer site with Assisted Apply.";
     db.prepare("UPDATE applications SET status = 'Applied', delivery = ?, updated_at = ? WHERE id = ?").run(delivery, Date.now(), row.id);
     recordApplyKitEvent(user.id, row.id, "completed");
+    const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(row.job_id);
+    ensureFollowUpReminder({
+      userId: user.id,
+      applicationId: row.id,
+      status: "Applied",
+      company: row.target_company || job?.primary_company || job?.company || "",
+      title: job?.title || "",
+    });
     res.json({
       ok: true,
       status: "Applied",
@@ -370,6 +379,13 @@ export function registerApplications(app, ctx) {
     }
     const delivery = await employerDelivery(user, job, version.rendered || "");
     db.prepare("UPDATE applications SET status = 'Applied', delivery = ?, updated_at = ? WHERE id = ?").run(delivery, Date.now(), row.id);
+    ensureFollowUpReminder({
+      userId: user.id,
+      applicationId: row.id,
+      status: "Applied",
+      company: row.target_company || job.primary_company || job.company || "",
+      title: job.title || "",
+    });
     res.json({ ok: true, status: "Applied", delivery, versionId: version.id });
   });
 
@@ -442,6 +458,15 @@ export function registerApplications(app, ctx) {
       res.status(404).json({ error: "Application not found." });
       return;
     }
+    const row = db.prepare("SELECT * FROM applications WHERE id = ?").get(req.params.id);
+    const job = row ? db.prepare("SELECT * FROM jobs WHERE id = ?").get(row.job_id) : null;
+    ensureFollowUpReminder({
+      userId: user.id,
+      applicationId: req.params.id,
+      status,
+      company: row?.target_company || job?.primary_company || job?.company || "",
+      title: job?.title || "",
+    });
     res.json({ ok: true });
   });
 

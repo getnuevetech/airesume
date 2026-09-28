@@ -48,6 +48,7 @@ export function OverviewPage() {
         <Tile label="Resume rating" value={data.stats.resumeRating === null ? "—" : String(data.stats.resumeRating)} />
         <Tile label="Recommended" value={String(data.stats.recommended)} />
         <Tile label="Ready to submit" value={String(data.stats.ready || 0)} />
+        <Tile label="Follow-ups due" value={String(data.stats.followUpsDue || 0)} />
         <Tile label="Submitted" value={String(data.stats.applied)} />
       </div>
       <div className="account-split">
@@ -87,7 +88,11 @@ type CareerInsights = {
     tracked: number;
     submitted: number;
     responses: number;
+    interviews?: number;
+    offers?: number;
+    rejected?: number;
     responseRate: number | null;
+    interviewRate?: number | null;
     skillCount: number;
   };
   strengths: { skill: string; demand: number; kind: string }[];
@@ -96,6 +101,18 @@ type CareerInsights = {
   categoryOutlook: { category: string; jobs: number; avgScore: number; strong: number }[];
   focus: { id: string; title: string; detail: string }[];
   topMatches: { id: string; title: string; company: string; score: number; label: string; missing: string[] }[];
+  outcomes?: {
+    interviews: number;
+    offers: number;
+    rejected: number;
+    advanced: number;
+    stalled: number;
+    avgMatchAdvanced: number | null;
+    avgMatchStalled: number | null;
+    winningCategories: { label: string; count: number }[];
+    winningSkills: { skill: string; hits: number; kind: string }[];
+    lessons: { id: string; title: string; detail: string }[];
+  };
 };
 
 export function InsightsPage() {
@@ -122,7 +139,7 @@ export function InsightsPage() {
             <p className="eyebrow">Career intelligence</p>
             <h1>Insights</h1>
             <p className="lede">
-              Demand and gaps are counted from open roles against skills already on your resume. Nothing is invented.
+              Demand, gaps, and outcome lessons are counted from open roles and your tracker. Nothing is invented.
               {limited ? ` Your ${planName || "current"} plan shows a shorter skill list.` : ""}
             </p>
           </div>
@@ -132,9 +149,32 @@ export function InsightsPage() {
             <div className="stat-grid">
               <Tile label="Catalog roles" value={String(insights.summary.catalogJobs)} />
               <Tile label="Strong matches" value={String(insights.summary.strongMatches)} />
-              <Tile label="Tracked" value={String(insights.summary.tracked)} />
               <Tile label="Response rate" value={insights.summary.responseRate === null ? "—" : `${insights.summary.responseRate}%`} />
+              <Tile label="Interview rate" value={insights.summary.interviewRate == null ? "—" : `${insights.summary.interviewRate}%`} />
             </div>
+            {insights.outcomes ? (
+              <section className="account-card">
+                <h2>Outcomes from your tracker</h2>
+                <p className="role">
+                  {insights.outcomes.advanced} advanced · {insights.outcomes.interviews} interviews · {insights.outcomes.offers} offers · {insights.outcomes.rejected} rejected
+                  {insights.outcomes.avgMatchAdvanced != null ? ` · avg match on advanced ${insights.outcomes.avgMatchAdvanced}%` : ""}
+                  {insights.outcomes.avgMatchStalled != null ? ` · avg match on stalled ${insights.outcomes.avgMatchStalled}%` : ""}
+                </p>
+                {insights.outcomes.winningSkills.length ? (
+                  <div className="chips">
+                    {insights.outcomes.winningSkills.map((item) => (
+                      <span className="chip" key={item.skill}>{item.skill} · advanced {item.hits}</span>
+                    ))}
+                  </div>
+                ) : null}
+                {insights.outcomes.lessons.length ? insights.outcomes.lessons.map((lesson) => (
+                  <article className="insight-focus" key={lesson.id}>
+                    <strong>{lesson.title}</strong>
+                    <p className="role">{lesson.detail}</p>
+                  </article>
+                )) : <p className="role">Move applications to Applied / Interview / Offer to unlock outcome lessons.</p>}
+              </section>
+            ) : null}
             <div className="account-split">
               <section className="account-card">
                 <h2>Focus next</h2>
@@ -237,6 +277,14 @@ type InterviewPrep = {
   talkingPoints: { skill: string; detail: string; ready: boolean }[];
   askEmployer: string[];
   reminders: string[];
+  coverage?: {
+    percent: number;
+    promptsReady: number;
+    promptsTotal: number;
+    talkingPointsReady: number;
+    starWithSource: number;
+    practiceReady: boolean;
+  };
 };
 
 type VoiceFeedback = {
@@ -283,10 +331,10 @@ type VoiceSession = {
 export function InterviewPage() {
   const { data, setError } = useAccount();
   const eligible = (data?.applications || []).filter((item) =>
-    ["Ready", "Applied", "Responded", "Interview", "Offer"].includes(item.status),
+    ["Ready", "Review required", "Applied", "Responded", "Interview", "Offer"].includes(item.status),
   );
   const priority = [...eligible].sort((a, b) => {
-    const rank = (status: string) => ({ Interview: 0, Offer: 1, Responded: 2, Applied: 3, Ready: 4 }[status] ?? 9);
+    const rank = (status: string) => ({ Interview: 0, Offer: 1, Responded: 2, Applied: 3, Ready: 4, "Review required": 5 }[status] ?? 9);
     return rank(a.status) - rank(b.status);
   });
   const [selected, setSelected] = useState("");
@@ -312,7 +360,7 @@ export function InterviewPage() {
         {!priority.length ? (
           <section className="account-card">
             <h2>No interview-ready applications yet</h2>
-            <p className="lede">Prep unlocks for Ready, Applied, Responded, Interview, and Offer rows in your tracker.</p>
+            <p className="lede">Prep unlocks for Ready, Review required, Applied, Responded, Interview, and Offer rows in your tracker.</p>
             <Link className="btn btn-primary btn-sm" to="/account/applications">Open tracker</Link>
           </section>
         ) : (
@@ -417,6 +465,12 @@ function InterviewPrepPanel({
                 {prep.listingUrl ? <a className="btn btn-ghost btn-sm" href={prep.listingUrl} target="_blank" rel="noreferrer">Open listing</a> : null}
               </header>
               <p className="lede">Matched: {(prep.briefing.matched || []).join(", ") || "limited overlap"}.{(prep.briefing.missing || []).length ? ` Gaps to discuss honestly: ${prep.briefing.missing.join(", ")}.` : ""}</p>
+              {prep.coverage ? (
+                <p className={prep.coverage.practiceReady ? "role" : "form-error"} role="status">
+                  Prep coverage {prep.coverage.percent}% · {prep.coverage.promptsReady}/{prep.coverage.promptsTotal} prompts ready · {prep.coverage.starWithSource} STAR with source bullets
+                  {prep.coverage.practiceReady ? " · ready for voice practice" : " · harden STAR bullets before practicing aloud"}
+                </p>
+              ) : null}
               {prep.briefing.signals.length ? (
                 <>
                   <h3>From the listing</h3>
@@ -1182,9 +1236,16 @@ export function ApplicationsPage() {
               {typeof data.stats.kitCompletionRate === "number"
                 ? ` Kit completion ${data.stats.kitCompletionRate}% (${data.stats.kitCompleted || 0}/${data.stats.kitOpened || 0}).`
                 : ""}
+              {data.stats.followUpsDue ? ` ${data.stats.followUpsDue} follow-up${data.stats.followUpsDue === 1 ? "" : "s"} due.` : ""}
             </p>
           </div>
         </header>
+        {data.features.manual_apply ? (
+          <FollowUpsPanel
+            onDone={() => { setMessage("Follow-up updated."); void reload(); }}
+            onError={(message) => setError(message)}
+          />
+        ) : null}
         {data.features.auto_apply ? (
           <AutoApply
             enabled={data.autoApply}
@@ -1261,7 +1322,7 @@ export function ApplicationsPage() {
                 onError={(message) => setError(message)}
               />
             ) : null}
-            {["Ready", "Applied", "Responded", "Interview", "Offer"].includes(item.status) ? (
+            {["Ready", "Review required", "Applied", "Responded", "Interview", "Offer"].includes(item.status) ? (
               <InterviewPrepPanel
                 applicationId={item.id}
                 onError={(message) => setError(message)}
@@ -1461,6 +1522,84 @@ function BrowserApplyAssistant({
         </div>
       ) : null}
     </div>
+  );
+}
+
+type FollowUpReminder = {
+  id: string;
+  applicationId: string;
+  kind: string;
+  title: string;
+  detail: string;
+  company: string;
+  roleTitle: string;
+  status: string;
+  dueAt: number;
+  overdue: boolean;
+};
+
+function FollowUpsPanel({
+  onDone,
+  onError,
+}: {
+  onDone: () => void;
+  onError: (message: string) => void;
+}) {
+  const [reminders, setReminders] = useState<FollowUpReminder[]>([]);
+  const [metrics, setMetrics] = useState<{ open: number; due: number; done: number } | null>(null);
+
+  async function load() {
+    const data = await api<{ reminders: FollowUpReminder[]; metrics: { open: number; due: number; done: number } }>("/api/follow-ups");
+    setReminders(data.reminders || []);
+    setMetrics(data.metrics || null);
+  }
+
+  useEffect(() => {
+    void load().catch((err: Error) => onError(err.message));
+  }, [onError]);
+
+  async function act(id: string, action: string) {
+    await api(`/api/follow-ups/${id}/${action}`, {
+      method: "POST",
+      body: JSON.stringify(action === "snooze" ? { snoozeDays: 2 } : {}),
+    });
+    await load();
+    onDone();
+  }
+
+  if (!reminders.length && !metrics?.due) {
+    return (
+      <section className="account-card">
+        <h2>Follow-up reminders</h2>
+        <p className="role">Reminders appear after you mark Applied, Responded, Interview, or Offer.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="account-card">
+      <h2>Follow-up reminders</h2>
+      <p className="role">
+        {metrics ? `${metrics.due} due · ${metrics.open} open · ${metrics.done} done` : "Loading…"}
+      </p>
+      {reminders.map((item) => (
+        <div className="quiet-row" key={item.id}>
+          <div>
+            <strong>{item.title}</strong>
+            <p className="role">
+              {[item.roleTitle, item.company].filter(Boolean).join(" · ")}
+              {item.overdue ? " · due now" : ` · due ${new Date(item.dueAt).toLocaleDateString()}`}
+            </p>
+            <p className="role">{item.detail}</p>
+          </div>
+          <div className="job-actions">
+            <button className="btn btn-primary btn-sm" type="button" onClick={() => void act(item.id, "done").catch((err: Error) => onError(err.message))}>Done</button>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => void act(item.id, "snooze").catch((err: Error) => onError(err.message))}>Snooze 2d</button>
+            <button className="text-btn" type="button" onClick={() => void act(item.id, "dismiss").catch((err: Error) => onError(err.message))}>Dismiss</button>
+          </div>
+        </div>
+      ))}
+    </section>
   );
 }
 

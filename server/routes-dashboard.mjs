@@ -6,6 +6,7 @@ import { TRACKER_STATUSES } from "./apply-rules.mjs";
 import { allowExplanation, explanationQuota, redactMatch, reviewQuota } from "./quota.mjs";
 import { publicPlan, resolveTemplate, templateLimitOf, RESUME_TEMPLATES } from "./schema.mjs";
 import { applyKitMetrics } from "./apply-kit-metrics.mjs";
+import { followUpMetrics, syncFollowUpsForUser } from "./follow-ups.mjs";
 
 function publicVersion(row) {
   return { id: row.id, label: row.label, kind: row.kind, active: Boolean(row.active), rendered: row.rendered, createdAt: row.created_at };
@@ -105,6 +106,9 @@ export function registerDashboard(app, ctx) {
     const readyCount = applications.filter((item) => item.status === "Ready").length;
     const reviewCount = applications.filter((item) => item.status === "Review required").length;
     const kitStats = applyKitMetrics({ userId: user.id });
+    const jobsById = new Map(jobs.map((job) => [job.id, job]));
+    syncFollowUpsForUser(user.id, applications, jobsById);
+    const followUps = followUpMetrics(user.id);
     const versionLabels = new Map(versions.map((item) => [item.id, item.label]));
     res.json({
       profile: profilePayload(profile, user, parse),
@@ -145,6 +149,8 @@ export function registerDashboard(app, ctx) {
         kitOpened: kitStats.kitsOpened,
         kitCompleted: kitStats.kitsCompleted,
         kitCompletionRate: kitStats.completionRate,
+        followUpsDue: followUps.due,
+        followUpsOpen: followUps.open,
       },
       jobs: ranked.map((item) => jobCard(item.job, item, sourceNames, appliedIds.has(item.job.id))),
       applications: applications.map((item) => {
