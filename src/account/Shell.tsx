@@ -1,4 +1,4 @@
-import { NavLink, Outlet, Link } from "react-router-dom";
+import { NavLink, Outlet, Link, Navigate, useLocation } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { AccountProvider, useAccount } from "./AccountContext";
 
@@ -15,6 +15,7 @@ const ITEMS = [
 
 export function AccountShell() {
   const { user } = useApp();
+  const location = useLocation();
   if (!user) {
     return (
       <div className="container page-hero">
@@ -22,6 +23,9 @@ export function AccountShell() {
         <Link className="btn btn-primary btn-lg" to="/signin">Sign in</Link>
       </div>
     );
+  }
+  if (user.mustChangePassword && location.pathname !== "/account/settings") {
+    return <Navigate to="/account/settings" replace />;
   }
   return (
     <AccountProvider>

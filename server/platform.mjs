@@ -7,6 +7,8 @@ import { completeJson } from "./ai-run.mjs";
 import { AI_FUNCTIONS, FEATURES, RESUME_TEMPLATES, migrate, publicPlan, resolveTemplate, templateLimitOf } from "./schema.mjs";
 import { deliverMail } from "./mail.mjs";
 import { feedConfig, fetchFeedListings, normalizeFeedUrl, publicFeedConfig, resolvePrimary } from "./feeds.mjs";
+import { extractRequirements, matchJob } from "./match.mjs";
+import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 migrate();
 
@@ -120,11 +122,6 @@ function sourceText(doc) {
   return JSON.stringify(doc);
 }
 
-function claimsSupported(proposed, source) {
-  const numbers = String(proposed).match(/\d[\d,.]*/g) || [];
-  return numbers.every((number) => source.includes(number));
-}
-
 function diagnose(doc) {
   const feedback = [];
   const recommendations = [];
@@ -232,21 +229,6 @@ function setPath(doc, path, value) {
   return true;
 }
 
-function matchJob(doc, preferences, job) {
-  const skills = (doc.skills || []).map((skill) => skill.toLowerCase());
-  const required = parse(job.skills, []);
-  const matched = required.filter((skill) => skills.some((owned) => owned.includes(skill.toLowerCase()) || skill.toLowerCase().includes(owned)));
-  const skillScore = required.length ? matched.length / required.length : 0.45;
-  const titles = (doc.employment || []).map((item) => `${item.title || ""} ${item.employer || ""}`.toLowerCase());
-  const role = `${job.title} ${job.role}`.toLowerCase();
-  const titleScore = titles.some((title) => title && (role.includes(title.split(",")[0]) || title.includes(String(job.role || "").toLowerCase()))) ? 1 : 0.35;
-  let locationScore = 0.7;
-  const places = String(preferences.locations || "").toLowerCase();
-  if (places) locationScore = places.split(/[,/]/).some((place) => job.location.toLowerCase().includes(place.trim()) || job.remote_type === "remote") ? 1 : 0.4;
-  const score = Math.round(skillScore * 60 + titleScore * 25 + locationScore * 15);
-  return { score: Math.max(1, Math.min(99, score)), matched, missing: required.filter((skill) => !matched.includes(skill)) };
-}
-
 function categorizeText(title, description) {
   const blob = `${title} ${description}`.toLowerCase();
   const rules = [
@@ -298,21 +280,30 @@ function saveJob(sourceId, raw) {
   const key = jobKey(raw);
   const existing = db.prepare("SELECT * FROM jobs WHERE source_id = ? AND external_key = ?").get(sourceId, key);
   const skills = Array.isArray(raw.skills) ? raw.skills.map(String).slice(0, 12) : [];
+  const requirements = raw.requirements && typeof raw.requirements === "object"
+    ? raw.requirements
+    : extractRequirements({
+      title: raw.title,
+      description: raw.description,
+      skills,
+      role: raw.role,
+      category: raw.category,
+    });
   const primaryCompany = String(raw.primaryCompany || raw.company || "");
   const primaryUrl = String(raw.primaryUrl || "");
   const primaryEmail = String(raw.primaryEmail || "");
   if (existing) {
     db.prepare(
-      `UPDATE jobs SET title = ?, company = ?, location = ?, remote_type = ?, salary_min = ?, salary_max = ?, description = ?, skills = ?, category = ?, role = ?, source_url = ?, verification = ?, verification_note = ?, primary_company = ?, primary_url = ?, primary_email = ?, active = 1
+      `UPDATE jobs SET title = ?, company = ?, location = ?, remote_type = ?, salary_min = ?, salary_max = ?, description = ?, skills = ?, requirements = ?, category = ?, role = ?, source_url = ?, verification = ?, verification_note = ?, primary_company = ?, primary_url = ?, primary_email = ?, active = 1
        WHERE id = ?`,
-    ).run(raw.title, raw.company, raw.location || "", raw.remoteType || "", raw.salaryMin || null, raw.salaryMax || null, raw.description || "", JSON.stringify(skills), raw.category || "", raw.role || "", raw.sourceUrl || "", raw.verification, raw.note, primaryCompany, primaryUrl, primaryEmail, existing.id);
+    ).run(raw.title, raw.company, raw.location || "", raw.remoteType || "", raw.salaryMin || null, raw.salaryMax || null, raw.description || "", JSON.stringify(skills), JSON.stringify(requirements), raw.category || "", raw.role || "", raw.sourceUrl || "", raw.verification, raw.note, primaryCompany, primaryUrl, primaryEmail, existing.id);
     return existing.id;
   }
   const jobId = id("job");
   db.prepare(
-    `INSERT INTO jobs (id, source_id, external_key, title, company, location, remote_type, employment_type, salary_min, salary_max, description, skills, category, role, source_url, verification, verification_note, primary_company, primary_url, primary_email, active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'full-time', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-  ).run(jobId, sourceId, key, raw.title, raw.company, raw.location || "", raw.remoteType || "", raw.salaryMin || null, raw.salaryMax || null, raw.description || "", JSON.stringify(skills), raw.category || "", raw.role || "", raw.sourceUrl || "", raw.verification, raw.note, primaryCompany, primaryUrl, primaryEmail, Date.now());
+    `INSERT INTO jobs (id, source_id, external_key, title, company, location, remote_type, employment_type, salary_min, salary_max, description, skills, requirements, category, role, source_url, verification, verification_note, primary_company, primary_url, primary_email, active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'full-time', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+  ).run(jobId, sourceId, key, raw.title, raw.company, raw.location || "", raw.remoteType || "", raw.salaryMin || null, raw.salaryMax || null, raw.description || "", JSON.stringify(skills), JSON.stringify(requirements), raw.category || "", raw.role || "", raw.sourceUrl || "", raw.verification, raw.note, primaryCompany, primaryUrl, primaryEmail, Date.now());
   return jobId;
 }
 
@@ -458,15 +449,9 @@ function applyPlan(user, plan, gateway, cycle, externalId, amount, credit) {
   }
 }
 
-function tailoredDocument(doc, job, match) {
-  const skills = [...(doc.skills || [])];
-  skills.sort((a, b) => Number(match.matched.some((skill) => skill.toLowerCase() === b.toLowerCase())) - Number(match.matched.some((skill) => skill.toLowerCase() === a.toLowerCase())));
-  return { ...doc, skills };
-}
-
-async function createApplication(user, job, mode, doc, preferences) {
+async function createApplication(user, job, mode, doc, preferences, facts = []) {
   const match = matchJob(doc, preferences, job);
-  const versionDoc = tailoredDocument(doc, job, match);
+  const versionDoc = tailoredDocument(doc, job, match, facts);
   const rendered = renderDocument(versionDoc);
   const versionId = id("ver");
   const targetCompany = job.primary_company || job.company;
@@ -533,8 +518,11 @@ function jobCard(job, match, sourceNames, applied) {
     verification: job.verification,
     description: job.description,
     score: match.score,
+    label: match.label || "",
+    explanation: match.explanation || "",
     matched: match.matched,
     missing: match.missing,
+    preferredMatched: match.preferredMatched || [],
     applied,
   };
 }
@@ -603,7 +591,7 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
         applied: applications.length,
         responded,
         available: ranked.length,
-        recommended: ranked.filter((item) => item.score >= 70).length,
+        recommended: ranked.filter((item) => item.score >= 70 || item.label === "strong" || item.label === "good").length,
         versions: versions.length,
       },
       jobs: ranked.map((item) => jobCard(item.job, item, sourceNames, appliedIds.has(item.job.id))),
@@ -849,7 +837,7 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       res.status(400).json({ error: "That job is not available." });
       return;
     }
-    const score = await createApplication(user, job, "manual", parse(version.document, {}), parse(profile.preferences, {}));
+    const score = await createApplication(user, job, "manual", parse(version.document, {}), parse(profile.preferences, {}), parse(profile.facts, []));
     res.json({ ok: true, score });
   });
 
@@ -869,6 +857,7 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     }
     const doc = parse(version.document, {});
     const preferences = parse(profile.preferences, {});
+    const facts = parse(profile.facts, []);
     const existing = new Set(db.prepare("SELECT job_id FROM applications WHERE user_id = ?").all(user.id).map((item) => item.job_id));
     const ready = db
       .prepare("SELECT * FROM jobs WHERE active = 1")
@@ -878,7 +867,7 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       .filter((item) => item.score >= (user.auto_min || 85) && !existing.has(item.job.id))
       .sort((a, b) => b.score - a.score)
       .slice(0, 10);
-    for (const item of ready) await createApplication(user, item.job, "auto", doc, preferences);
+    for (const item of ready) await createApplication(user, item.job, "auto", doc, preferences, facts);
     res.json({ applied: ready.length });
   });
 

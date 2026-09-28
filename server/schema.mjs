@@ -1,4 +1,7 @@
 import { db, id } from "./db.mjs";
+import { extractRequirements } from "./match.mjs";
+
+export const SCHEMA_VERSION = 2;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -70,6 +73,7 @@ export function migrate() {
   addColumn("users", "plan_id", "TEXT DEFAULT 'free'");
   addColumn("users", "auto_apply", "INTEGER DEFAULT 0");
   addColumn("users", "auto_min", "INTEGER DEFAULT 85");
+  addColumn("users", "password_must_change", "INTEGER DEFAULT 0");
   addColumn("profiles", "headline", "TEXT DEFAULT ''");
   addColumn("profiles", "photo_url", "TEXT DEFAULT ''");
   addColumn("profiles", "slug", "TEXT DEFAULT ''");
@@ -189,6 +193,7 @@ export function migrate() {
       salary_max INTEGER,
       description TEXT DEFAULT '',
       skills TEXT DEFAULT '[]',
+      requirements TEXT DEFAULT '{}',
       category TEXT DEFAULT '',
       role TEXT DEFAULT '',
       source_url TEXT DEFAULT '',
@@ -213,6 +218,7 @@ export function migrate() {
   addColumn("jobs", "primary_company", "TEXT DEFAULT ''");
   addColumn("jobs", "primary_url", "TEXT DEFAULT ''");
   addColumn("jobs", "primary_email", "TEXT DEFAULT ''");
+  addColumn("jobs", "requirements", "TEXT DEFAULT '{}'");
   addColumn("applications", "target_company", "TEXT DEFAULT ''");
   addColumn("applications", "target_url", "TEXT DEFAULT ''");
   addColumn("applications", "target_email", "TEXT DEFAULT ''");
@@ -259,11 +265,19 @@ export function migrate() {
       "INSERT INTO job_sources (id, name, kind, config, enabled, created_at) VALUES (?, 'JobPilot catalog', 'catalog', '{}', 1, ?)",
     ).run(sourceId, Date.now());
     const insert = db.prepare(
-      `INSERT INTO jobs (id, source_id, external_key, title, company, location, remote_type, employment_type, salary_min, salary_max, description, skills, category, role, source_url, verification, verification_note, active, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'full-time', ?, ?, ?, ?, ?, ?, '', ?, ?, 1, ?)`,
+      `INSERT INTO jobs (id, source_id, external_key, title, company, location, remote_type, employment_type, salary_min, salary_max, description, skills, requirements, category, role, source_url, verification, verification_note, active, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'full-time', ?, ?, ?, ?, ?, ?, ?, '', ?, ?, 1, ?)`,
     );
     CATALOG.forEach((job, index) => {
       const staffing = /staffing|recruit/i.test(job[1]);
+      const skills = job[8];
+      const requirements = extractRequirements({
+        title: job[0],
+        description: job[9],
+        skills,
+        role: job[7],
+        category: job[6],
+      });
       insert.run(
         id("job"),
         sourceId,
@@ -275,7 +289,8 @@ export function migrate() {
         job[4],
         job[5],
         job[9],
-        JSON.stringify(job[8]),
+        JSON.stringify(skills),
+        JSON.stringify(requirements),
         job[6],
         job[7],
         staffing ? "Third-party recruiter" : "Active",
@@ -295,6 +310,32 @@ export function migrate() {
     }
   }
 
+  for (const job of db.prepare("SELECT id, title, description, skills, role, category, requirements FROM jobs").all()) {
+    let needs = false;
+    try {
+      const parsed = JSON.parse(job.requirements || "{}");
+      needs = !parsed || !Array.isArray(parsed.mandatory);
+    } catch {
+      needs = true;
+    }
+    if (!needs) continue;
+    const skills = (() => {
+      try {
+        return JSON.parse(job.skills || "[]");
+      } catch {
+        return [];
+      }
+    })();
+    const requirements = extractRequirements({
+      title: job.title,
+      description: job.description,
+      skills,
+      role: job.role,
+      category: job.category,
+    });
+    db.prepare("UPDATE jobs SET requirements = ? WHERE id = ?").run(JSON.stringify(requirements), job.id);
+  }
+
   const templateDefaults = { free: 2, starter: 3, pro: 4, autopilot: 6 };
   for (const plan of db.prepare("SELECT id, features FROM plans").all()) {
     const features = JSON.parse(plan.features || "{}");
@@ -302,6 +343,13 @@ export function migrate() {
       features.template_limit = templateDefaults[plan.id] ?? 2;
       db.prepare("UPDATE plans SET features = ? WHERE id = ?").run(JSON.stringify(features), plan.id);
     }
+  }
+
+  const versionRow = db.prepare("SELECT version FROM schema_version LIMIT 1").get();
+  if (!versionRow) {
+    db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(SCHEMA_VERSION);
+  } else if (versionRow.version < SCHEMA_VERSION) {
+    db.prepare("UPDATE schema_version SET version = ?").run(SCHEMA_VERSION);
   }
 }
 

@@ -21,12 +21,21 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [message, setMessage] = useState("");
 
   async function reload() {
+    if (user?.mustChangePassword) {
+      setData(null);
+      return;
+    }
     const next = await api<AccountData>("/api/dashboard");
     setData(next);
   }
 
   useEffect(() => {
     if (!user) return;
+    if (user.mustChangePassword) {
+      setError("");
+      setData(null);
+      return;
+    }
     void reload().catch((err: Error) => setError(err.message));
   }, [user]);
 

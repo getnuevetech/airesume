@@ -7,6 +7,7 @@ export type User = {
   role?: "user" | "admin";
   status?: string;
   planId?: string;
+  mustChangePassword?: boolean;
 };
 
 export type ResumeFile = {

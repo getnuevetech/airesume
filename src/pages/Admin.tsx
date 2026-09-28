@@ -17,9 +17,10 @@ export function AdminPage() {
 
   useEffect(() => {
     if (ready && user?.role !== "admin") navigate("/signin", { replace: true });
+    if (ready && user?.mustChangePassword) navigate("/account/settings", { replace: true });
   }, [ready, user, navigate]);
 
-  if (!user || user.role !== "admin") return null;
+  if (!user || user.role !== "admin" || user.mustChangePassword) return null;
 
   return (
     <div className="admin-shell">

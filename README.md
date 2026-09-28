@@ -17,11 +17,23 @@ npm run build
 npm start
 ```
 
-The first admin account is created on the first API boot. Defaults are `admin@jobpilot.app` / `JobPilot-Admin-2026` unless `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set first. The values are written to `server/data/admin-bootstrap.txt`.
+The first admin account is created on the first API boot. Defaults are `admin@jobpilot.app` / `JobPilot-Admin-2026` unless `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set first. When the default password is used, the admin must change it on first sign-in before opening `/admin`. The bootstrap values are written to `server/data/admin-bootstrap.txt`.
 
-After sign-in, the dashboard shows resume rating, tailored jobs, applications, and plan controls. Admins assign each AI function to a provider, edit the plan matrix, add Stripe, PayPal, or a manual ledger, and pull jobs from configured sources. A public resume is served at `/resume/<slug>`.
+After sign-in, the dashboard shows resume rating, tailored jobs, applications, and plan controls. Admins assign each AI function to a provider, edit the plan matrix, add Stripe, PayPal, or a manual ledger, and pull jobs from configured sources. A public resume is served at `/resume/<slug>`. The product plan is in `docs/EXECUTION_PLAN.md`.
 
-Google sign-in needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Resume extraction uses a rules parser unless `OPENAI_API_KEY` is set. The product plan is in `docs/EXECUTION_PLAN.md`.
+Optional environment:
+
+- `ADMIN_EMAIL`, `ADMIN_PASSWORD` before the first database create
+- `COOKIE_SECURE=1` to force Secure session cookies (also set automatically when `x-forwarded-proto` is `https`)
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- `SMTP_*` for password-reset email
+- AI providers are configured in Admin → AI Pipelines (not only via `OPENAI_API_KEY`)
+
+```bash
+npm test
+```
+
+runs the Node smoke tests (migrate, match, claim checks).
 
 ## Lightsail
 

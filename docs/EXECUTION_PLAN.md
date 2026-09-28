@@ -1,19 +1,21 @@
 # JobPilot execution plan
 
-JobPilot is an AI job application manager. The product finds fitting roles, tailors truthful applications from a verified career profile, and tracks outcomes. Quality of applications comes before volume.
+JobPilot is an AI job application manager. Quality of applications comes before volume. The fact ledger is the source of truth: AI may rewrite wording, never invent employers, dates, credentials, skills, or numbers.
 
-This plan is the build sequence. Phase 1 is in the application now. Later phases stay behind the same API, fact ledger, and provider-independent orchestrator.
+## As-built (this repository)
 
-## What is live in this build
+Already live beyond early Phase 1:
 
-- Public homepage rendered from a CMS record. Admins edit menu labels, hero copy, hero image, stats, steps, checklist, story portraits and quotes, closing banner, and footer.
-- Email accounts, cookie sessions, Google sign-in when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, and password reset links that last one hour.
-- Admin accounts can create users and admins, enable or disable accounts, and issue reset links. An admin cannot demote or disable themselves.
-- Resume-first signup. The user uploads a PDF, DOCX, or TXT resume. A career extraction pipeline returns name, email, phone, address, city, summary, skills, employment, and education. A reviewer drops any claim that does not appear in the source text. The user confirms the draft, sets a password, and the account plus fact ledger are stored.
-- Dashboard shows the confirmed profile, fact ledger, and a password change form for email accounts.
-- AI calls go through `server/ai.mjs` routing and `server/extract.mjs`. Without `OPENAI_API_KEY`, extraction is deterministic. With a key, OpenAI extracts and the same reviewer still rejects unsupported facts. Every extraction is written to `ai_audit`.
+- Homepage CMS, email/Google auth, password reset, admin users
+- Resume-first onboarding with extraction + claim review + confirm
+- Account shell: profile, resume review/upscale/versions, templates, jobs, applications, plan, settings
+- Job catalog + JSON/RSS feeds, verification labels, hybrid match score with explanations
+- Requirements JSON on jobs (mandatory/preferred skills, education, years)
+- Job-specific resume shaping that reorders existing facts only
+- Plans, Stripe/PayPal/manual billing hooks, AI provider admin, public `/resume/:slug`
+- Early auto-apply (plan-gated) — still needs stricter caps/exclusions before marketing it as Autopilot
 
-Default admin on first boot: `admin@jobpilot.app` / `JobPilot-Admin-2026`, unless `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set before the database is created. The values are written once to `server/data/admin-bootstrap.txt`.
+Default admin on first boot uses `ADMIN_EMAIL` / `ADMIN_PASSWORD` when set. Without `ADMIN_PASSWORD`, bootstrap credentials force a password change on first sign-in. Session cookies set `Secure` when the request is HTTPS (`x-forwarded-proto`) or `COOKIE_SECURE=1`.
 
 ## Architecture locked for every later phase
 
@@ -22,96 +24,50 @@ Browser
   → Express API
       → Candidate, job, and application services
           → Orchestrator
-              → Task route (config, not hard-coded vendor)
+              → Task route (admin AI assignment, not hard-coded vendor)
                   → Producer model
                   → Reviewer model
                   → Rules engine against the fact ledger
 ```
 
-Rules:
+## Next build sequence
 
-1. The fact ledger is the source of truth. Generated resumes are presentations of that ledger.
-2. AI may rewrite wording. It may not invent employers, dates, credentials, skills, or numbers.
-3. Sensitive answers (work authorization, salary, disability, veteran status, sponsorship) are entered by the user.
-4. Prompts are versioned names such as `CAREER_EXTRACTION_V1`, not strings scattered through handlers.
-5. Structured JSON moves between pipeline stages. Free text is for the user, not for the next model.
-6. Deterministic code handles salary, dates, eligibility, location, and score math. Models handle interpretation and writing.
+### Foundation (in progress)
 
-Provider routing lives in environment configuration (`AI_EXTRACT_PROVIDER`, `AI_REVIEW_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_EXTRACT_MODEL`). Adding Anthropic or Gemini means a new provider module and a config change, not a rewrite of the product.
+1. Schema migrate order + `schema_version` + smoke tests
+2. Force bootstrap password change + Secure cookies
+3. Hybrid match + requirements + fact-safe tailor
 
-## Phase 1 — accounts, CMS, career profile
+### Finish the review-first apply loop
 
-Done in this repository.
+1. Application tracker states: found → reviewed → skipped → resume preparing → ready → applied
+2. Application question drafts (leave legal/salary blank for the user)
+3. Paste-a-job URL / stronger requirement extraction from listing text
+4. Weekly match explanation quotas on Free
+5. Constrain auto-apply: salary/location/type exclusions, daily cap, never submit on validator uncertainty
+6. Align marketing copy with what Autopilot actually does
 
-| Area | Delivered |
-| --- | --- |
-| Homepage CMS | `settings.homepage`, public `GET /api/content/homepage`, admin `PUT /api/admin/homepage`, image upload |
-| Identity | Login, logout, Google OAuth, forgot/reset password, admin user and admin management |
-| Onboarding | `POST /api/onboarding/extract`, confirm screen, `POST /api/onboarding/activate` |
-| Profile | `profiles` table, fact ledger JSON, `GET /api/profile` |
-| Audit | `ai_audit` for extraction runs |
+### Later
 
-## Phase 2 — jobs, match score, job-specific resume
+- Browser apply assistant, career intelligence, interview prep
+- Employer accounts, candidate search, voice interviews
 
-Build next. No auto-apply.
+## Pricing gates (implemented in admin plan matrix)
 
-1. Job schema: company, title, location, remote type, employment type, salary range, description, requirements, source URL, source type, detected and verified dates.
-2. Ingestion from licensed APIs, public ATS feeds, and user-pasted job URLs. Do not make unrestricted scraping the foundation.
-3. Requirement extractor returns mandatory skills, preferred skills, education, and years as JSON.
-4. Match score is hybrid: deterministic weights (core experience 25, required skills 25, role similarity 15, industry 10, education 10, location 5, salary 5, preferred skills 5) plus a reasoning model that explains the score. Labels come from thresholds: strong, good, possible, weak, not recommended.
-5. Resume strategy, writer, and validator. The validator fails any sentence that is not supported by a fact id. The user reviews before anything is saved as a version.
-6. Application question drafts, with legal and salary fields left blank for the user.
-7. Application tracker statuses: found, reviewed, skipped, resume preparing, ready, applied, and the later interview and offer states.
-
-## Phase 3 — assisted apply and intelligence
-
-- Browser assistant that detects a posting, imports it, and fills fields the user confirms.
-- Career intelligence over viewed, applied, and response history.
-- Interview preparation once a tracker row reaches interview.
-- Job quality labels: employer verified, possible duplicate, staffing repost, listing may be expired.
-
-## Phase 4 — controlled autopilot
-
-Only after the review-first path is solid. A job is eligible when every user rule passes: minimum match, salary, locations, employment type, exclusions, and a daily cap. Any validator uncertainty moves the row to review required. It is never submitted on a guess.
-
-Employer accounts, candidate search, and voice interviews stay after the candidate product is working.
-
-## Pricing to implement with Phase 2 limits
-
-| Plan | Price | Gate |
+| Plan | Price | Intent |
 | --- | --- | --- |
-| Free | $0 | Profile, basic resume, 5 match explanations per week |
-| Starter | $7.99/month | Resume upscale and a higher match allowance |
-| Pro | $14.99/month | Job-specific resumes and application tracking |
-| Autopilot | $24.99/month | Assisted apply rules and interview prep |
+| Free | $0 | Profile, review, short job list |
+| Starter | $7.99/month | Upscale + manual apply |
+| Pro | $14.99/month | Full list + more templates |
+| Autopilot | $24.99/month | Auto apply when rules clear |
 
-Annual Pro at $99 is the planned yearly offer. Exact AI quotas should be set after extraction and writing costs are measured from `ai_audit`.
+## Local run
 
-## API contracts already in use
+```bash
+npm install
+npm run api
+npm run dev
+npm test
+```
 
-- `GET /api/health`
-- `GET /api/content/homepage`
-- `GET /api/auth/me`
-- `POST /api/auth/login` `{ email, password }`
-- `POST /api/auth/logout`
-- `POST /api/auth/forgot-password` `{ email }` → `{ ok, message, devLink }`
-- `POST /api/auth/reset-password` `{ token, password }`
-- `GET /api/auth/google` and `GET /api/auth/google/callback`
-- `POST /api/onboarding/extract` multipart field `resume`
-- `POST /api/onboarding/activate` `{ draftId, name, email, phone, address, city, summary, password, salary, workArrangement, locations, workAuthorization, consent }`
-- `GET /api/profile`
-- `POST /api/account/password` `{ current, password }`
-- Admin: homepage get/put, upload, users list/create/patch, reset link, outbox, audit
-
-## Local and Lightsail run
-
-Development needs two processes: `npm run api` on port 3000 and `npm run dev` on port 5173. Vite proxies `/api` and `/uploads`.
-
-Production is one Node process (`NODE_ENV=production`) behind Nginx. `deploy/bootstrap.sh` installs Node 22, builds the client, writes a systemd unit, and proxies port 80 to port 3000. Resume uploads need the 12 MB Nginx body limit already in `deploy/nginx.jobpilot.conf`.
-
-Optional environment:
-
-- `ADMIN_EMAIL`, `ADMIN_PASSWORD` before the first database create
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-- `OPENAI_API_KEY`, `OPENAI_EXTRACT_MODEL`
-- `SMTP_HOST` when reset links should be emailed instead of shown to the requester and stored in the admin outbox
+API `:3000`, Vite `:5173`. Production: `npm run build && npm start` behind Nginx (`deploy/bootstrap.sh`).

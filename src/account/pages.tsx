@@ -395,10 +395,12 @@ export function JobsPage() {
               <p>{job.applyCompany || job.company} · {job.location || job.remoteType}</p>
               {job.viaCompany ? <p className="role">Listed by {job.viaCompany}{job.sourceName ? ` on ${job.sourceName}` : ""}. This application goes to {job.applyCompany}.</p> : null}
               <p className="lede">{job.description}</p>
+              {job.explanation ? <p className="role">{job.label ? `${job.label}: ` : ""}{job.explanation}</p> : null}
               <p className="role">{job.matched.join(", ") || "Limited skill overlap"}{job.missing.length ? ` · Gap: ${job.missing.join(", ")}` : ""}</p>
             </div>
             <div className="job-side">
               <span className="match-badge">{job.score}%</span>
+              {job.label ? <p className="role">{job.label}</p> : null}
               {job.applied ? <p className="role">In your tracker</p> : (
                 <button className="btn btn-primary btn-sm" type="button" disabled={!data.features.manual_apply} onClick={() => void api("/api/applications", { method: "POST", body: JSON.stringify({ jobId: job.id }) }).then(reload).catch((err: Error) => setError(err.message))}>
                   {data.features.manual_apply ? (job.viaCompany ? `Apply to ${job.applyCompany}` : "Apply") : "Upgrade to apply"}
@@ -522,18 +524,21 @@ export function PlanPage() {
 }
 
 export function SettingsPage() {
-  const { user } = useApp();
+  const { user, refresh, notify } = useApp();
   const { data, reload, setMessage, setError } = useAccount();
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
-  if (!data) return null;
-  const link = data.profile?.slug ? `${window.location.origin}/resume/${data.profile.slug}` : "";
+  if (!data && !user?.mustChangePassword) return null;
+  const link = data?.profile?.slug ? `${window.location.origin}/resume/${data.profile.slug}` : "";
   return (
     <div className="account-page">
       <header className="account-head">
         <div>
           <p className="eyebrow">Settings</p>
           <h1>Account</h1>
+          {user?.mustChangePassword ? (
+            <p className="lede">Change the bootstrap password before using admin or account tools.</p>
+          ) : null}
         </div>
       </header>
       {link ? (
@@ -544,8 +549,22 @@ export function SettingsPage() {
         </section>
       ) : null}
       {user?.provider === "email" ? (
-        <form className="account-card" onSubmit={(event) => { event.preventDefault(); void api("/api/account/password", { method: "POST", body: JSON.stringify({ current, password }) }).then(() => { setCurrent(""); setPassword(""); setMessage("Password updated."); }).catch((err: Error) => setError(err.message)); }}>
-          <h2>Password</h2>
+        <form className="account-card" onSubmit={(event) => {
+          event.preventDefault();
+          void api<{ ok: boolean; user?: typeof user }>("/api/account/password", { method: "POST", body: JSON.stringify({ current, password }) })
+            .then(async (result) => {
+              setCurrent("");
+              setPassword("");
+              setMessage("Password updated.");
+              notify("Password updated.");
+              await refresh();
+              if (result.user && !result.user.mustChangePassword) {
+                void reload?.();
+              }
+            })
+            .catch((err: Error) => setError(err.message));
+        }}>
+          <h2>{user?.mustChangePassword ? "Choose a new password" : "Password"}</h2>
           <label className="field"><span>Current password</span><input type="password" value={current} onChange={(event) => setCurrent(event.target.value)} required /></label>
           <label className="field"><span>New password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required /></label>
           <button className="btn btn-primary btn-sm" type="submit">Update password</button>
@@ -554,7 +573,7 @@ export function SettingsPage() {
       <section className="account-card">
         <h2>Session</h2>
         <p className="role">Signed in as {user?.email}. Plan changes and template access refresh when you save them.</p>
-        <button className="text-btn" type="button" onClick={() => void reload()}>Refresh account</button>
+        {data ? <button className="text-btn" type="button" onClick={() => void reload()}>Refresh account</button> : null}
       </section>
     </div>
   );

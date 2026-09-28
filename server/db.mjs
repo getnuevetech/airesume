@@ -4,7 +4,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "data");
+const root = process.env.JOBPILOT_DATA_DIR
+  ? process.env.JOBPILOT_DATA_DIR
+  : join(dirname(fileURLToPath(import.meta.url)), "data");
 mkdirSync(root, { recursive: true });
 
 export const dataDir = root;
@@ -27,6 +29,9 @@ db.exec(`
     status TEXT NOT NULL,
     consent_at INTEGER,
     created_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
@@ -113,5 +118,6 @@ export function publicUser(row) {
     provider: row.provider,
     status: row.status,
     planId: row.plan_id || "free",
+    mustChangePassword: Boolean(row.password_must_change),
   };
 }

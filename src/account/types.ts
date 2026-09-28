@@ -16,8 +16,11 @@ export type AccountJob = {
   verification: string;
   description: string;
   score: number;
+  label: string;
+  explanation: string;
   matched: string[];
   missing: string[];
+  preferredMatched: string[];
   applied: boolean;
 };
 export type AccountData = {

@@ -31,14 +31,23 @@ function seed() {
   if (!admin) {
     const email = process.env.ADMIN_EMAIL || "admin@jobpilot.app";
     const password = process.env.ADMIN_PASSWORD || "JobPilot-Admin-2026";
+    const mustChange = process.env.ADMIN_PASSWORD ? 0 : 1;
     db.prepare(
-      `INSERT INTO users (id, name, email, password_hash, provider, role, status, created_at)
-       VALUES (?, 'Site Admin', ?, ?, 'email', 'admin', 'active', ?)`,
-    ).run(id("usr"), email, hashPassword(password), Date.now());
+      `INSERT INTO users (id, name, email, password_hash, provider, role, status, password_must_change, created_at)
+       VALUES (?, 'Site Admin', ?, ?, 'email', 'admin', 'active', ?, ?)`,
+    ).run(id("usr"), email, hashPassword(password), mustChange, Date.now());
     try {
-      writeFileSync(join(dataDir, "admin-bootstrap.txt"), `email: ${email}\npassword: ${password}\n`, { flag: "wx" });
+      const note = mustChange
+        ? `email: ${email}\npassword: ${password}\nnote: change this password on first sign-in\n`
+        : `email: ${email}\npassword: (set via ADMIN_PASSWORD)\n`;
+      writeFileSync(join(dataDir, "admin-bootstrap.txt"), note, { flag: "wx" });
     } catch {
       // Credentials file already exists from an earlier boot.
+    }
+  } else if (!process.env.ADMIN_PASSWORD) {
+    const defaultAdmin = db.prepare("SELECT * FROM users WHERE email = ? AND role = 'admin'").get("admin@jobpilot.app");
+    if (defaultAdmin && verifyPassword("JobPilot-Admin-2026", defaultAdmin.password_hash)) {
+      db.prepare("UPDATE users SET password_must_change = 1 WHERE id = ?").run(defaultAdmin.id);
     }
   }
 }
@@ -63,7 +72,20 @@ function originOf(req) {
   return `${proto}://${host}`;
 }
 
-function setSession(res, userId) {
+function cookieSecure(req) {
+  if (process.env.COOKIE_SECURE === "0") return false;
+  if (process.env.COOKIE_SECURE === "1") return true;
+  const proto = String(req?.headers?.["x-forwarded-proto"] || req?.protocol || "");
+  return proto.split(",")[0].trim() === "https";
+}
+
+function sessionCookieAttrs(req, maxAge) {
+  const parts = ["HttpOnly", "Path=/", "SameSite=Lax", `Max-Age=${maxAge}`];
+  if (cookieSecure(req)) parts.push("Secure");
+  return parts.join("; ");
+}
+
+function setSession(res, userId, req) {
   const token = randomBytes(32).toString("hex");
   db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)").run(
     token,
@@ -72,13 +94,13 @@ function setSession(res, userId) {
   );
   res.setHeader(
     "Set-Cookie",
-    `jp_session=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 14}`,
+    `jp_session=${token}; ${sessionCookieAttrs(req, 60 * 60 * 24 * 14)}`,
   );
   return token;
 }
 
-function clearSession(res) {
-  res.setHeader("Set-Cookie", "jp_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0");
+function clearSession(res, req) {
+  res.setHeader("Set-Cookie", `jp_session=; ${sessionCookieAttrs(req, 0)}`);
 }
 
 function currentUser(req) {
@@ -93,10 +115,22 @@ function currentUser(req) {
   return row || null;
 }
 
+function allowedWhilePasswordChange(req) {
+  const path = String(req.originalUrl || req.url || "").split("?")[0];
+  if (req.method === "GET" && path === "/api/auth/me") return true;
+  if (req.method === "POST" && path === "/api/auth/logout") return true;
+  if (req.method === "POST" && path === "/api/account/password") return true;
+  return false;
+}
+
 function requireUser(req, res) {
   const user = currentUser(req);
   if (!user) {
     res.status(401).json({ error: "Sign in required." });
+    return null;
+  }
+  if (user.password_must_change && !allowedWhilePasswordChange(req)) {
+    res.status(403).json({ error: "Change your password before continuing.", mustChangePassword: true });
     return null;
   }
   return user;
@@ -157,14 +191,14 @@ app.post("/api/auth/login", (req, res) => {
     res.status(401).json({ error: "That password does not match." });
     return;
   }
-  setSession(res, user.id);
+  setSession(res, user.id, req);
   res.json({ user: publicUser(user) });
 });
 
 app.post("/api/auth/logout", (req, res) => {
   const token = cookie(req, "jp_session");
   if (token) db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
-  clearSession(res);
+  clearSession(res, req);
   res.json({ ok: true });
 });
 
@@ -283,7 +317,7 @@ app.get("/api/auth/google/callback", async (req, res) => {
     res.redirect("/signin?error=disabled");
     return;
   }
-  setSession(res, user.id);
+  setSession(res, user.id, req);
   res.redirect(existsProfile(user.id) ? "/dashboard" : "/get-started");
 });
 
@@ -418,7 +452,7 @@ app.post("/api/onboarding/activate", (req, res) => {
   );
   db.prepare("DELETE FROM drafts WHERE id = ?").run(draft.id);
   syncProfileVersion(userId);
-  setSession(res, userId);
+  setSession(res, userId, req);
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
   res.json({ user: publicUser(user) });
 });
@@ -615,8 +649,20 @@ app.post("/api/account/password", (req, res) => {
     res.status(400).json({ error: "Use at least 8 characters." });
     return;
   }
-  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(next), user.id);
-  res.json({ ok: true });
+  if (next === String(req.body.current || "")) {
+    res.status(400).json({ error: "Choose a new password that is different from the current one." });
+    return;
+  }
+  db.prepare("UPDATE users SET password_hash = ?, password_must_change = 0 WHERE id = ?").run(hashPassword(next), user.id);
+  try {
+    const bootstrap = join(dataDir, "admin-bootstrap.txt");
+    if (existsSync(bootstrap)) {
+      writeFileSync(bootstrap, `email: ${user.email}\npassword: (changed — not stored)\n`);
+    }
+  } catch {
+    // Best-effort wipe of the bootstrap password copy.
+  }
+  res.json({ ok: true, user: publicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id)) });
 });
 
 registerPlatform(app, { requireUser, requireAdmin, audit, upload, originOf });
