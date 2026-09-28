@@ -1,0 +1,186 @@
+/** Parse pasted job text or a public listing URL into structured fields. */
+
+import { extractRequirements } from "./match.mjs";
+
+const BLOCKED_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
+
+export function assertPublicHttpUrl(value) {
+  let parsed;
+  try {
+    parsed = new URL(String(value || "").trim());
+  } catch {
+    throw new Error("Enter a valid http or https job URL.");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Job URL must start with http or https.");
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (BLOCKED_HOSTS.has(host) || host.endsWith(".local") || host.endsWith(".internal")) {
+    throw new Error("That host cannot be imported.");
+  }
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.|169\.254\.)/.test(host)) {
+    throw new Error("Private network URLs cannot be imported.");
+  }
+  return parsed.toString();
+}
+
+export function htmlToText(html) {
+  return String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function field(text, names) {
+  for (const name of names) {
+    const match = text.match(new RegExp(`(?:^|\\n)\\s*${name}\\s*[:\\-]\\s*(.+)`, "i"));
+    if (match) return match[1].trim();
+  }
+  return "";
+}
+
+function salaryRange(text) {
+  const match = String(text || "").match(/\$?\s?(\d{2,3}(?:,\d{3})?)(?:\s*k)?\s*[-–to]+\s*\$?\s?(\d{2,3}(?:,\d{3})?)(?:\s*k)?/i);
+  if (!match) return { salaryMin: null, salaryMax: null };
+  const scale = /k/i.test(match[0]) ? 1000 : 1;
+  const min = Number(match[1].replace(/,/g, "")) * scale;
+  const max = Number(match[2].replace(/,/g, "")) * scale;
+  return {
+    salaryMin: Number.isFinite(min) ? min : null,
+    salaryMax: Number.isFinite(max) ? max : null,
+  };
+}
+
+function remoteType(text) {
+  const blob = String(text || "").toLowerCase();
+  if (/\bremote\b/.test(blob)) return "remote";
+  if (/\bhybrid\b/.test(blob)) return "hybrid";
+  if (/\bonsite\b|\bon-site\b|\bin office\b/.test(blob)) return "onsite";
+  return "";
+}
+
+/**
+ * Turn freeform paste into a job draft.
+ */
+export function parseJobPaste(input = {}) {
+  const sourceUrl = String(input.url || input.sourceUrl || "").trim();
+  let text = String(input.text || input.description || "").trim();
+  if (!text && !sourceUrl) {
+    throw new Error("Paste a job description or a listing URL.");
+  }
+  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  let title = String(input.title || field(text, ["title", "role", "position", "job title"]) || lines[0] || "").trim();
+  let company = String(input.company || field(text, ["company", "employer", "organization", "org"]) || "").trim();
+  if (!company && lines[1] && lines[1].length < 80 && !/require|responsib|about the/i.test(lines[1])) {
+    company = lines[1];
+  }
+  if (!company) company = "Unknown company";
+  if (!title) title = "Untitled role";
+  const location = String(input.location || field(text, ["location", "based in", "office"]) || "").trim();
+  const description = text || `${title}\n${company}`;
+  const pay = salaryRange(description);
+  const skillsFromText = extractSkillsFromDescription(description);
+  const skills = Array.isArray(input.skills) && input.skills.length ? input.skills.map(String) : skillsFromText;
+  const requirements = extractRequirements({
+    title,
+    description,
+    skills,
+    role: title,
+  });
+  return {
+    title: title.slice(0, 160),
+    company: company.slice(0, 120),
+    location: location.slice(0, 120),
+    remoteType: remoteType(`${location}\n${description}`),
+    description: description.slice(0, 12000),
+    skills: skills.slice(0, 16),
+    requirements,
+    salaryMin: pay.salaryMin,
+    salaryMax: pay.salaryMax,
+    sourceUrl,
+    role: title.slice(0, 80),
+  };
+}
+
+export function extractSkillsFromDescription(description) {
+  const text = String(description || "");
+  const skills = [];
+  const section = text.match(/(?:requirements|qualifications|must have|what you.?ll need|you have)[:\s]*([\s\S]{0,2500}?)(?:\n\s*\n|responsibilities|about |benefits|nice to have|$)/i);
+  const block = section ? section[1] : text;
+  const bullets = block.split(/\n+/).map((line) => line.replace(/^[-*•\d.)\s]+/, "").trim()).filter(Boolean);
+  for (const bullet of bullets) {
+    if (bullet.length < 3 || bullet.length > 48) continue;
+    if (/^(the|you|we|our|this|and|with|for)\b/i.test(bullet)) continue;
+    if (/[.!?]/.test(bullet) && bullet.length > 30) continue;
+    skills.push(bullet.replace(/\.$/, ""));
+  }
+  const known = [
+    "JavaScript",
+    "TypeScript",
+    "React",
+    "Node",
+    "Python",
+    "SQL",
+    "Product management",
+    "Figma",
+    "AWS",
+    "Java",
+    "Go",
+    "Kubernetes",
+    "Excel",
+    "A/B testing",
+    "User research",
+    "Roadmapping",
+    "Communication",
+    "Leadership",
+  ];
+  for (const skill of known) {
+    if (new RegExp(`\\b${skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text)) skills.push(skill);
+  }
+  const seen = new Set();
+  return skills.filter((skill) => {
+    const key = skill.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 16);
+}
+
+export async function fetchJobUrl(url) {
+  const safe = assertPublicHttpUrl(url);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(safe, {
+      signal: controller.signal,
+      redirect: "follow",
+      headers: {
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "User-Agent": "JobPilot/1.0 (+paste-import)",
+      },
+    });
+    if (!response.ok) throw new Error(`Could not fetch that listing (${response.status}).`);
+    const contentType = String(response.headers.get("content-type") || "");
+    const body = await response.text();
+    const text = /html/i.test(contentType) || /<html/i.test(body) ? htmlToText(body) : body;
+    if (!text || text.length < 40) throw new Error("That page did not include enough job text to import.");
+    return { url: safe, text: text.slice(0, 20000) };
+  } catch (error) {
+    if (error?.name === "AbortError") throw new Error("Timed out fetching that listing.");
+    throw error instanceof Error ? error : new Error("Could not fetch that listing.");
+  } finally {
+    clearTimeout(timer);
+  }
+}

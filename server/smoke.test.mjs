@@ -6,7 +6,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { autoDecision, TRACKER_STATUSES } from "./apply-rules.mjs";
+import { parseJobPaste } from "./job-import.mjs";
 import { extractRequirements, matchJob, matchLabel } from "./match.mjs";
+import { draftQuestions } from "./questions.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -121,6 +123,57 @@ test("autoDecision never chooses silent submit", () => {
   assert.equal(missing.action, "review");
 });
 
+test("parseJobPaste extracts title company and requirements", () => {
+  const draft = parseJobPaste({
+    text: `Senior Product Manager
+Northstar
+Location: Remote
+Salary: $140,000 - $170,000
+
+Requirements:
+- Product management
+- SQL
+- Roadmapping
+
+Nice to have:
+- A/B testing
+
+Are you authorized to work in the US?
+What are your salary expectations?
+`,
+  });
+  assert.equal(draft.title, "Senior Product Manager");
+  assert.equal(draft.company, "Northstar");
+  assert.equal(draft.remoteType, "remote");
+  assert.ok(draft.requirements.mandatory.includes("Product management"));
+  assert.ok(draft.salaryMin >= 140000);
+});
+
+test("draftQuestions leaves salary and authorization blank", () => {
+  const questions = draftQuestions(
+    {
+      title: "Product Manager",
+      company: "Northstar",
+      description: "What are your salary expectations?\nAre you authorized to work in the US?\nTell us about a launch you led.",
+    },
+    {
+      skills: ["Product management", "SQL"],
+      employment: [{ title: "PM", employer: "Acme", bullets: ["Led an onboarding launch"] }],
+      summary: "Product manager",
+    },
+    { salary: "150000", workAuthorization: "US citizen" },
+    { matched: ["Product management"], missing: [] },
+  );
+  const salary = questions.find((item) => /salary/i.test(item.prompt));
+  const auth = questions.find((item) => /authoriz/i.test(item.prompt));
+  assert.ok(salary);
+  assert.equal(salary.answer, "");
+  assert.ok(salary.blankReason);
+  assert.ok(auth);
+  assert.equal(auth.answer, "");
+  assert.ok(questions.some((item) => item.kind === "draft" && item.answer));
+});
+
 test("fresh data dir migrates and seeds schema version", () => {
   const dir = mkdtempSync(join(tmpdir(), "jobpilot-test-"));
   const script = `
@@ -137,8 +190,9 @@ test("fresh data dir migrates and seeds schema version", () => {
     const sample = db.prepare("SELECT requirements FROM jobs LIMIT 1").get();
     const requirements = JSON.parse(sample.requirements || "{}");
     if (!Array.isArray(requirements.mandatory)) process.exit(4);
-    const columns = db.prepare("PRAGMA table_info(users)").all().map((row) => row.name);
-    if (!columns.includes("auto_daily_cap")) process.exit(5);
+    const columns = db.prepare("PRAGMA table_info(applications)").all().map((row) => row.name);
+    if (!columns.includes("questions")) process.exit(5);
+    if (!db.prepare("PRAGMA table_info(users)").all().some((row) => row.name === "auto_daily_cap")) process.exit(6);
   `;
   try {
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {

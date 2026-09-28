@@ -373,8 +373,30 @@ export function TemplatesPage() {
 }
 
 export function JobsPage() {
-  const { data, reload, setError } = useAccount();
+  const { data, reload, setError, setMessage } = useAccount();
+  const [pasteText, setPasteText] = useState("");
+  const [pasteUrl, setPasteUrl] = useState("");
+  const [busy, setBusy] = useState(false);
   if (!data) return null;
+
+  async function importJob(action: "" | "prepare" | "track") {
+    setBusy(true);
+    try {
+      await api("/api/jobs/paste", {
+        method: "POST",
+        body: JSON.stringify({ text: pasteText, url: pasteUrl, action }),
+      });
+      setPasteText("");
+      setPasteUrl("");
+      setMessage(action === "prepare" ? "Job imported and prepared." : action === "track" ? "Job imported and tracked." : "Job imported.");
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not import that job.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Gate feature="job_browse">
       <div className="account-page">
@@ -385,6 +407,21 @@ export function JobsPage() {
             <p className="lede">{data.stats.available} roles in this list. {data.stats.recommended} are strong matches.</p>
           </div>
         </header>
+        <section className="account-card">
+          <h2>Paste a job</h2>
+          <p className="lede">Drop in a listing URL or the full description. We extract requirements and score it against your resume.</p>
+          <label className="field"><span>Listing URL</span><input value={pasteUrl} onChange={(event) => setPasteUrl(event.target.value)} placeholder="https://..." /></label>
+          <label className="field"><span>Or paste description</span><textarea rows={5} value={pasteText} onChange={(event) => setPasteText(event.target.value)} placeholder={"Title\nCompany\nRequirements..."} /></label>
+          <div className="job-actions">
+            <button className="btn btn-primary btn-sm" type="button" disabled={busy || (!pasteText.trim() && !pasteUrl.trim())} onClick={() => void importJob("")}>Import</button>
+            {data.features.manual_apply ? (
+              <>
+                <button className="btn btn-ghost btn-sm" type="button" disabled={busy || (!pasteText.trim() && !pasteUrl.trim())} onClick={() => void importJob("prepare")}>Import & prepare</button>
+                <button className="btn btn-ghost btn-sm" type="button" disabled={busy || (!pasteText.trim() && !pasteUrl.trim())} onClick={() => void importJob("track")}>Import & track</button>
+              </>
+            ) : null}
+          </div>
+        </section>
         {data.jobs.map((job) => (
           <article className="account-card job-card" key={job.id}>
             <div>
@@ -450,32 +487,98 @@ export function ApplicationsPage() {
           </section>
         )}
         {data.applications.map((item) => (
-          <article className="account-card job-card" key={item.id}>
-            <div>
-              <h2>{item.title}</h2>
-              <p className="role">{item.company} · {item.mode} · {item.match}% match · {item.status}</p>
-              {item.viaCompany ? <p className="role">Found through {item.viaCompany}{item.sourceName ? ` on ${item.sourceName}` : ""}</p> : null}
-              {item.delivery ? <p className="role">{item.delivery}</p> : null}
-              {item.targetUrl ? <a href={item.targetUrl} target="_blank" rel="noreferrer">Open employer listing</a> : null}
+          <article className="account-card" key={item.id}>
+            <div className="job-card" style={{ padding: 0, boxShadow: "none", background: "transparent" }}>
+              <div>
+                <h2>{item.title}</h2>
+                <p className="role">{item.company} · {item.mode} · {item.match}% match · {item.status}</p>
+                {item.viaCompany ? <p className="role">Found through {item.viaCompany}{item.sourceName ? ` on ${item.sourceName}` : ""}</p> : null}
+                {item.delivery ? <p className="role">{item.delivery}</p> : null}
+                {item.targetUrl ? <a href={item.targetUrl} target="_blank" rel="noreferrer">Open employer listing</a> : null}
+              </div>
+              <div className="job-side">
+                {["Ready", "Review required", "Resume preparing"].includes(item.status) ? (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    type="button"
+                    onClick={() => void api(`/api/applications/${item.id}/submit`, { method: "POST" }).then(() => { setMessage("Application submitted."); return reload(); }).catch((err: Error) => setError(err.message))}
+                  >
+                    Submit
+                  </button>
+                ) : null}
+                <select value={item.status} onChange={(event) => void api(`/api/applications/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: event.target.value }) }).then(reload)}>
+                  {statuses.map((status) => <option key={status}>{status}</option>)}
+                </select>
+              </div>
             </div>
-            <div className="job-side">
-              {["Ready", "Review required", "Resume preparing"].includes(item.status) ? (
-                <button
-                  className="btn btn-primary btn-sm"
-                  type="button"
-                  onClick={() => void api(`/api/applications/${item.id}/submit`, { method: "POST" }).then(() => { setMessage("Application submitted."); return reload(); }).catch((err: Error) => setError(err.message))}
-                >
-                  Submit
-                </button>
-              ) : null}
-              <select value={item.status} onChange={(event) => void api(`/api/applications/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: event.target.value }) }).then(reload)}>
-                {statuses.map((status) => <option key={status}>{status}</option>)}
-              </select>
-            </div>
+            {(item.questions?.length || ["Ready", "Review required", "Resume preparing", "Found"].includes(item.status)) ? (
+              <QuestionDrafts
+                applicationId={item.id}
+                initial={item.questions || []}
+                onSaved={() => { setMessage("Answers saved."); void reload(); }}
+                onError={(message) => setError(message)}
+              />
+            ) : null}
           </article>
         ))}
       </div>
     </Gate>
+  );
+}
+
+function QuestionDrafts({
+  applicationId,
+  initial,
+  onSaved,
+  onError,
+}: {
+  applicationId: string;
+  initial: { id: string; prompt: string; kind: string; answer: string; blankReason?: string; hint?: string }[];
+  onSaved: () => void;
+  onError: (message: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [questions, setQuestions] = useState(initial);
+  useEffect(() => {
+    setQuestions(initial);
+  }, [initial]);
+  if (!questions.length && !open) {
+    return null;
+  }
+  return (
+    <div className="question-drafts">
+      <button className="text-btn" type="button" onClick={() => setOpen((value) => !value)}>
+        {open ? "Hide application answers" : `Application answers (${questions.length})`}
+      </button>
+      {open ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void api(`/api/applications/${applicationId}/questions`, {
+              method: "PUT",
+              body: JSON.stringify({ questions }),
+            })
+              .then(onSaved)
+              .catch((err: Error) => onError(err.message));
+          }}
+        >
+          {questions.map((item, index) => (
+            <label className="field" key={item.id}>
+              <span>{item.prompt}{item.kind === "user" ? " (you fill)" : ""}</span>
+              <textarea
+                rows={3}
+                value={item.answer}
+                placeholder={item.blankReason || item.hint || ""}
+                onChange={(event) => setQuestions((rows) => rows.map((row, rowIndex) => (rowIndex === index ? { ...row, answer: event.target.value } : row)))}
+              />
+              {item.blankReason ? <span className="role">{item.blankReason}</span> : null}
+              {!item.blankReason && item.hint ? <span className="role">{item.hint}</span> : null}
+            </label>
+          ))}
+          <button className="btn btn-primary btn-sm" type="submit">Save answers</button>
+        </form>
+      ) : null}
+    </div>
   );
 }
 

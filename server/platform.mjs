@@ -10,6 +10,8 @@ import { feedConfig, fetchFeedListings, normalizeFeedUrl, publicFeedConfig, reso
 import { extractRequirements, matchJob } from "./match.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
 import { TRACKER_STATUSES, autoDecision, startOfUtcDay } from "./apply-rules.mjs";
+import { fetchJobUrl, parseJobPaste } from "./job-import.mjs";
+import { draftQuestions } from "./questions.mjs";
 
 migrate();
 
@@ -483,11 +485,12 @@ async function createApplication(user, job, mode, doc, preferences, facts = [], 
   if (options.reason && status === "Review required") {
     delivery = options.reason;
   }
+  const questions = draftQuestions(job, doc, preferences, match);
   const now = Date.now();
   db.prepare(
-    `INSERT INTO applications (id, user_id, job_id, version_id, mode, status, match_score, target_company, target_url, target_email, delivery, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(user_id, job_id) DO UPDATE SET version_id = COALESCE(excluded.version_id, applications.version_id), mode = excluded.mode, status = excluded.status, match_score = excluded.match_score, target_company = excluded.target_company, target_url = excluded.target_url, target_email = excluded.target_email, delivery = excluded.delivery, updated_at = excluded.updated_at`,
+    `INSERT INTO applications (id, user_id, job_id, version_id, mode, status, match_score, target_company, target_url, target_email, delivery, questions, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, job_id) DO UPDATE SET version_id = COALESCE(excluded.version_id, applications.version_id), mode = excluded.mode, status = excluded.status, match_score = excluded.match_score, target_company = excluded.target_company, target_url = excluded.target_url, target_email = excluded.target_email, delivery = excluded.delivery, questions = excluded.questions, updated_at = excluded.updated_at`,
   ).run(
     id("app"),
     user.id,
@@ -500,10 +503,11 @@ async function createApplication(user, job, mode, doc, preferences, facts = [], 
     job.primary_url || job.source_url || "",
     job.primary_email || "",
     delivery,
+    JSON.stringify(questions),
     now,
     now,
   );
-  return { score: match.score, status, match };
+  return { score: match.score, status, match, questions };
 }
 
 function canAutoApply(job) {
@@ -665,6 +669,7 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
           mode: item.mode,
           match: item.match_score,
           versionId: item.version_id,
+          questions: parse(item.questions, []),
         };
       }),
       review: review
@@ -902,7 +907,119 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
       parse(profile.facts, []),
       { status, deliver: status === "Applied" },
     );
-    res.json({ ok: true, score: result.score, status: result.status });
+    res.json({ ok: true, score: result.score, status: result.status, questions: result.questions });
+  });
+
+  app.post("/api/jobs/paste", async (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    if (!requireFeature(user, "job_browse", res)) return;
+    try {
+      let text = String(req.body.text || "");
+      let sourceUrl = String(req.body.url || "").trim();
+      if (sourceUrl) {
+        const fetched = await fetchJobUrl(sourceUrl);
+        sourceUrl = fetched.url;
+        text = text ? `${text}\n\n${fetched.text}` : fetched.text;
+      }
+      const draft = parseJobPaste({
+        text,
+        url: sourceUrl,
+        title: req.body.title,
+        company: req.body.company,
+        location: req.body.location,
+      });
+      let source = db.prepare("SELECT * FROM job_sources WHERE kind = 'paste' LIMIT 1").get();
+      if (!source) {
+        const sourceId = id("src");
+        db.prepare(
+          "INSERT INTO job_sources (id, name, kind, config, enabled, created_at) VALUES (?, 'Pasted jobs', 'paste', '{}', 1, ?)",
+        ).run(sourceId, Date.now());
+        source = db.prepare("SELECT * FROM job_sources WHERE id = ?").get(sourceId);
+      }
+      const siblings = db.prepare("SELECT id, title, company FROM jobs").all();
+      const checked = await categorizeAndVerify(draft, siblings);
+      const jobId = saveJob(source.id, {
+        ...draft,
+        externalKey: `paste-${user.id}-${Date.now()}`,
+        category: checked.category,
+        role: checked.role || draft.role,
+        verification: checked.verification,
+        note: checked.note,
+        primaryCompany: draft.company,
+        primaryUrl: draft.sourceUrl || "",
+      });
+      const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
+      const version = profile ? activeVersion(user.id) : null;
+      const doc = version ? parse(version.document, {}) : { skills: [], employment: [], education: [] };
+      const preferences = profile ? parse(profile.preferences, {}) : {};
+      const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(jobId);
+      const match = matchJob(doc, preferences, job);
+      const action = String(req.body.action || "");
+      const track = action === "prepare" || action === "track";
+      let application = null;
+      const access = featuresOf(user);
+      if (track && profile && version && access.features.manual_apply) {
+        const status = action === "track" ? "Found" : "Ready";
+        application = await createApplication(user, job, "manual", doc, preferences, parse(profile.facts, []), {
+          status,
+          deliver: false,
+        });
+      }
+      res.json({
+        job: {
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          remoteType: job.remote_type,
+          description: job.description,
+          skills: parse(job.skills, []),
+          requirements: parse(job.requirements, {}),
+          verification: job.verification,
+          sourceUrl: job.source_url,
+          score: match.score,
+          label: match.label,
+          explanation: match.explanation,
+          matched: match.matched,
+          missing: match.missing,
+        },
+        application,
+      });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Could not import that job." });
+    }
+  });
+
+  app.put("/api/applications/:id/questions", (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const row = db.prepare("SELECT * FROM applications WHERE id = ? AND user_id = ?").get(req.params.id, user.id);
+    if (!row) {
+      res.status(404).json({ error: "Application not found." });
+      return;
+    }
+    const incoming = Array.isArray(req.body.questions) ? req.body.questions : [];
+    const current = parse(row.questions, []);
+    const byId = new Map(current.map((item) => [item.id, item]));
+    const next = incoming.map((item, index) => {
+      const id = String(item.id || `custom-${index}`);
+      const prev = byId.get(id) || {};
+      const prompt = String(item.prompt || prev.prompt || "").trim();
+      if (!prompt) return null;
+      const sensitive = /salary|compensation|disability|veteran|race|gender|sponsor|authorization|criminal/i.test(prompt);
+      return {
+        id,
+        prompt,
+        kind: item.kind === "draft" || item.kind === "user" ? item.kind : prev.kind || "user",
+        answer: String(item.answer ?? prev.answer ?? ""),
+        blankReason: String(item.blankReason || prev.blankReason || (sensitive && !String(item.answer || "") ? "Sensitive — fill this yourself." : "")),
+        hint: String(item.hint || prev.hint || ""),
+        source: String(prev.source || item.source || "user"),
+      };
+    }).filter(Boolean);
+    db.prepare("UPDATE applications SET questions = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(next), Date.now(), row.id);
+    res.json({ questions: next });
   });
 
   app.post("/api/applications/:id/submit", async (req, res) => {

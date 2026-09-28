@@ -1,7 +1,7 @@
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -224,6 +224,7 @@ export function migrate() {
   addColumn("applications", "target_url", "TEXT DEFAULT ''");
   addColumn("applications", "target_email", "TEXT DEFAULT ''");
   addColumn("applications", "delivery", "TEXT DEFAULT ''");
+  addColumn("applications", "questions", "TEXT DEFAULT '[]'");
 
   const provider = db.prepare("SELECT id FROM ai_providers LIMIT 1").get();
   if (!provider) {

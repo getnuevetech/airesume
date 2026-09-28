@@ -69,10 +69,18 @@ function educationFromText(text) {
  * @param {{ title?: string, description?: string, skills?: string[], role?: string, category?: string }} raw
  */
 export function extractRequirements(raw = {}) {
-  const skills = Array.isArray(raw.skills) ? raw.skills.map(String) : [];
+  const provided = Array.isArray(raw.skills) ? raw.skills.map(String) : [];
+  const fromText = provided.length ? [] : skillsFromDescription(raw.description || "");
+  const skills = unique([...provided, ...fromText]);
   const blob = `${raw.title || ""}\n${raw.description || ""}\n${raw.role || ""}`;
-  const mandatory = unique(skills.slice(0, 8));
-  const preferred = unique(skills.slice(8, 14));
+  const mandatoryFromSection = sectionSkills(raw.description || "", /must have|required|requirements|qualifications/i);
+  const preferredFromSection = sectionSkills(raw.description || "", /nice to have|preferred|bonus/i);
+  const mandatory = unique(mandatoryFromSection.length ? mandatoryFromSection : skills.slice(0, 8));
+  const preferred = unique(
+    preferredFromSection.length
+      ? preferredFromSection
+      : skills.slice(mandatory.length, mandatory.length + 6).filter((skill) => !mandatory.some((item) => lower(item) === lower(skill))),
+  );
   const years = yearsFromText(blob);
   const education = educationFromText(blob);
   return {
@@ -81,6 +89,39 @@ export function extractRequirements(raw = {}) {
     education,
     years,
   };
+}
+
+function sectionSkills(description, heading) {
+  const text = String(description || "");
+  const match = text.match(new RegExp(`(?:${heading.source})[:\\s]*([\\s\\S]{0,1800}?)(?:\\n\\s*\\n|responsibilities|about |benefits|$)`, "i"));
+  if (!match) return [];
+  return match[1]
+    .split(/\n+|·|•|;/)
+    .map((line) => line.replace(/^[-*•\d.)\s]+/, "").trim())
+    .filter((line) => line.length >= 2 && line.length <= 48 && !/[?]/.test(line));
+}
+
+function skillsFromDescription(description) {
+  const text = String(description || "");
+  const known = [
+    "JavaScript",
+    "TypeScript",
+    "React",
+    "Node",
+    "Python",
+    "SQL",
+    "Product management",
+    "Figma",
+    "AWS",
+    "Java",
+    "Excel",
+    "A/B testing",
+    "User research",
+    "Roadmapping",
+    "Communication",
+    "Leadership",
+  ];
+  return known.filter((skill) => new RegExp(`\\b${skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text));
 }
 
 export function parseRequirements(value, fallbackSkills = []) {

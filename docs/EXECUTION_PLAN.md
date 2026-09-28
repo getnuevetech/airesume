@@ -15,6 +15,8 @@ Already live beyond early Phase 1:
 - Review-first application tracker: Found → Reviewed → Skipped → Resume preparing → Ready → Review required → Applied…
 - Manual Prepare/Track from Jobs; Submit only from Ready / Review required
 - Autopilot queues Ready or Review required with daily cap, exclusions, and preference checks — never submits blindly
+- Paste-a-job (URL or description) with stronger requirement extraction
+- Application question drafts; salary, sponsorship, authorization, disability, veteran stay blank for the user
 - Plans, Stripe/PayPal/manual billing hooks, AI provider admin, public `/resume/:slug`
 
 Default admin on first boot uses `ADMIN_EMAIL` / `ADMIN_PASSWORD` when set. Without `ADMIN_PASSWORD`, bootstrap credentials force a password change on first sign-in. Session cookies set `Secure` when the request is HTTPS (`x-forwarded-proto`) or `COOKIE_SECURE=1`.
@@ -40,13 +42,12 @@ Browser
 2. Force bootstrap password change + Secure cookies
 3. Hybrid match + requirements + fact-safe tailor
 4. Review-first tracker + autopilot safety rules
+5. Paste-a-job + application question drafts
 
 ### Finish the review-first apply loop
 
-1. Application question drafts (leave legal/salary blank for the user)
-2. Paste-a-job URL / stronger requirement extraction from listing text
-3. Weekly match explanation quotas on Free
-4. Split `platform.mjs` into jobs / resume / billing modules
+1. Weekly match explanation quotas on Free
+2. Split `platform.mjs` into jobs / resume / billing modules
 
 ### Later
 

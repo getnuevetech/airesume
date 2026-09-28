@@ -1,5 +1,14 @@
 export type Employment = { title: string; employer: string; dates?: string; bullets: string[] };
 export type Recommendation = { id: string; title: string; detail: string; kind: string; proposed?: string };
+export type ApplicationQuestion = {
+  id: string;
+  prompt: string;
+  kind: string;
+  answer: string;
+  blankReason?: string;
+  hint?: string;
+  source?: string;
+};
 export type AccountJob = {
   id: string;
   title: string;
@@ -79,6 +88,7 @@ export type AccountData = {
     mode: string;
     match: number;
     versionId?: string;
+    questions?: ApplicationQuestion[];
   }[];
   review: { id: string; rating: number; feedback: string[]; recommendations: Recommendation[]; provider: string; model: string } | null;
   versions: { id: string; label: string; kind: string; active: boolean; rendered: string }[];
