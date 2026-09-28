@@ -6,15 +6,16 @@ import { db, id, uploadsDir } from "./db.mjs";
 import { completeJson } from "./ai-run.mjs";
 import { AI_FUNCTIONS, FEATURES, RESUME_TEMPLATES, migrate, publicPlan, resolveTemplate, templateLimitOf } from "./schema.mjs";
 import { deliverMail } from "./mail.mjs";
-import { feedConfig, fetchFeedListings, normalizeFeedUrl, publicFeedConfig, resolvePrimary } from "./feeds.mjs";
+import { fetchFeedListings, normalizeFeedUrl, publicFeedConfig, resolvePrimary } from "./feeds.mjs";
 import { extractRequirements, matchJob } from "./match.mjs";
 import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
-import { TRACKER_STATUSES, autoDecision, startOfUtcDay } from "./apply-rules.mjs";
-import { fetchJobUrl, parseJobPaste } from "./job-import.mjs";
+import { TRACKER_STATUSES, startOfUtcDay } from "./apply-rules.mjs";
 import { draftQuestions } from "./questions.mjs";
 import { allowExplanation, explanationQuota, redactMatch } from "./quota.mjs";
 import { registerBilling } from "./routes-billing.mjs";
 import { registerResume } from "./routes-resume.mjs";
+import { registerApplications } from "./routes-applications.mjs";
+import { registerJobsAdmin } from "./routes-jobs-admin.mjs";
 
 migrate();
 
@@ -632,6 +633,29 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     setPath,
     renderDocument,
   });
+  registerApplications(app, {
+    requireUser,
+    requireFeature,
+    featuresOf,
+    createApplication,
+    activeVersion,
+    parse,
+    categorizeAndVerify,
+    saveJob,
+    employerDelivery,
+    autoCapUsed,
+    canAutoApply,
+  });
+  registerJobsAdmin(app, {
+    requireAdmin,
+    audit,
+    parse,
+    publicSource,
+    feedUrlTaken,
+    pullSource,
+    categorizeAndVerify,
+    saveJob,
+  });
 
   app.get("/api/plans", (_req, res) => {
     const plans = db.prepare("SELECT * FROM plans WHERE active = 1 ORDER BY sort_order").all().map(publicPlan);
@@ -852,268 +876,6 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     res.json({ photoUrl: `/uploads/${nextName}`, provider: ai.provider, model: ai.model });
   });
 
-  app.post("/api/applications", async (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    if (!requireFeature(user, "manual_apply", res)) return;
-    const job = db.prepare("SELECT * FROM jobs WHERE id = ? AND active = 1").get(String(req.body.jobId || ""));
-    const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
-    const version = activeVersion(user.id);
-    if (!job || !profile || !version) {
-      res.status(400).json({ error: "That job is not available." });
-      return;
-    }
-    const action = String(req.body.action || "prepare");
-    const status =
-      action === "track" ? "Found" : action === "skip" ? "Skipped" : action === "apply" ? "Applied" : "Ready";
-    const result = await createApplication(
-      user,
-      job,
-      "manual",
-      parse(version.document, {}),
-      parse(profile.preferences, {}),
-      parse(profile.facts, []),
-      { status, deliver: status === "Applied" },
-    );
-    res.json({ ok: true, score: result.score, status: result.status, questions: result.questions });
-  });
-
-  app.post("/api/jobs/paste", async (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    if (!requireFeature(user, "job_browse", res)) return;
-    try {
-      let text = String(req.body.text || "");
-      let sourceUrl = String(req.body.url || "").trim();
-      if (sourceUrl) {
-        const fetched = await fetchJobUrl(sourceUrl);
-        sourceUrl = fetched.url;
-        text = text ? `${text}\n\n${fetched.text}` : fetched.text;
-      }
-      const draft = parseJobPaste({
-        text,
-        url: sourceUrl,
-        title: req.body.title,
-        company: req.body.company,
-        location: req.body.location,
-      });
-      let source = db.prepare("SELECT * FROM job_sources WHERE kind = 'paste' LIMIT 1").get();
-      if (!source) {
-        const sourceId = id("src");
-        db.prepare(
-          "INSERT INTO job_sources (id, name, kind, config, enabled, created_at) VALUES (?, 'Pasted jobs', 'paste', '{}', 1, ?)",
-        ).run(sourceId, Date.now());
-        source = db.prepare("SELECT * FROM job_sources WHERE id = ?").get(sourceId);
-      }
-      const siblings = db.prepare("SELECT id, title, company FROM jobs").all();
-      const checked = await categorizeAndVerify(draft, siblings);
-      const jobId = saveJob(source.id, {
-        ...draft,
-        externalKey: `paste-${user.id}-${Date.now()}`,
-        category: checked.category,
-        role: checked.role || draft.role,
-        verification: checked.verification,
-        note: checked.note,
-        primaryCompany: draft.company,
-        primaryUrl: draft.sourceUrl || "",
-      });
-      const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
-      const version = profile ? activeVersion(user.id) : null;
-      const doc = version ? parse(version.document, {}) : { skills: [], employment: [], education: [] };
-      const preferences = profile ? parse(profile.preferences, {}) : {};
-      const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(jobId);
-      const match = matchJob(doc, preferences, job);
-      const action = String(req.body.action || "");
-      const track = action === "prepare" || action === "track";
-      let application = null;
-      const access = featuresOf(user);
-      if (track && profile && version && access.features.manual_apply) {
-        const status = action === "track" ? "Found" : "Ready";
-        application = await createApplication(user, job, "manual", doc, preferences, parse(profile.facts, []), {
-          status,
-          deliver: false,
-        });
-      }
-      res.json({
-        job: {
-          id: job.id,
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          remoteType: job.remote_type,
-          description: job.description,
-          skills: parse(job.skills, []),
-          requirements: parse(job.requirements, {}),
-          verification: job.verification,
-          sourceUrl: job.source_url,
-          score: match.score,
-          label: match.label,
-          explanation: match.explanation,
-          matched: match.matched,
-          missing: match.missing,
-        },
-        application,
-      });
-    } catch (error) {
-      res.status(400).json({ error: error instanceof Error ? error.message : "Could not import that job." });
-    }
-  });
-
-  app.put("/api/applications/:id/questions", (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    const row = db.prepare("SELECT * FROM applications WHERE id = ? AND user_id = ?").get(req.params.id, user.id);
-    if (!row) {
-      res.status(404).json({ error: "Application not found." });
-      return;
-    }
-    const incoming = Array.isArray(req.body.questions) ? req.body.questions : [];
-    const current = parse(row.questions, []);
-    const byId = new Map(current.map((item) => [item.id, item]));
-    const next = incoming.map((item, index) => {
-      const id = String(item.id || `custom-${index}`);
-      const prev = byId.get(id) || {};
-      const prompt = String(item.prompt || prev.prompt || "").trim();
-      if (!prompt) return null;
-      const sensitive = /salary|compensation|disability|veteran|race|gender|sponsor|authorization|criminal/i.test(prompt);
-      return {
-        id,
-        prompt,
-        kind: item.kind === "draft" || item.kind === "user" ? item.kind : prev.kind || "user",
-        answer: String(item.answer ?? prev.answer ?? ""),
-        blankReason: String(item.blankReason || prev.blankReason || (sensitive && !String(item.answer || "") ? "Sensitive — fill this yourself." : "")),
-        hint: String(item.hint || prev.hint || ""),
-        source: String(prev.source || item.source || "user"),
-      };
-    }).filter(Boolean);
-    db.prepare("UPDATE applications SET questions = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(next), Date.now(), row.id);
-    res.json({ questions: next });
-  });
-
-  app.post("/api/applications/:id/submit", async (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    const access = featuresOf(user);
-    if (!access.features.manual_apply && !access.features.auto_apply) {
-      res.status(403).json({ error: "Submitting applications is not on your plan." });
-      return;
-    }
-    const row = db.prepare("SELECT * FROM applications WHERE id = ? AND user_id = ?").get(req.params.id, user.id);
-    if (!row) {
-      res.status(404).json({ error: "Application not found." });
-      return;
-    }
-    if (!["Ready", "Review required", "Resume preparing"].includes(row.status)) {
-      res.status(400).json({ error: "Only ready or review-required applications can be submitted." });
-      return;
-    }
-    const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(row.job_id);
-    const version = row.version_id
-      ? db.prepare("SELECT * FROM resume_versions WHERE id = ? AND user_id = ?").get(row.version_id, user.id)
-      : null;
-    if (!job || !version) {
-      res.status(400).json({ error: "Prepare a tailored resume before submitting." });
-      return;
-    }
-    const delivery = await employerDelivery(user, job, version.rendered || "");
-    db.prepare("UPDATE applications SET status = 'Applied', delivery = ?, updated_at = ? WHERE id = ?").run(delivery, Date.now(), row.id);
-    res.json({ ok: true, status: "Applied", delivery });
-  });
-
-  app.post("/api/applications/auto", async (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    if (!requireFeature(user, "auto_apply", res)) return;
-    if (!user.auto_apply) {
-      res.status(400).json({ error: "Turn on auto apply in your account first." });
-      return;
-    }
-    const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
-    const version = activeVersion(user.id);
-    if (!profile || !version) {
-      res.status(400).json({ error: "A resume is required before auto apply." });
-      return;
-    }
-    const doc = parse(version.document, {});
-    const preferences = parse(profile.preferences, {});
-    const facts = parse(profile.facts, []);
-    const existing = new Set(db.prepare("SELECT job_id FROM applications WHERE user_id = ?").all(user.id).map((item) => item.job_id));
-    const dailyCap = Math.max(1, Math.min(25, Number(user.auto_daily_cap ?? 5) || 5));
-    let used = autoCapUsed(user.id);
-    const summary = { ready: 0, reviewRequired: 0, skipped: 0, capped: false };
-    const candidates = db
-      .prepare("SELECT * FROM jobs WHERE active = 1")
-      .all()
-      .filter((job) => !existing.has(job.id))
-      .map((job) => ({ job, ...matchJob(doc, preferences, job) }))
-      .sort((a, b) => b.score - a.score);
-
-    for (const item of candidates) {
-      if (used >= dailyCap) {
-        summary.capped = true;
-        break;
-      }
-      let decision = autoDecision(item.job, item, preferences, user);
-      if (decision.action === "skip") {
-        summary.skipped += 1;
-        continue;
-      }
-      if (decision.action === "ready" && !canAutoApply(item.job)) {
-        decision = { action: "review", reason: "Listing is not cleared for autopilot submit." };
-      }
-      const status = decision.action === "ready" ? "Ready" : "Review required";
-      await createApplication(user, item.job, "auto", doc, preferences, facts, {
-        status,
-        deliver: false,
-        reason: decision.reason,
-      });
-      used += 1;
-      if (status === "Ready") summary.ready += 1;
-      else summary.reviewRequired += 1;
-    }
-    res.json({ ...summary, applied: 0, queued: summary.ready + summary.reviewRequired });
-  });
-
-  app.patch("/api/applications/:id", (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    const status = TRACKER_STATUSES.includes(req.body.status) ? req.body.status : "";
-    if (!status) {
-      res.status(400).json({ error: "Choose a status from the tracker." });
-      return;
-    }
-    const result = db.prepare("UPDATE applications SET status = ?, updated_at = ? WHERE id = ? AND user_id = ?").run(status, Date.now(), req.params.id, user.id);
-    if (!result.changes) {
-      res.status(404).json({ error: "Application not found." });
-      return;
-    }
-    res.json({ ok: true });
-  });
-
-  app.put("/api/account/auto-apply", (req, res) => {
-    const user = requireUser(req, res);
-    if (!user) return;
-    if (req.body.enabled && !requireFeature(user, "auto_apply", res)) return;
-    const minMatch = Math.max(50, Math.min(99, Number(req.body.minMatch) || 85));
-    const dailyCap = Math.max(1, Math.min(25, Number(req.body.dailyCap) || user.auto_daily_cap || 5));
-    db.prepare("UPDATE users SET auto_apply = ?, auto_min = ?, auto_daily_cap = ? WHERE id = ?").run(
-      req.body.enabled ? 1 : 0,
-      minMatch,
-      dailyCap,
-      user.id,
-    );
-    const profile = db.prepare("SELECT preferences FROM profiles WHERE user_id = ?").get(user.id);
-    if (profile) {
-      const preferences = {
-        ...parse(profile.preferences, {}),
-        excludeCompanies: String(req.body.excludeCompanies || ""),
-        excludeKeywords: String(req.body.excludeKeywords || ""),
-      };
-      db.prepare("UPDATE profiles SET preferences = ?, updated_at = ? WHERE user_id = ?").run(JSON.stringify(preferences), Date.now(), user.id);
-    }
-    res.json({ ok: true });
-  });
-
   app.get("/api/public/resume/:slug", (req, res) => {
     const profile = db.prepare("SELECT * FROM profiles WHERE slug = ?").get(req.params.slug);
     if (!profile) {
@@ -1320,177 +1082,6 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     }
     db.prepare("DELETE FROM plans WHERE id = ?").run(plan.id);
     res.json({ ok: true });
-  });
-
-  app.get("/api/admin/jobs", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const sources = db.prepare("SELECT * FROM job_sources ORDER BY created_at").all();
-    const names = new Map(sources.map((source) => [source.id, source.name]));
-    res.json({
-      sources: sources.map(publicSource),
-      jobs: db.prepare("SELECT * FROM jobs ORDER BY created_at DESC LIMIT 300").all().map((job) => ({
-        id: job.id,
-        title: job.title,
-        company: job.company,
-        category: job.category,
-        role: job.role,
-        verification: job.verification,
-        location: job.location,
-        sourceId: job.source_id,
-        sourceName: names.get(job.source_id) || "Unknown feed",
-        primaryCompany: job.primary_company || "",
-        primaryUrl: job.primary_url || "",
-        primaryEmail: job.primary_email || "",
-        active: Boolean(job.active),
-      })),
-    });
-  });
-
-  app.post("/api/admin/job-sources", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const name = String(req.body.name || "").trim();
-    if (name.length < 2) {
-      res.status(400).json({ error: "Name the feed." });
-      return;
-    }
-    let url = "";
-    try {
-      url = normalizeFeedUrl(req.body.url);
-    } catch (error) {
-      res.status(400).json({ error: error instanceof Error ? error.message : "Enter a valid feed URL." });
-      return;
-    }
-    if (feedUrlTaken(url)) {
-      res.status(409).json({ error: "That feed is already added." });
-      return;
-    }
-    const config = feedConfig({ ...req.body, url });
-    const sourceId = id("src");
-    db.prepare("INSERT INTO job_sources (id, name, kind, config, enabled, created_at) VALUES (?, ?, 'json', ?, ?, ?)").run(
-      sourceId,
-      name,
-      JSON.stringify(config),
-      req.body.enabled === false ? 0 : 1,
-      Date.now(),
-    );
-    res.json({ source: publicSource(db.prepare("SELECT * FROM job_sources WHERE id = ?").get(sourceId)) });
-  });
-
-  app.put("/api/admin/job-sources/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const source = db.prepare("SELECT * FROM job_sources WHERE id = ?").get(req.params.id);
-    if (!source) {
-      res.status(404).json({ error: "Feed not found." });
-      return;
-    }
-    const name = String(req.body.name || source.name).trim();
-    if (name.length < 2) {
-      res.status(400).json({ error: "Name the feed." });
-      return;
-    }
-    const current = parse(source.config, {});
-    let url = current.url || "";
-    if (source.kind === "json" || source.kind === "rss" || req.body.url) {
-      try {
-        url = req.body.url == null || req.body.url === "" ? url : normalizeFeedUrl(req.body.url);
-      } catch (error) {
-        res.status(400).json({ error: error instanceof Error ? error.message : "Enter a valid feed URL." });
-        return;
-      }
-    }
-    if (url && feedUrlTaken(url, source.id)) {
-      res.status(409).json({ error: "That feed is already added." });
-      return;
-    }
-    if ((source.kind === "json" || source.kind === "rss") && !url) {
-      res.status(400).json({ error: "Add a feed URL." });
-      return;
-    }
-    const config = feedConfig({ ...req.body, url }, current);
-    db.prepare("UPDATE job_sources SET name = ?, config = ?, enabled = ? WHERE id = ?").run(
-      name,
-      JSON.stringify(config),
-      req.body.enabled === false ? 0 : 1,
-      source.id,
-    );
-    res.json({ source: publicSource(db.prepare("SELECT * FROM job_sources WHERE id = ?").get(source.id)) });
-  });
-
-  app.delete("/api/admin/job-sources/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const source = db.prepare("SELECT * FROM job_sources WHERE id = ?").get(req.params.id);
-    if (!source) {
-      res.status(404).json({ error: "Feed not found." });
-      return;
-    }
-    const jobs = db.prepare("SELECT id FROM jobs WHERE source_id = ?").all(source.id);
-    for (const job of jobs) db.prepare("DELETE FROM applications WHERE job_id = ?").run(job.id);
-    db.prepare("DELETE FROM jobs WHERE source_id = ?").run(source.id);
-    db.prepare("DELETE FROM job_sources WHERE id = ?").run(source.id);
-    res.json({ ok: true, removedJobs: jobs.length });
-  });
-
-  app.post("/api/admin/jobs/pull", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const requested = String(req.body.sourceId || "");
-    const sources = requested
-      ? db.prepare("SELECT * FROM job_sources WHERE id = ? AND kind != 'manual'").all(requested)
-      : db.prepare("SELECT * FROM job_sources WHERE enabled = 1 AND kind != 'manual'").all();
-    if (requested && !sources.length) {
-      res.status(404).json({ error: "Feed not found." });
-      return;
-    }
-    const results = [];
-    for (const source of sources) {
-      try {
-        const count = await pullSource(source);
-        results.push({ id: source.id, name: source.name, count });
-        audit({ functionName: "job_categorize", provider: "pipeline", model: "pull", status: "done", detail: source.name });
-      } catch (error) {
-        results.push({ id: source.id, name: source.name, error: error instanceof Error ? error.message : "Pull failed" });
-      }
-    }
-    res.json({ results });
-  });
-
-  app.delete("/api/admin/jobs/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const job = db.prepare("SELECT id FROM jobs WHERE id = ?").get(req.params.id);
-    if (!job) {
-      res.status(404).json({ error: "Job not found." });
-      return;
-    }
-    db.prepare("DELETE FROM applications WHERE job_id = ?").run(job.id);
-    db.prepare("DELETE FROM jobs WHERE id = ?").run(job.id);
-    res.json({ ok: true });
-  });
-
-  app.post("/api/admin/jobs", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
-    const title = String(req.body.title || "").trim();
-    const company = String(req.body.company || "").trim();
-    if (!title || !company) {
-      res.status(400).json({ error: "Title and company are required." });
-      return;
-    }
-    let source = db.prepare("SELECT * FROM job_sources WHERE kind = 'manual' LIMIT 1").get();
-    if (!source) {
-      const sourceId = id("src");
-      db.prepare("INSERT INTO job_sources (id, name, kind, config, enabled, created_at) VALUES (?, 'Manual entries', 'manual', '{}', 1, ?)").run(sourceId, Date.now());
-      source = db.prepare("SELECT * FROM job_sources WHERE id = ?").get(sourceId);
-    }
-    const draft = {
-      title,
-      company,
-      location: String(req.body.location || ""),
-      description: String(req.body.description || ""),
-      skills: String(req.body.skills || "").split(",").map((skill) => skill.trim()).filter(Boolean),
-      category: String(req.body.category || ""),
-      role: String(req.body.role || ""),
-    };
-    const checked = await categorizeAndVerify(draft, db.prepare("SELECT id, title, company FROM jobs").all());
-    const jobId = saveJob(source.id, { ...draft, remoteType: String(req.body.remoteType || ""), salaryMin: Number(req.body.salaryMin) || null, salaryMax: Number(req.body.salaryMax) || null, sourceUrl: String(req.body.sourceUrl || ""), externalKey: `${company}-${title}-${Date.now()}`, ...checked, note: checked.note });
-    res.json({ id: jobId });
   });
 
 }
