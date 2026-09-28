@@ -64,18 +64,27 @@ Browser
 9. Browser apply assistant (apply kit + employer-site complete)
 10. Career intelligence insights (demand, gaps, focus)
 11. Interview prep packs for tracked applications
-12. Employer accounts + public candidate search
-13. Voice practice sessions with fact-safe answer coaching
-14. Employer hiring pipeline (shortlist stages + notes)
-15. Live employer-led voice interviews with join codes
-16. Employer job postings and outbound candidate invites
-17. Multi-party interview rooms (host, interviewer, candidate)
-18. Employer analytics and SLA workflows
-19. Realtime WebRTC audio rooms (HTTP-polled signaling)
+12. Voice practice sessions with fact-safe answer coaching
+13. Resume extraction cleaning + terms-gated upload without dismissing the file
+14. Public HTML/JSON/RSS job ingest without source login
+15. Published Terms + Privacy draft pack on `/terms` and `/privacy`
+
+### Active next (candidate product — see `docs/SPEC_REVIEW_AND_PLAN.md`)
+
+1. Email OTP / magic-link activation
+2. Missing-preference interview after resume confirm
+3. Draft retention / deletion for unactivated uploads
+4. Account privacy controls (export / delete)
+5. Stronger second-model career fact review
+
+### Deferred unless explicitly requested
+
+- Employer accounts, hiring pipeline, employer voice rooms
+- Controlled Auto Apply authorization UX
+- Browser extension
 
 ### Later
 
-- Employer team seats and permissions
 - TURN servers / production media hardening
 
 ## Pricing gates (implemented in admin plan matrix)

@@ -283,6 +283,24 @@ button { cursor: pointer; }
 }
 .drop-title { font-weight: 700; font-size: 15px; }
 .drop-hint { color: var(--muted); font-size: 13px; margin: 4px 0 14px; }
+.drop-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f3fbf7;
+  border: 1px solid #cfe9dc;
+  font-size: 13px;
+  color: #244536;
+}
+.drop-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
 .drop .btn-block { margin-top: 2px; }
 .or-text { color: #91a0b3; font-size: 13px; margin: 10px 0; }
 .fine-print { color: #8b98ab; font-size: 12.5px; margin-top: 12px; }
@@ -797,8 +815,29 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
-.fact-list { margin: 8px 0 0; padding-left: 18px; color: #3d4d66; }
-.fact-list li { margin: 6px 0; }
+.article.legal-doc {
+  max-width: 760px;
+  padding-bottom: 64px;
+}
+.legal-section {
+  margin-top: 28px;
+}
+.legal-section h2 {
+  font-size: 1.15rem;
+  margin: 0 0 10px;
+}
+.legal-section p,
+.legal-section li {
+  color: #3d4d66;
+  line-height: 1.55;
+}
+.legal-section ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+.legal-section li {
+  margin: 6px 0;
+}
 
 .admin-shell {
   min-height: 100vh;

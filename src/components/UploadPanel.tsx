@@ -9,6 +9,18 @@ type UploadPanelProps = {
   showSample?: boolean;
 };
 
+function isAllowedResume(file: File) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".doc") && !name.endsWith(".docx")) {
+    return "Save the older Word .doc file as DOCX, then upload that.";
+  }
+  const allowed = name.endsWith(".pdf") || name.endsWith(".docx") || name.endsWith(".txt") || name.endsWith(".md");
+  if (!allowed) return "Use a PDF, DOCX, or TXT file.";
+  if (file.size > 10 * 1024 * 1024) return "That file is over 10MB.";
+  if (file.size === 0) return "That file is empty.";
+  return "";
+}
+
 export function UploadPanel({ showSample = false }: UploadPanelProps) {
   const inputId = useId();
   const navigate = useNavigate();
@@ -18,29 +30,24 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
   const [consent, setConsent] = useState(false);
+  const [selected, setSelected] = useState<File | null>(null);
   const [error, setError] = useState("");
 
-  async function take(file: File) {
+  function chooseFile(file: File | undefined | null) {
+    if (!file) return;
+    const problem = isAllowedResume(file);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setSelected(file);
+    setError(consent ? "" : "Resume selected. Check the agreement box, then continue.");
+  }
+
+  async function uploadFile(file: File) {
     if (!consent) {
-      setError("Agree to the terms before we read your resume.");
-      return;
-    }
-    const name = file.name.toLowerCase();
-    if (name.endsWith(".doc") && !name.endsWith(".docx")) {
-      setError("Save the older Word .doc file as DOCX, then upload that.");
-      return;
-    }
-    const allowed = name.endsWith(".pdf") || name.endsWith(".docx") || name.endsWith(".txt") || name.endsWith(".md");
-    if (!allowed) {
-      setError("Use a PDF, DOCX, or TXT file.");
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setError("That file is over 10MB.");
-      return;
-    }
-    if (file.size === 0) {
-      setError("That file is empty.");
+      setSelected(file);
+      setError("Agree to the terms before we read your resume. Your file is still selected.");
       return;
     }
     setError("");
@@ -56,11 +63,19 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
       window.dispatchEvent(new Event("jp-draft"));
       notify("We read your resume. Confirm the details to finish your account.");
       navigate("/get-started");
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "We could not read that file.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "We could not read that file.");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function uploadSelected() {
+    if (!selected) {
+      setError("Choose a resume file first.");
+      return;
+    }
+    await uploadFile(selected);
   }
 
   async function useSample() {
@@ -71,8 +86,9 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
       if (!response.ok) throw new Error("missing");
       const text = await response.text();
       const file = new File([text], "sample-resume.txt", { type: "text/plain" });
+      setSelected(file);
       setBusy(false);
-      await take(file);
+      await uploadFile(file);
     } catch {
       setError("The sample resume could not be loaded.");
       setBusy(false);
@@ -90,8 +106,7 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
       onDrop={(event) => {
         event.preventDefault();
         setDrag(false);
-        const file = event.dataTransfer.files?.[0];
-        if (file) void take(file);
+        chooseFile(event.dataTransfer.files?.[0]);
       }}
     >
       <input
@@ -102,7 +117,7 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
-          if (file) void take(file);
+          chooseFile(file);
         }}
       />
       <span className="drop-icon">
@@ -110,20 +125,28 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
       </span>
       <p className="drop-title">{busy ? "Reading your resume..." : hero.dropTitle}</p>
       <p className="drop-hint">{hero.dropHint}</p>
+      {selected ? (
+        <p className="drop-file" aria-live="polite">
+          Selected: <strong>{selected.name}</strong>
+          <button className="text-btn" type="button" onClick={() => setSelected(null)} disabled={busy}>
+            Clear
+          </button>
+        </p>
+      ) : null}
       {error ? (
         <p className="form-error" role="alert">
           {error}
         </p>
       ) : null}
       <TermsAgreement checked={consent} onChange={setConsent} includeResume />
-      <button
-        className="btn btn-primary btn-block"
-        type="button"
-        disabled={busy}
-        onClick={() => document.getElementById(inputId)?.click()}
-      >
-        {busy ? "Reading..." : hero.uploadLabel}
-      </button>
+      <div className="drop-actions">
+        <button className="btn btn-ghost btn-block" type="button" disabled={busy} onClick={() => document.getElementById(inputId)?.click()}>
+          {selected ? "Choose a different file" : hero.uploadLabel}
+        </button>
+        <button className="btn btn-primary btn-block" type="button" disabled={busy || !selected || !consent} onClick={() => void uploadSelected()}>
+          {busy ? "Reading..." : selected ? "Continue with this resume" : "Select a resume to continue"}
+        </button>
+      </div>
       <p className="or-text">{hero.orLabel}</p>
       <button
         className="btn btn-google btn-block"

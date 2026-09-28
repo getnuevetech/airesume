@@ -459,7 +459,9 @@ export function JobsAdmin() {
   return (
     <div>
       <h1>Job feeds</h1>
-      <p className="lede">Add each JSON or RSS feed once. If a site requires access, store the token or username and password on that feed. Pull reads the feed, labels the employer named in the listing, and keeps each job under its feed.</p>
+      <p className="lede">
+        Add public job sources that do not require a candidate login: public careers pages, JSON feeds, or RSS/Atom. Set a default employer when the page omits the company name. Optional tokens are only for documented public API keys — not for scraping behind a sign-in wall.
+      </p>
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="role">{message}</p> : null}
       <button className="btn btn-primary" type="button" onClick={() => void pull()}>Pull enabled feeds</button>
@@ -480,13 +482,14 @@ export function JobsAdmin() {
         <h2>Add a feed</h2>
         <div className="admin-grid">
           <label className="field"><span>Name</span><input value={feed.name} onChange={(event) => setFeed({ ...feed, name: event.target.value })} required /></label>
-          <label className="field"><span>Feed URL</span><input value={feed.url} onChange={(event) => setFeed({ ...feed, url: event.target.value })} placeholder="https://example.com/jobs.json" required /></label>
+          <label className="field"><span>Source URL</span><input value={feed.url} onChange={(event) => setFeed({ ...feed, url: event.target.value })} placeholder="https://boards.greenhouse.io/example or jobs.json / RSS" required /></label>
           <label className="field">
             <span>Format</span>
             <select value={feed.format} onChange={(event) => setFeed({ ...feed, format: event.target.value })}>
-              <option value="auto">Detect JSON or RSS</option>
+              <option value="auto">Detect JSON, RSS, or public HTML</option>
               <option value="json">JSON</option>
               <option value="rss">RSS or Atom</option>
+              <option value="html">Public HTML careers page</option>
             </select>
           </label>
           <label className="field"><span>Default employer if the feed omits one</span><input value={feed.employer} onChange={(event) => setFeed({ ...feed, employer: event.target.value })} /></label>
@@ -587,8 +590,10 @@ function FeedAccess<T extends { authType: string; username: string; headerName: 
         <label className="field"><span>Header name</span><input value={feed.headerName} onChange={(event) => onFeed({ ...feed, headerName: event.target.value })} placeholder="X-Api-Key" /></label>
       ) : null}
       {feed.authType !== "none" ? (
-        <label className="field"><span>{feed.authType === "basic" ? "Password" : "Token"}</span><input type="password" value={secret} onChange={(event) => onSecret(event.target.value)} placeholder="Leave blank to keep the saved value" /></label>
-      ) : null}
+        <label className="field"><span>{feed.authType === "basic" ? "Password" : "Token"}</span><input type="password" value={secret} onChange={(event) => onSecret(event.target.value)} placeholder="Optional public API key only" /></label>
+      ) : (
+        <p className="role">Public sources should use Access: None. Do not store personal login passwords for job sites.</p>
+      )}
     </div>
   );
 }
@@ -634,14 +639,15 @@ function FeedCard({ source, onPull, onChanged, onError }: { source: Source; onPu
       <p className="role">{source.kind} · {pulled}{source.config.hasSecret ? " · access saved" : ""}</p>
       <div className="admin-grid">
         <label className="field"><span>Name</span><input value={name} onChange={(event) => setName(event.target.value)} required /></label>
-        {remote ? <label className="field"><span>Feed URL</span><input value={url} onChange={(event) => setUrl(event.target.value)} required /></label> : null}
+        {remote ? <label className="field"><span>Source URL</span><input value={url} onChange={(event) => setUrl(event.target.value)} required /></label> : null}
         {remote ? (
           <label className="field">
             <span>Format</span>
             <select value={format} onChange={(event) => setFormat(event.target.value)}>
-              <option value="auto">Detect JSON or RSS</option>
+              <option value="auto">Detect JSON, RSS, or public HTML</option>
               <option value="json">JSON</option>
               <option value="rss">RSS or Atom</option>
+              <option value="html">Public HTML careers page</option>
             </select>
           </label>
         ) : null}

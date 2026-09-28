@@ -22,12 +22,16 @@ const SKILL_WORDS = [
   "Azure",
 ];
 
-const CORRUPT_MARK = /[¨ˆ˜˘˙˚˛˝°≡¼½¾¤¦§]/g;
+const CORRUPT_MARK = /[¨ˆ˜˘˙˚˛˝°≡¼½¾¤¦§☒÷×⊘⋊⊲⊳◊◆◇□■▪▫※†‡•‣※Ω∑∏√∞≈≠≤≥«»‹›¡¿¢£¥€℗™℠]/g;
+const PRIVATE_OR_SYMBOL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\uE000-\uF8FF\uFFF0-\uFFFF]/g;
 const NOT_A_NAME =
-  /\b(resume|curriculum|vitae|summary|experience|address|email|phone|mobile|objective|profile|skills|education|contact|references|personal|married|born|service|management|manager|engineer|developer|administrator|support|supervisor|design|designer|system|systems|solution|application|server|network|professional|director|analyst|consultant|specialist|officer|assistant|coordinator|architect|technician)\b/i;
+  /\b(resume|curriculum|vitae|summary|experience|address|email|phone|mobile|objective|profile|skills|education|contact|references|personal|married|born|service|management|manager|engineer|developer|administrator|support|supervisor|design|designer|system|systems|solution|application|server|network|professional|director|analyst|consultant|specialist|officer|assistant|coordinator|architect|technician|managed|deployed|developed|configured|maintained|installed|implemented|led|built|created|improved|responsible|duties|role|title|location|city|state|country|present|current|remote|hybrid)\b/i;
+const STOP_HEADER = /^(summary|experience|employment|work history|skills|education|projects|certifications|objective|profile)\b/i;
+const LABEL_LINE = /^(name|email|phone|mobile|address|location|city|tel|telephone|dob|date of birth)\s*[:#-]?\s*$/i;
+const FILLER_WORD = /^(the|and|for|with|from|into|onto|over|under|call|centre|center|deployment|preparation|solution|solutions|systems|server|remote|work)$/i;
 
 function isAllowedChar(ch) {
-  return /[\p{L}\p{N}]/u.test(ch) || ".,;:'\"’‘“”-–—/&()@+#%$!?*•·|".includes(ch);
+  return /[\p{L}\p{N}]/u.test(ch) || ".,;:'\"’‘“”-–—/&()@+#%$!?*|".includes(ch);
 }
 
 function weirdRatio(value) {
@@ -40,12 +44,42 @@ function weirdRatio(value) {
   return weird / compact.length;
 }
 
-function looksCorrupt(value) {
+function scriptCounts(value) {
+  let latin = 0;
+  let cjk = 0;
+  let greek = 0;
+  let other = 0;
+  for (const ch of String(value || "")) {
+    if (/\s/.test(ch)) continue;
+    if (/[\u0041-\u007A\u00C0-\u024F\u1E00-\u1EFF]/i.test(ch)) latin += 1;
+    else if (/[\u3040-\u30FF\u3400-\u9FFF\uF900-\uFAFF]/.test(ch)) cjk += 1;
+    else if (/[\u0370-\u03FF\u1F00-\u1FFF]/.test(ch)) greek += 1;
+    else if (/[\p{L}\p{N}]/u.test(ch)) other += 1;
+  }
+  return { latin, cjk, greek, other };
+}
+
+export function looksCorrupt(value) {
   const text = String(value || "");
   if (!text.trim()) return true;
+  if (PRIVATE_OR_SYMBOL.test(text)) return true;
   const marks = text.match(CORRUPT_MARK);
+  if (marks && marks.length >= 1 && weirdRatio(text) > 0.04) return true;
   if (marks && marks.length >= 2) return true;
-  return weirdRatio(text) > 0.12;
+  if (weirdRatio(text) > 0.08) return true;
+  const scripts = scriptCounts(text);
+  if (scripts.cjk && scripts.latin) return true;
+  if (scripts.greek >= 2 && scripts.latin) return true;
+  if (/[ØÐÞæðþßÐ]/.test(text) && /[≡½¾¼×÷¤¦§]/.test(text)) return true;
+  return false;
+}
+
+function sanitizeFragment(value) {
+  return String(value || "")
+    .replace(PRIVATE_OR_SYMBOL, "")
+    .replace(CORRUPT_MARK, " ")
+    .replace(/[^\S\n]+/g, " ")
+    .trim();
 }
 
 export function cleanResumeText(text) {
@@ -53,8 +87,8 @@ export function cleanResumeText(text) {
     .replace(/\u0000/g, "")
     .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
     .split(/\r?\n/)
-    .map((line) => line.replace(/[^\S\n]+/g, " ").trim())
-    .filter((line) => line && !looksCorrupt(line))
+    .map((line) => sanitizeFragment(line.replace(/[^\S\n]+/g, " ")))
+    .filter((line) => line && !looksCorrupt(line) && !LABEL_LINE.test(line))
     .join("\n");
 }
 
@@ -66,11 +100,13 @@ function appearsIn(source, value) {
 function isPersonName(name) {
   const value = String(name || "").replace(/\s+/g, " ").trim();
   if (value.length < 2 || value.length > 60) return false;
-  if (looksCorrupt(value) || /\d|@/.test(value)) return false;
+  if (looksCorrupt(value) || /\d|@|:/.test(value)) return false;
   if (!/^[\p{L}][\p{L}\s.'’-]*$/u.test(value)) return false;
   if (NOT_A_NAME.test(value)) return false;
+  if (/^(us|uk|uae|eu)\s+address$/i.test(value)) return false;
   const words = value.split(/\s+/).filter(Boolean);
-  if (words.length > 5) return false;
+  if (words.length < 1 || words.length > 5) return false;
+  if (words.some((word) => FILLER_WORD.test(word))) return false;
   const letters = (word) => word.replace(/[.'’\-]/g, "");
   if (words.length === 1) {
     const word = letters(words[0]);
@@ -80,19 +116,34 @@ function isPersonName(name) {
     const plain = letters(word);
     return plain.length <= 4 && plain === plain.toUpperCase() && !word.includes(".");
   });
-  if (allShortCaps) return false;
+  if (allShortCaps && words.length === 1) return false;
+  // Prefer real names: most words capitalized, no long lowercase filler phrases.
+  const titled = words.filter((word) => /^[\p{L}]/u.test(word) && word[0] === word[0].toUpperCase());
+  if (titled.length < Math.ceil(words.length / 2)) return false;
+  if (words.length >= 3 && words.every((word) => letters(word).length >= 4) && /ing\b|ment\b|tion\b/i.test(value)) {
+    return false;
+  }
   return words.some((word) => letters(word).length >= 2);
 }
 
-function pickName(source, city) {
+function headerLines(source) {
   const lines = String(source || "")
     .split(/\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  for (const line of lines.slice(0, 15)) {
-    const candidate = line.split(/\s+[|•]\s+/)[0].trim();
+  const stop = lines.findIndex((line) => STOP_HEADER.test(line));
+  return (stop < 0 ? lines.slice(0, 12) : lines.slice(0, stop)).slice(0, 12);
+}
+
+function pickName(source, city) {
+  for (const line of headerLines(source)) {
+    const candidate = line
+      .split(/\s+[|•]\s+/)[0]
+      .replace(/^(name|full name)\s*[:#-]?\s*/i, "")
+      .trim();
     if (city && candidate.toLowerCase() === String(city).toLowerCase()) continue;
     if (/,\s*[A-Z]{2}\b/.test(candidate)) continue;
+    if (/@|https?:|\d{3,}/.test(candidate)) continue;
     if (isPersonName(candidate)) return candidate;
   }
   return "";
@@ -103,7 +154,7 @@ function listEmails(text) {
   for (const match of String(text || "").matchAll(/[A-Z0-9][A-Z0-9._%+-]*@[A-Z0-9.-]+\.[A-Z]{2,}/gi)) {
     const email = match[0].replace(/[.,;:]+$/, "");
     const local = email.split("@")[0] || "";
-    if (local.length < 3) continue;
+    if (local.length < 2) continue;
     if (!found.some((item) => item.toLowerCase() === email.toLowerCase())) found.push(email);
   }
   found.sort((a, b) => b.length - a.length);
@@ -159,9 +210,51 @@ function pickPhone(candidate, source) {
   return found[0] || "";
 }
 
+function isLocationLabel(value) {
+  return /^(us|uk|uae|eu)?\s*address$/i.test(String(value || "").trim()) || /^(location|city|state|country)$/i.test(String(value || "").trim());
+}
+
+function pickCity(source, candidate = "") {
+  const wanted = String(candidate || "").replace(/\s+/g, " ").trim();
+  if (wanted && !looksCorrupt(wanted) && !isLocationLabel(wanted) && appearsIn(source, wanted) && wanted.length < 48) {
+    if (/,\s*[A-Z]{2}\b/.test(wanted) || /^[\p{L}][\p{L}\s.'’-]*$/u.test(wanted)) return wanted;
+  }
+  const lines = String(source || "")
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (const line of lines.slice(0, 20)) {
+    if (looksCorrupt(line) || isLocationLabel(line) || /@/.test(line)) continue;
+    if (/,\s*[A-Z]{2}\b/.test(line) && line.length < 48) return line;
+    const cityOnly = line.match(/^([A-Z][\p{L}'’.-]+(?:\s+[A-Z][\p{L}'’.-]+){0,2}),?\s*([A-Z]{2})\b/u);
+    if (cityOnly) return `${cityOnly[1]}, ${cityOnly[2]}`;
+  }
+  return "";
+}
+
+function pickAddress(source, candidate = "") {
+  const wanted = String(candidate || "").replace(/\s+/g, " ").trim();
+  if (wanted && !looksCorrupt(wanted) && appearsIn(source, wanted) && wanted.length <= 120) {
+    if (/^\d+\s+\w+/.test(wanted) || /street|st\.|ave|road|rd\.|blvd|lane|dr\.|apt\b|close|street/i.test(wanted)) {
+      return wanted;
+    }
+  }
+  const lines = String(source || "")
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (const line of lines.slice(0, 25)) {
+    if (looksCorrupt(line) || isLocationLabel(line)) continue;
+    if (/^\d+\s+\w+/.test(line) && /street|st\.|ave|road|rd\.|blvd|lane|dr\.|apt\b|close|street/i.test(line) && line.length <= 120) {
+      return line;
+    }
+  }
+  return "";
+}
+
 function cleanPlain(value, source, max) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
-  if (!text || text.length > max || looksCorrupt(text)) return "";
+  if (!text || text.length > max || looksCorrupt(text) || isLocationLabel(text)) return "";
   if (source && !appearsIn(source, text)) return "";
   return text;
 }
@@ -169,11 +262,12 @@ function cleanPlain(value, source, max) {
 function cleanSummary(value, source) {
   const text = String(value || "").replace(/\s+/g, " ").trim().slice(0, 500);
   if (!text || looksCorrupt(text)) return "";
+  if (/born on|married\.?$/i.test(text) && text.length < 80) return "";
   const words = text.split(/\s+/).filter((word) => word.replace(/[^A-Za-z0-9]/g, "").length > 3);
   if (!words.length) return text.length < 80 && appearsIn(source, text) ? text : "";
   const hay = String(source || "").toLowerCase();
   const hits = words.filter((word) => hay.includes(word.toLowerCase().replace(/[^a-z0-9]/gi, "")));
-  if (hits.length / words.length < 0.6) return "";
+  if (hits.length / words.length < 0.55) return "";
   return text;
 }
 
@@ -192,25 +286,26 @@ export function deterministicExtract(text) {
     .filter(Boolean);
   const email = pickEmail("", text);
   const phone = pickPhone("", text);
-  const city = lines.find((line) => /,\s*[A-Z]{2}\b/.test(line) && line.length < 48 && !looksCorrupt(line)) || "";
+  const city = pickCity(text);
   const name = pickName(text, city);
-  const address =
-    lines.find((line) => /^\d+\s+\w+/.test(line) && /street|st\.|ave|road|rd\.|blvd|lane|dr\.|apt\b/i.test(line) && !looksCorrupt(line)) ||
-    "";
-  const summaryBlock = section(lines, "Summary", ["Experience", "Skills", "Education"]);
+  const address = pickAddress(text);
+  const summaryBlock = section(lines, "Summary", ["Experience", "Skills", "Education", "Employment", "Work History"]);
   const summary = summaryBlock.join(" ").slice(0, 500);
-  const skillLines = section(lines, "Skills", ["Education", "Experience", "Summary"]);
+  const skillLines = section(lines, "Skills", ["Education", "Experience", "Summary", "Employment"]);
   const skills = SKILL_WORDS.filter((skill) => new RegExp(skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(text));
   for (const line of skillLines.join(",").split(/[,•]/)) {
     const clean = line.trim();
-    if (clean && clean.length < 40 && !skills.some((skill) => skill.toLowerCase() === clean.toLowerCase())) {
+    if (clean && clean.length < 40 && !looksCorrupt(clean) && !skills.some((skill) => skill.toLowerCase() === clean.toLowerCase())) {
       skills.push(clean);
     }
   }
-  const experience = section(lines, "Experience", ["Skills", "Education", "Summary"]);
+  const experience = section(lines, "Experience", ["Skills", "Education", "Summary"])
+    .concat(section(lines, "Employment", ["Skills", "Education", "Summary"]))
+    .concat(section(lines, "Work History", ["Skills", "Education", "Summary"]));
   const employment = [];
   let current = null;
   for (const line of experience) {
+    if (looksCorrupt(line)) continue;
     const bullet = line.replace(/^[-•*]\s*/, "");
     const marked = /^[-•*]/.test(line);
     const sentence = current && /[.!?]$/.test(bullet) && !/,/.test(bullet);
@@ -218,7 +313,11 @@ export function deterministicExtract(text) {
       current?.bullets.push(bullet);
       continue;
     }
-    const parts = bullet.split(",").map((part) => part.trim());
+    if (/^\d{4}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i.test(bullet) && /\b(present|current|date|\d{4})\b/i.test(bullet) && bullet.length < 40) {
+      if (current && !current.dates) current.dates = bullet;
+      continue;
+    }
+    const parts = bullet.split(/\s*[•|,]\s*/).map((part) => part.trim()).filter(Boolean);
     current = {
       title: parts[0] || bullet,
       employer: parts[1] || "",
@@ -289,16 +388,17 @@ function cleanEmployment(jobs, source) {
   for (const job of jobs || []) {
     const title = String(job?.title || "").replace(/\s+/g, " ").trim();
     const employer = String(job?.employer || "").replace(/\s+/g, " ").trim();
-    const dates = String(job?.dates || "").replace(/\s+/g, " ").trim();
+    let dates = String(job?.dates || "").replace(/\s+/g, " ").trim();
     if (!title || title.length > 80 || looksCorrupt(title) || looksCorrupt(employer)) continue;
     if (/\bdate\b/i.test(title) && title.length < 28) continue;
     if (!appearsIn(source, title)) continue;
     if (employer && (!appearsIn(source, employer) || employer.length > 80)) continue;
-    if (dates && (looksCorrupt(dates) || !appearsIn(source, dates))) continue;
+    if (dates && (looksCorrupt(dates) || /\bdate\b/i.test(dates) || !appearsIn(source, dates))) dates = "";
     const bullets = [];
     for (const bullet of job?.bullets || []) {
       const text = String(bullet || "").replace(/\s+/g, " ").trim();
       if (!text || text.length > 240 || looksCorrupt(text) || !appearsIn(source, text)) continue;
+      if (/^(born on|married)\b/i.test(text)) continue;
       bullets.push(text);
       if (bullets.length >= 6) break;
     }
@@ -313,6 +413,7 @@ function cleanEducation(items, source) {
   for (const item of items || []) {
     const text = String(item || "").replace(/\s+/g, " ").trim();
     if (!text || text.length > 120 || looksCorrupt(text) || !appearsIn(source, text)) continue;
+    if (/^(born on|married)\b/i.test(text)) continue;
     out.push(text);
     if (out.length >= 6) break;
   }
@@ -327,32 +428,31 @@ function rebuildFacts(profile) {
   if (profile.city) facts.push(fact("ID-004", "identity", `Location: ${profile.city}`, 0.8));
   else if (profile.address) facts.push(fact("ID-004", "identity", `Address: ${profile.address}`, 0.8));
   profile.employment.forEach((job, index) => {
-    facts.push(
-      fact(
-        `EXP-${String(index + 1).padStart(3, "0")}`,
-        "employment",
-        `${job.title}${job.employer ? ` at ${job.employer}` : ""}`,
-        0.75,
-      ),
-    );
+    const statement = `${job.title}${job.employer ? ` at ${job.employer}` : ""}${job.dates ? ` (${job.dates})` : ""}`;
+    if (looksCorrupt(statement)) return;
+    facts.push(fact(`EXP-${String(index + 1).padStart(3, "0")}`, "employment", statement, 0.75));
   });
   profile.skills.forEach((skill, index) => {
+    if (looksCorrupt(skill)) return;
     facts.push(fact(`SKILL-${String(index + 1).padStart(3, "0")}`, "skill", skill, 0.85));
   });
-  return facts;
+  return facts.filter((item) => !looksCorrupt(item.statement));
 }
 
 export function reviewExtraction(extracted, sourceText) {
   const source = cleanResumeText(sourceText);
   const unsupported = [];
+  const warnings = [];
   const name = isPersonName(extracted.name) && appearsIn(source, extracted.name) ? String(extracted.name).replace(/\s+/g, " ").trim() : "";
   const email = pickEmail(extracted.email, source);
   const phone = pickPhone(extracted.phone, source);
-  const city = cleanPlain(extracted.city, source, 48);
-  const address = cleanPlain(extracted.address, source, 120);
+  const city = pickCity(source, cleanPlain(extracted.city, source, 48) || extracted.city);
+  const address = pickAddress(source, extracted.address);
   if (extracted.name && !name) unsupported.push("name");
   if (extracted.email && !email) unsupported.push("email");
   if (extracted.phone && !phone) unsupported.push("phone");
+  if (extracted.city && !city) unsupported.push("city");
+  if (extracted.address && !address) unsupported.push("address");
   const profile = {
     ...extracted,
     name: name || pickName(source, city),
@@ -371,8 +471,15 @@ export function reviewExtraction(extracted, sourceText) {
   if (!profile.email) profile.questions.push("Which email should we use for your account?");
   if (!profile.phone) profile.questions.push("What phone number should employers use?");
   if (!profile.city && !profile.address) profile.questions.push("Which city are you based in?");
+  if (!profile.name) profile.questions.push("What full name should appear on your account?");
+  if (unsupported.length) {
+    warnings.push("Some extracted details were removed because they were not found clearly in the resume.");
+  }
+  if (!profile.email) warnings.push("No email was found. Add one to activate the account.");
+  if (!profile.name) warnings.push("No clear name was found. Add your full name before activating.");
+  profile.warnings = warnings;
   profile.review = {
-    status: unsupported.length ? "adjusted" : "pass",
+    status: unsupported.length || !profile.name || !profile.email ? "adjusted" : "pass",
     unsupported,
     prompt: prompts.CAREER_EXTRACTION_V1.slice(0, 80),
   };
@@ -405,9 +512,11 @@ export async function extractCareerProfile(text) {
   reviewed.model = ai.model;
   reviewed.costMicros = ai.costMicros || 0;
   reviewed.prompt = "CAREER_EXTRACTION_V1";
-  reviewed.warnings = [];
   if (!ai.json && ai.error) {
-    reviewed.warnings = ["The assigned model was unavailable, so a rules-based extraction was used."];
+    reviewed.warnings = [
+      ...(reviewed.warnings || []),
+      "The assigned model was unavailable, so a rules-based extraction was used.",
+    ];
   }
   return reviewed;
 }
@@ -418,19 +527,21 @@ function linesFromPdfItems(items) {
   let lastY = null;
   let lastEnd = null;
   const flush = () => {
-    const cleaned = line.replace(/[ \t]{2,}/g, " ").trim();
-    if (cleaned) lines.push(cleaned);
+    const cleaned = sanitizeFragment(line.replace(/[ \t]{2,}/g, " "));
+    if (cleaned && !looksCorrupt(cleaned)) lines.push(cleaned);
     line = "";
     lastEnd = null;
   };
   for (const item of items) {
-    if (!item || typeof item.str !== "string" || !item.str || looksCorrupt(item.str)) continue;
+    if (!item || typeof item.str !== "string" || !item.str) continue;
+    const fragment = sanitizeFragment(item.str);
+    if (!fragment || looksCorrupt(fragment)) continue;
     const y = item.transform?.[5] ?? 0;
     const x = item.transform?.[4] ?? 0;
     const gap = lastEnd == null ? 0 : x - lastEnd;
     if (lastY != null && Math.abs(y - lastY) > 3) flush();
-    if (line && gap > 1.5 && !line.endsWith(" ") && !item.str.startsWith(" ")) line += " ";
-    line += item.str;
+    if (line && gap > 1.5 && !line.endsWith(" ") && !fragment.startsWith(" ")) line += " ";
+    line += fragment;
     lastY = y;
     lastEnd = x + (Number(item.width) || 0);
     if (item.hasEOL) flush();

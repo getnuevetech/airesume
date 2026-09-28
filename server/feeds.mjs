@@ -1,7 +1,7 @@
 import { completeJson } from "./ai-run.mjs";
 
 const AUTH_TYPES = ["none", "bearer", "basic", "header"];
-const FORMATS = ["auto", "json", "rss"];
+const FORMATS = ["auto", "json", "rss", "html"];
 
 export function normalizeFeedUrl(value) {
   let parsed;
@@ -160,13 +160,112 @@ export function listingsFromXml(xml, fallbackCompany) {
   return rows;
 }
 
-export function parseFeedDocument(text, contentType, fallbackCompany, format = "auto") {
+export function listingsFromHtml(html, fallbackCompany, baseUrl = "") {
+  const body = String(html || "");
+  const companyFallback = String(fallbackCompany || "").trim();
+  const rows = [];
+  const seen = new Set();
+
+  const push = (title, href, company = "", location = "", description = "") => {
+    const cleanTitle = decodeXml(title).replace(/\s+/g, " ").trim();
+    if (!cleanTitle || cleanTitle.length < 3 || cleanTitle.length > 160) return;
+    let sourceUrl = decodeXml(href).trim();
+    if (sourceUrl && baseUrl) {
+      try {
+        sourceUrl = new URL(sourceUrl, baseUrl).toString();
+      } catch {
+        sourceUrl = "";
+      }
+    }
+    const companyName = decodeXml(company).trim() || companyFallback;
+    if (!companyName) return;
+    const key = `${cleanTitle.toLowerCase()}|${sourceUrl || companyName.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push({
+      externalKey: (sourceUrl || `${companyName}-${cleanTitle}`).slice(0, 180),
+      title: cleanTitle,
+      company: companyName,
+      employer: "",
+      location: decodeXml(location).trim(),
+      remoteType: /remote/i.test(`${location} ${description}`) ? "remote" : "",
+      salaryMin: null,
+      salaryMax: null,
+      description: decodeXml(description).slice(0, 5000),
+      skills: [],
+      category: "",
+      role: "",
+      sourceUrl,
+      applyUrl: sourceUrl,
+    });
+  };
+
+  for (const match of body.matchAll(
+    /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+  )) {
+    try {
+      const json = JSON.parse(match[1]);
+      const nodes = Array.isArray(json) ? json : json["@graph"] ? json["@graph"] : [json];
+      for (const node of nodes) {
+        const type = String(node?.["@type"] || "");
+        if (!/JobPosting/i.test(type)) continue;
+        push(
+          node.title || node.name || "",
+          node.url || node.mainEntityOfPage || "",
+          node.hiringOrganization?.name || companyFallback,
+          node.jobLocation?.address?.addressLocality || node.jobLocationType || "",
+          node.description || "",
+        );
+      }
+    } catch {
+      // Ignore invalid JSON-LD blocks.
+    }
+  }
+
+  for (const match of body.matchAll(
+    /<a\b[^>]*href=["']([^"']*(?:\/jobs?\/|\/careers?\/|\/position\/|\/opening\/|gh_jid=|lever\.co\/|ashbyhq\.com\/|greenhouse\.io\/)[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi,
+  )) {
+    const title = decodeXml(match[2]).replace(/\s+/g, " ").trim();
+    if (!title || title.length < 3) continue;
+    push(title, match[1], companyFallback);
+  }
+
+  if (!rows.length) {
+    for (const match of body.matchAll(/<(h1|h2|h3)[^>]*>([\s\S]*?)<\/\1>/gi)) {
+      const inner = match[2];
+      const link = inner.match(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
+      if (!link) continue;
+      const title = decodeXml(link[2]).replace(/\s+/g, " ").trim();
+      if (!title || title.length < 4 || title.length > 120) continue;
+      if (!/engineer|manager|analyst|designer|developer|specialist|director|lead|coordinator|assistant|officer|consultant|architect|scientist|nurse|teacher|sales|support|intern|product|marketing|finance|operations|technician/i.test(title)) {
+        continue;
+      }
+      push(title, link[1], companyFallback);
+    }
+  }
+
+  return rows;
+}
+
+function isLoginWall(body) {
+  return /<form\b/i.test(body) && /type=["']password["']/i.test(body) && !/<(rss|feed|item|entry)\b/i.test(body);
+}
+
+export function parseFeedDocument(text, contentType, fallbackCompany, format = "auto", baseUrl = "") {
   const body = String(text || "").trim();
-  const looksFeed = /<(rss|feed|item|entry)\b/i.test(body);
-  if (/<form\b/i.test(body) && /type=["']password["']/i.test(body) && !looksFeed) {
-    throw new Error("This address opened a sign-in page. Use the site's JSON or RSS feed URL, then add the token or username and password that feed expects.");
+  if (format !== "html" && isLoginWall(body) && !/<(rss|feed|item|entry)\b/i.test(body) && !/"@type"\s*:\s*"JobPosting"/i.test(body)) {
+    throw new Error(
+      "This address opened a sign-in page. Prefer a public careers page, JSON feed, or RSS/Atom URL that does not require login.",
+    );
   }
   if (format === "rss") return listingsFromXml(body, fallbackCompany);
+  if (format === "html") {
+    const rows = listingsFromHtml(body, fallbackCompany, baseUrl);
+    if (!rows.length) {
+      throw new Error("No public job listings were found on that page. Use a public careers URL, or a JSON/RSS feed.");
+    }
+    return rows;
+  }
   if (format === "json") {
     try {
       return listingsFromJson(JSON.parse(body), fallbackCompany);
@@ -175,18 +274,39 @@ export function parseFeedDocument(text, contentType, fallbackCompany, format = "
     }
   }
   const type = String(contentType || "").toLowerCase();
-  const looksXml = type.includes("xml") || type.includes("rss") || body.startsWith("<");
+  const looksXml = type.includes("xml") || type.includes("rss") || /<(rss|feed)\b/i.test(body);
   const looksJson = type.includes("json") || body.startsWith("{") || body.startsWith("[");
+  const looksHtml = type.includes("html") || /<html\b/i.test(body) || /<body\b/i.test(body);
   if (looksXml && !looksJson) return listingsFromXml(body, fallbackCompany);
-  if (!looksJson && /<form[\s\S]{0,800}type=["']password["']/i.test(body.slice(0, 5000))) {
-    throw new Error("This address opened a sign-in page. Use the site's JSON or RSS feed URL, then add the token or username and password that feed expects.");
+  if (!looksJson && isLoginWall(body.slice(0, 8000))) {
+    throw new Error(
+      "This address opened a sign-in page. Prefer a public careers page, JSON feed, or RSS/Atom URL that does not require login.",
+    );
+  }
+  if (looksJson) {
+    try {
+      return listingsFromJson(JSON.parse(body), fallbackCompany);
+    } catch {
+      // Fall through to HTML/XML attempts.
+    }
+  }
+  if (looksHtml || /JobPosting|\/jobs\/|\/careers\//i.test(body)) {
+    const htmlRows = listingsFromHtml(body, fallbackCompany, baseUrl);
+    if (htmlRows.length) return htmlRows;
   }
   try {
     return listingsFromJson(JSON.parse(body), fallbackCompany);
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("This address opened")) throw error;
-    if (body.startsWith("<")) return listingsFromXml(body, fallbackCompany);
-    throw new Error("This feed is not a JSON or RSS job list. Paste the feed URL, not a public search page.");
+    if (body.startsWith("<")) {
+      const xmlRows = listingsFromXml(body, fallbackCompany);
+      if (xmlRows.length) return xmlRows;
+      const htmlRows = listingsFromHtml(body, fallbackCompany, baseUrl);
+      if (htmlRows.length) return htmlRows;
+    }
+    throw new Error(
+      "Could not read jobs from that URL. Use a public careers page, JSON job feed, or RSS/Atom feed — login is not required for public sources.",
+    );
   }
 }
 
@@ -243,10 +363,18 @@ export async function fetchFeedListings(source, config) {
     throw new Error(`Could not reach the feed. ${message}`);
   }
   if (response.status === 401 || response.status === 403) {
-    throw new Error("This feed requires access. Add the API token or username and password on this feed, then pull again.");
+    throw new Error(
+      "This source blocked anonymous access. Prefer a public careers page or public JSON/RSS feed. Only add a token if the publisher documents a public API key.",
+    );
   }
   if (!response.ok) throw new Error(`Feed returned ${response.status}.`);
-  const listings = parseFeedDocument(await response.text(), response.headers.get("content-type") || "", config.employer || source.name, config.format || "auto");
-  if (!listings.length) throw new Error("The feed responded, but no jobs were in it. Check the URL and the default employer name.");
+  const listings = parseFeedDocument(
+    await response.text(),
+    response.headers.get("content-type") || "",
+    config.employer || source.name,
+    config.format || "auto",
+    config.url,
+  );
+  if (!listings.length) throw new Error("The source responded, but no jobs were in it. Check the URL and the default employer name.");
   return listings.map((listing) => ({ ...listing, sourceUrl: listing.sourceUrl || config.url }));
 }

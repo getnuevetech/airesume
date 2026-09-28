@@ -19,13 +19,16 @@ export function TermsAgreement({ checked, onChange, includeResume = false, requi
       <span>
         I agree to the{" "}
         <Link to="/terms" onClick={(event) => event.stopPropagation()}>
-          terms
+          Terms of Service
         </Link>{" "}
         and{" "}
         <Link to="/privacy" onClick={(event) => event.stopPropagation()}>
-          privacy policy
+          Privacy &amp; Data Use Policy
         </Link>
-        {includeResume ? ", and I agree that my resume can be read to fill this account" : ""}.
+        {includeResume
+          ? ". I confirm this resume is mine or I am authorized to upload it, and JobPilot may extract its contents to create a temporary draft profile"
+          : ""}
+        .
       </span>
     </div>
   );

@@ -21,6 +21,8 @@ type Draft = {
   facts: { fact_id: string; statement: string; confidence: number }[];
   questions: string[];
   warnings?: string[];
+  provider?: string;
+  model?: string;
 };
 
 export function GetStartedPage() {
@@ -173,7 +175,22 @@ export function GetStartedPage() {
       <div className="page-hero">
         <p className="eyebrow">Confirm your profile</p>
         <h1>We drafted your account from the resume.</h1>
-        <p className="lede">Check the details from your resume. Correct anything that is outdated, then activate the account.</p>
+        <p className="lede">
+          {draft.provider && draft.model
+            ? `Extracted with ${draft.provider} (${draft.model}). `
+            : ""}
+          Nothing here is invented. Correct anything that is outdated, then activate the account.
+        </p>
+        {(draft.warnings || []).map((warning) => (
+          <p className="form-error" role="alert" key={warning}>
+            {warning}
+          </p>
+        ))}
+        {draft.questions.length ? (
+          <p className="role" role="status">
+            {draft.questions.join(" ")}
+          </p>
+        ) : null}
         <div className="chips">
           {draft.profile.skills.map((skill) => (
             <span className="chip" key={skill}>
@@ -182,9 +199,12 @@ export function GetStartedPage() {
           ))}
         </div>
         <ul className="fact-list">
-          {draft.facts.slice(0, 8).map((fact) => (
-            <li key={fact.fact_id}>{fact.statement}</li>
-          ))}
+          {draft.facts
+            .filter((fact) => fact.statement && !/[\uE000-\uF8FF≡¼½¾¤¦§☒ØÐÞ]/.test(fact.statement))
+            .slice(0, 8)
+            .map((fact) => (
+              <li key={fact.fact_id}>{fact.statement}</li>
+            ))}
         </ul>
         {user ? (
           <p>
@@ -243,7 +263,6 @@ export function GetStartedPage() {
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required />
         </label>
         <TermsAgreement checked={consent} onChange={setConsent} includeResume />
-        {draft.questions.length ? <p className="role">{draft.questions.join(" ")}</p> : null}
         <button className="btn btn-primary btn-block" type="submit" disabled={Boolean(user)}>
           Create account
         </button>

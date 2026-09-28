@@ -1,38 +1,46 @@
 import { Link } from "react-router-dom";
+import { privacyDoc } from "../content/privacy";
+import { termsDoc, type LegalDoc } from "../content/terms";
 
-export function LegalPage({ kind }: { kind: "privacy" | "terms" }) {
-  if (kind === "privacy") {
-    return (
-      <article className="container article">
-        <p className="eyebrow">Privacy</p>
-        <h1>Privacy</h1>
-        <p className="role">Updated September 27, 2026</p>
-        <p>
-          JobPilot stores the account you create and the resume you upload so you can review and use that profile.
-        </p>
-        <p>
-          If you upload a resume, that file is read to fill your name, contact details, experience, and skills. You confirm those details before the account is activated.
-        </p>
-        <p>
-          Questions: <Link to="/contact">contact the team</Link>.
-        </p>
-      </article>
-    );
-  }
+function LegalArticle({ doc }: { doc: LegalDoc }) {
   return (
-    <article className="container article">
-      <p className="eyebrow">Terms</p>
-      <h1>Terms</h1>
-      <p className="role">Updated September 27, 2026</p>
-        <p>
-          By creating a JobPilot account you agree to these terms. You can create an account by entering your details or by uploading a resume.
-        </p>
-        <p>
-          Uploading a resume lets JobPilot read that file to fill the account. You can correct the details before the account is activated. You confirm that the resume and the details you submit are yours to share.
-        </p>
-        <p>The full terms text can be updated on this page.</p>
+    <article className="container article legal-doc">
+      <p className="eyebrow">{doc.title}</p>
+      <h1>{doc.title}</h1>
+      <p className="role">
+        Updated {doc.updated}
+        {doc.draft ? " · Draft for counsel review" : ""}
+      </p>
+      <p className="lede">
+        <a href={doc.pdfPath} target="_blank" rel="noreferrer">
+          Download PDF
+        </a>
+      </p>
+      {doc.sections.map((section) => (
+        <section key={section.heading} className="legal-section">
+          <h2>{section.heading}</h2>
+          {section.blocks.map((block, index) =>
+            block.type === "ul" ? (
+              <ul key={`${section.heading}-${index}`}>
+                {block.items.map((item) => (
+                  <li key={item.slice(0, 48)}>{item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p key={`${section.heading}-${index}`}>{block.text}</p>
+            ),
+          )}
+        </section>
+      ))}
+      <p className="fine-print">
+        Questions: <Link to="/contact">contact the team</Link>.
+      </p>
     </article>
   );
+}
+
+export function LegalPage({ kind }: { kind: "privacy" | "terms" }) {
+  return <LegalArticle doc={kind === "privacy" ? privacyDoc : termsDoc} />;
 }
 
 export function NotFoundPage() {
