@@ -22,6 +22,7 @@ Already live beyond early Phase 1:
 - AI audit cost estimates (`cost_micros`) with admin rollups
 - Browser apply assistant: copy-ready apply kit + mark Applied after employer-site submit
 - Career insights: demand, gaps, category outlook, and focus tips from catalog + profile facts
+- Interview prep: STAR drafts and talking points from resume bullets for tracked applications
 - Billing, resume, applications, jobs-admin, dashboard, profile, admin AI, and admin plans routes extracted from `platform.mjs`
 - Plans, Stripe/PayPal/manual billing hooks, AI provider admin, public `/resume/:slug`
 
@@ -54,10 +55,10 @@ Browser
 8. AI cost measurement from `ai_audit` + Free resume-review weekly quota
 9. Browser apply assistant (apply kit + employer-site complete)
 10. Career intelligence insights (demand, gaps, focus)
+11. Interview prep packs for tracked applications
 
 ### Later
 
-- Interview prep
 - Employer accounts, candidate search, voice interviews
 
 ## Pricing gates (implemented in admin plan matrix)

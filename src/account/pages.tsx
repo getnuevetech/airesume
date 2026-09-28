@@ -69,6 +69,7 @@ export function OverviewPage() {
           <h2>Continue</h2>
           <Link className="quiet-row" to="/account/resume"><strong>Review your resume</strong><span>Rating and recommendations</span></Link>
           <Link className="quiet-row" to="/account/insights"><strong>Career insights</strong><span>Skill demand, gaps, and focus areas</span></Link>
+          <Link className="quiet-row" to="/account/interview"><strong>Interview prep</strong><span>STAR drafts from your resume facts</span></Link>
           <Link className="quiet-row" to="/account/templates"><strong>Choose a template</strong><span>{data.templateLimit} design{data.templateLimit === 1 ? "" : "s"} on this plan</span></Link>
           <Link className="quiet-row" to="/account/profile"><strong>Update your profile</strong><span>Contact, experience, and photo</span></Link>
         </section>
@@ -203,6 +204,212 @@ export function InsightsPage() {
         )}
       </div>
     </Gate>
+  );
+}
+
+type InterviewPrep = {
+  applicationId: string | null;
+  status: string;
+  title: string;
+  company: string;
+  score: number | null;
+  label: string;
+  listingUrl: string;
+  briefing: {
+    role: string;
+    category: string;
+    location: string;
+    verification: string;
+    signals: string[];
+    missing: string[];
+    matched: string[];
+  };
+  prompts: {
+    id: string;
+    prompt: string;
+    kind: string;
+    answer: string;
+    ready: boolean;
+    note: string;
+    sourceBullet?: { title: string; employer: string; bullet: string } | null;
+  }[];
+  talkingPoints: { skill: string; detail: string; ready: boolean }[];
+  askEmployer: string[];
+  reminders: string[];
+};
+
+export function InterviewPage() {
+  const { data, setError } = useAccount();
+  const eligible = (data?.applications || []).filter((item) =>
+    ["Ready", "Applied", "Responded", "Interview", "Offer"].includes(item.status),
+  );
+  const priority = [...eligible].sort((a, b) => {
+    const rank = (status: string) => ({ Interview: 0, Offer: 1, Responded: 2, Applied: 3, Ready: 4 }[status] ?? 9);
+    return rank(a.status) - rank(b.status);
+  });
+  const [selected, setSelected] = useState("");
+  useEffect(() => {
+    if (!priority.length) {
+      setSelected("");
+      return;
+    }
+    setSelected((current) => (current && priority.some((item) => item.id === current) ? current : priority[0].id));
+  }, [data?.applications]);
+
+  return (
+    <Gate feature="job_browse">
+      <div className="account-page">
+        <header className="account-head">
+          <div>
+            <p className="eyebrow">Interview prep</p>
+            <h1>Prepare</h1>
+            <p className="lede">STAR drafts and talking points come from resume bullets and match overlap. Metrics you cannot verify stay blank.</p>
+          </div>
+        </header>
+        {!priority.length ? (
+          <section className="account-card">
+            <h2>No interview-ready applications yet</h2>
+            <p className="lede">Prep unlocks for Ready, Applied, Responded, Interview, and Offer rows in your tracker.</p>
+            <Link className="btn btn-primary btn-sm" to="/account/applications">Open tracker</Link>
+          </section>
+        ) : (
+          <>
+            <section className="account-card">
+              <h2>Choose an application</h2>
+              <div className="interview-pick">
+                {priority.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={selected === item.id ? "on" : ""}
+                    onClick={() => setSelected(item.id)}
+                  >
+                    <strong>{item.title}</strong>
+                    <span className="role">{item.company} · {item.status} · {item.match}%</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+            {selected ? (
+              <InterviewPrepPanel
+                applicationId={selected}
+                defaultOpen
+                onError={(message) => setError(message)}
+              />
+            ) : null}
+          </>
+        )}
+      </div>
+    </Gate>
+  );
+}
+
+function InterviewPrepPanel({
+  applicationId,
+  defaultOpen = false,
+  onError,
+}: {
+  applicationId: string;
+  defaultOpen?: boolean;
+  onError: (message: string) => void;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [prep, setPrep] = useState<InterviewPrep | null>(null);
+  const [copied, setCopied] = useState("");
+
+  async function load() {
+    const data = await api<{ prep: InterviewPrep }>(`/api/applications/${applicationId}/interview-prep`);
+    setPrep(data.prep);
+  }
+
+  useEffect(() => {
+    if (defaultOpen) void load().catch((err: Error) => onError(err.message));
+  }, [applicationId, defaultOpen, onError]);
+
+  async function copyText(label: string, value: string) {
+    if (!value.trim()) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      window.setTimeout(() => setCopied((current) => (current === label ? "" : current)), 1600);
+    } catch {
+      onError("Clipboard access was blocked.");
+    }
+  }
+
+  return (
+    <div className="interview-prep">
+      {!defaultOpen ? (
+        <button
+          className="text-btn"
+          type="button"
+          onClick={() => {
+            const next = !open;
+            setOpen(next);
+            if (next) void load().catch((err: Error) => onError(err.message));
+          }}
+        >
+          {open ? "Hide interview prep" : "Interview prep"}
+        </button>
+      ) : null}
+      {(open || defaultOpen) ? (
+        <section className="account-card interview-prep-panel">
+          {!prep ? <p className="role">Loading prep…</p> : (
+            <>
+              <header className="account-head" style={{ marginBottom: 8 }}>
+                <div>
+                  <h2>{prep.title}</h2>
+                  <p className="role">{prep.company}{prep.score != null ? ` · ${prep.score}% match` : ""}</p>
+                </div>
+                {prep.listingUrl ? <a className="btn btn-ghost btn-sm" href={prep.listingUrl} target="_blank" rel="noreferrer">Open listing</a> : null}
+              </header>
+              <p className="lede">Matched: {(prep.briefing.matched || []).join(", ") || "limited overlap"}.{(prep.briefing.missing || []).length ? ` Gaps to discuss honestly: ${prep.briefing.missing.join(", ")}.` : ""}</p>
+              {prep.briefing.signals.length ? (
+                <>
+                  <h3>From the listing</h3>
+                  <ul className="interview-signals">
+                    {prep.briefing.signals.map((line) => <li key={line}>{line}</li>)}
+                  </ul>
+                </>
+              ) : null}
+              <h3>Practice prompts</h3>
+              {prep.prompts.map((item) => (
+                <div className="apply-kit-row" key={item.id}>
+                  <div>
+                    <strong>{item.prompt}</strong>
+                    <p className="role">{item.answer || item.note}</p>
+                    {item.note && item.answer ? <p className="role">{item.note}</p> : null}
+                  </div>
+                  <button className="text-btn" type="button" disabled={!item.answer} onClick={() => void copyText(item.id, item.answer)}>
+                    {copied === item.id ? "Copied" : "Copy"}
+                  </button>
+                </div>
+              ))}
+              <h3>Talking points</h3>
+              {prep.talkingPoints.length ? prep.talkingPoints.map((item) => (
+                <div className="apply-kit-row" key={item.skill}>
+                  <div>
+                    <strong>{item.skill}</strong>
+                    <p className="role">{item.detail}</p>
+                  </div>
+                  <button className="text-btn" type="button" disabled={!item.ready} onClick={() => void copyText(item.skill, item.detail)}>
+                    {copied === item.skill ? "Copied" : "Copy"}
+                  </button>
+                </div>
+              )) : <p className="role">No matched skills to rehearse yet.</p>}
+              <h3>Ask them</h3>
+              <ul className="interview-signals">
+                {prep.askEmployer.map((question) => <li key={question}>{question}</li>)}
+              </ul>
+              <h3>Reminders</h3>
+              <ul className="interview-signals">
+                {prep.reminders.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            </>
+          )}
+        </section>
+      ) : null}
+    </div>
   );
 }
 
@@ -654,6 +861,12 @@ export function ApplicationsPage() {
               <BrowserApplyAssistant
                 applicationId={item.id}
                 onDone={() => { setMessage("Marked Applied after browser apply."); void reload(); }}
+                onError={(message) => setError(message)}
+              />
+            ) : null}
+            {["Ready", "Applied", "Responded", "Interview", "Offer"].includes(item.status) ? (
+              <InterviewPrepPanel
+                applicationId={item.id}
                 onError={(message) => setError(message)}
               />
             ) : null}
