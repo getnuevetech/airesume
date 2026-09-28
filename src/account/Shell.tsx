@@ -26,6 +26,9 @@ export function AccountShell() {
       </div>
     );
   }
+  if (user.role === "employer") {
+    return <Navigate to="/employer" replace />;
+  }
   if (user.mustChangePassword && location.pathname !== "/account/settings") {
     return <Navigate to="/account/settings" replace />;
   }

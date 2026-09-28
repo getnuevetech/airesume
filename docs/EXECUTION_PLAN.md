@@ -23,6 +23,7 @@ Already live beyond early Phase 1:
 - Browser apply assistant: copy-ready apply kit + mark Applied after employer-site submit
 - Career insights: demand, gaps, category outlook, and focus tips from catalog + profile facts
 - Interview prep: STAR drafts and talking points from resume bullets for tracked applications
+- Employer accounts with public-candidate search
 - Billing, resume, applications, jobs-admin, dashboard, profile, admin AI, and admin plans routes extracted from `platform.mjs`
 - Plans, Stripe/PayPal/manual billing hooks, AI provider admin, public `/resume/:slug`
 
@@ -56,10 +57,12 @@ Browser
 9. Browser apply assistant (apply kit + employer-site complete)
 10. Career intelligence insights (demand, gaps, focus)
 11. Interview prep packs for tracked applications
+12. Employer accounts + public candidate search
 
 ### Later
 
-- Employer accounts, candidate search, voice interviews
+- Voice interviews
+- Deeper employer hiring workflows
 
 ## Pricing gates (implemented in admin plan matrix)
 

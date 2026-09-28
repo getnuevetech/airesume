@@ -33,6 +33,11 @@ const features = [
     text: "Practice prompts and STAR drafts built from resume bullets. Gaps stay honest — no invented metrics.",
   },
   {
+    icon: <Search />,
+    title: "Employer search",
+    text: "Hiring teams can search members who published a public resume link — contact stays private unless shared.",
+  },
+  {
     icon: <Shield />,
     title: "Private by design",
     text: "Your file is read in this browser. It is not uploaded to a server.",

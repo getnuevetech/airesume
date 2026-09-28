@@ -7,6 +7,7 @@ import { BlogPage, BlogPostPage } from "./pages/Blog";
 import { ContactPage } from "./pages/Contact";
 import { AccountShell } from "./account/Shell";
 import { ApplicationsPage, InsightsPage, InterviewPage, JobsPage, OverviewPage, PlanPage, ProfilePage, ResumePage, SettingsPage, TemplatesPage } from "./account/pages";
+import { EmployerCandidatesPage, EmployerCompanyPage, EmployerLandingPage, EmployerShell } from "./employer/pages";
 import { DashboardPage } from "./pages/Dashboard";
 import { FeaturesPage } from "./pages/Features";
 import { ForgotPasswordPage } from "./pages/ForgotPassword";
@@ -40,6 +41,10 @@ export default function App() {
             <Route path="plan" element={<PlanPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
+          <Route path="employer" element={<EmployerShell />}>
+            <Route index element={<EmployerCandidatesPage />} />
+            <Route path="company" element={<EmployerCompanyPage />} />
+          </Route>
           <Route element={<Layout />}>
             <Route index element={<HomePage />} />
             <Route path="how-it-works" element={<HowItWorksPage />} />
@@ -52,6 +57,7 @@ export default function App() {
             <Route path="forgot-password" element={<ForgotPasswordPage />} />
             <Route path="reset-password" element={<ResetPasswordPage />} />
             <Route path="get-started" element={<GetStartedPage />} />
+            <Route path="employers" element={<EmployerLandingPage />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="contact" element={<ContactPage />} />
             <Route path="privacy" element={<LegalPage kind="privacy" />} />

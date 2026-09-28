@@ -32,7 +32,7 @@ export function AdminPage() {
   const { user, ready } = useApp();
   const { content } = useSiteContent();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"home" | "users" | "admins" | "mail" | "ai" | "plans" | "payments" | "jobs">("home");
+  const [tab, setTab] = useState<"home" | "users" | "admins" | "employers" | "mail" | "ai" | "plans" | "payments" | "jobs">("home");
 
   useEffect(() => {
     if (ready && user?.role !== "admin") navigate("/signin", { replace: true });
@@ -56,6 +56,9 @@ export function AdminPage() {
         <button type="button" className={tab === "admins" ? "on" : ""} onClick={() => setTab("admins")}>
           Admins
         </button>
+        <button type="button" className={tab === "employers" ? "on" : ""} onClick={() => setTab("employers")}>
+          Employers
+        </button>
         <button type="button" className={tab === "mail" ? "on" : ""} onClick={() => setTab("mail")}>
           Email
         </button>
@@ -76,6 +79,7 @@ export function AdminPage() {
         {tab === "home" ? <HomepageEditor /> : null}
         {tab === "users" ? <PeopleEditor roleFilter="user" /> : null}
         {tab === "admins" ? <PeopleEditor roleFilter="admin" /> : null}
+        {tab === "employers" ? <PeopleEditor roleFilter="employer" /> : null}
         {tab === "mail" ? <MailEditor /> : null}
         {tab === "ai" ? <AiAdmin /> : null}
         {tab === "plans" ? <PlansAdmin /> : null}
@@ -435,7 +439,7 @@ function HomepageEditor() {
   );
 }
 
-function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" }) {
+function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" | "employer" }) {
   const [users, setUsers] = useState<User[]>([]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -473,26 +477,30 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" }) {
 
   return (
     <div>
-      <h1>{roleFilter === "admin" ? "Admins" : "Users"}</h1>
+      <h1>{roleFilter === "admin" ? "Admins" : roleFilter === "employer" ? "Employers" : "Users"}</h1>
       {error ? <p className="form-error">{error}</p> : null}
       {link ? <p className="role">Reset link: {link}</p> : null}
-      <form className="admin-card admin-grid" onSubmit={create}>
-        <label className="field">
-          <span>Name</span>
-          <input value={name} onChange={(event) => setName(event.target.value)} required />
-        </label>
-        <label className="field">
-          <span>Email</span>
-          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
-        </label>
-        <label className="field">
-          <span>Password</span>
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required />
-        </label>
-        <button className="btn btn-primary" type="submit">
-          Add {roleFilter}
-        </button>
-      </form>
+      {roleFilter === "employer" ? (
+        <p className="lede">Employers create accounts at /employers. Disable an account here if needed.</p>
+      ) : (
+        <form className="admin-card admin-grid" onSubmit={create}>
+          <label className="field">
+            <span>Name</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} required />
+          </label>
+          <label className="field">
+            <span>Email</span>
+            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+          </label>
+          <label className="field">
+            <span>Password</span>
+            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required />
+          </label>
+          <button className="btn btn-primary" type="submit">
+            Add {roleFilter}
+          </button>
+        </form>
+      )}
       <div className="admin-table">
         {users.map((person) => (
           <article key={person.id}>
