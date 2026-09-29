@@ -26,7 +26,12 @@ export function MfaPolicyAdmin() {
   async function load() {
     const payload = await api<MfaPolicyPayload>("/api/admin/mfa-policy");
     setData(payload);
-    setDraft(payload.roles.map((role) => ({ ...role })));
+    setDraft(
+      payload.roles.map((role) => ({
+        ...role,
+        enabled: role.envOverride === "forced_on" ? true : role.envOverride === "forced_off" ? false : role.enabled,
+      })),
+    );
   }
 
   useEffect(() => {
@@ -50,7 +55,12 @@ export function MfaPolicyAdmin() {
         }),
       });
       setData(result);
-      setDraft(result.roles.map((role) => ({ ...role })));
+      setDraft(
+        result.roles.map((role) => ({
+          ...role,
+          enabled: role.envOverride === "forced_on" ? true : role.envOverride === "forced_off" ? false : role.enabled,
+        })),
+      );
       setMessage("MFA policy saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save MFA policy.");
