@@ -12,18 +12,17 @@ import { migrate, SCHEMA_VERSION } from "./schema.mjs";
 import { db } from "./db.mjs";
 
 test("schema version includes admin MFA and homepage CTA patches", () => {
-  assert.ok(SCHEMA_VERSION >= 24);
+  assert.ok(SCHEMA_VERSION >= 25);
   migrate();
   assert.ok(db.prepare("PRAGMA table_info(users)").all().some((column) => column.name === "totp_secret"));
   assert.ok(db.prepare("PRAGMA table_info(sessions)").all().some((column) => column.name === "mfa_at"));
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ai_prompt_versions'").get());
+  assert.ok(db.prepare("SELECT value FROM settings WHERE key = 'mfa_policy'").get());
 });
 
-test("admin MFA required in production unless explicitly disabled", () => {
-  assert.equal(adminMfaRequired({ NODE_ENV: "production" }), true);
-  assert.equal(adminMfaRequired({ NODE_ENV: "production", REQUIRE_ADMIN_MFA: "0" }), false);
-  assert.equal(adminMfaRequired({ NODE_ENV: "development", REQUIRE_ADMIN_MFA: "1" }), true);
-  assert.equal(adminMfaRequired({ NODE_ENV: "development" }), false);
+test("admin MFA env override still works", () => {
+  assert.equal(adminMfaRequired({ REQUIRE_ADMIN_MFA: "1", NODE_ENV: "development" }), true);
+  assert.equal(adminMfaRequired({ REQUIRE_ADMIN_MFA: "0", NODE_ENV: "production" }), false);
 });
 
 test("totp generate and verify round-trip", () => {

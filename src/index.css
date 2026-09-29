@@ -1140,6 +1140,44 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
   grid-template-columns: 220px 1fr;
   background: #f6f8fb;
 }
+.admin-gate {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 20px 64px;
+  background: #f6f8fb;
+}
+.admin-gate .admin-card {
+  width: min(480px, 100%);
+  margin: 0;
+  padding: 28px 28px 24px;
+}
+.admin-gate .admin-card h1 {
+  font-size: 28px;
+  margin-bottom: 10px;
+  line-height: 1.2;
+}
+.admin-gate .admin-card .lede {
+  margin-bottom: 16px;
+}
+.admin-gate .admin-card .btn {
+  width: auto;
+  max-width: 100%;
+  white-space: normal;
+  margin: 8px 0;
+}
+.admin-gate .admin-card .field {
+  margin-top: 16px;
+}
+.admin-gate .mfa-secret {
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e7edf3;
+  word-break: break-all;
+}
 .admin-nav {
   background: var(--ink);
   color: #fff;

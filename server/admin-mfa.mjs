@@ -1,13 +1,13 @@
-/** Admin TOTP MFA helpers (RFC 6238) — no external OTP dependency. */
+/** TOTP MFA helpers (RFC 6238) — no external OTP dependency. */
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { mfaRequiredForRole } from "./mfa-policy.mjs";
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
+/** @deprecated Prefer mfaRequiredForRole("admin"); kept for launch readiness + tests. */
 export function adminMfaRequired(env = process.env) {
-  if (String(env.REQUIRE_ADMIN_MFA || "") === "1") return true;
-  if (String(env.REQUIRE_ADMIN_MFA || "") === "0") return false;
-  return String(env.NODE_ENV || "") === "production";
+  return mfaRequiredForRole("admin", env);
 }
 
 export function generateTotpSecret(bytes = 20) {
