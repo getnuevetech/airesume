@@ -1143,7 +1143,7 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
 .admin-gate {
   min-height: 100vh;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   padding: 48px 20px 64px;
   background: #f6f8fb;
