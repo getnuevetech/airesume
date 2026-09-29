@@ -1,6 +1,6 @@
 /** Aggregate production launch readiness signals for Admin (no secrets). */
 
-import { adminMfaRequired } from "./admin-mfa.mjs";
+import { mfaRequiredForRole, getMfaPolicy } from "./mfa-policy.mjs";
 import { publicMailSettings } from "./mail.mjs";
 import { iceConfigSummary, resolveIceServers } from "./webrtc-signaling.mjs";
 import { db } from "./db.mjs";
@@ -28,7 +28,15 @@ export function computeLaunchReadiness(options = {}) {
   const ice = options.ice || iceConfigSummary(resolveIceServers(env));
   const nodeEnv = String(env.NODE_ENV || "development");
   const production = nodeEnv === "production";
-  const mfaRequired = adminMfaRequired(env);
+  const mfaRequired = mfaRequiredForRole("admin", env);
+  const policy = (() => {
+    try {
+      return getMfaPolicy(env);
+    } catch {
+      return null;
+    }
+  })();
+  const adminWhen = policy?.roles?.admin?.when || "session";
   const adminMfaEnrolled =
     typeof options.adminMfaEnrolled === "boolean"
       ? options.adminMfaEnrolled
@@ -62,8 +70,8 @@ export function computeLaunchReadiness(options = {}) {
       "Admin MFA policy",
       mfaRequired,
       mfaRequired
-        ? "Admin MFA is required (production default or REQUIRE_ADMIN_MFA=1)."
-        : "Admin MFA is not required. Set REQUIRE_ADMIN_MFA=1 or NODE_ENV=production before public launch.",
+        ? `Admin MFA is required (${adminWhen === "session" ? "re-verify every 12 hours" : "at every sign-in"}). Change under Admin → Security.`
+        : "Admin MFA is off in settings. Enable it under Admin → Security (or set REQUIRE_ADMIN_MFA=1) before public launch.",
       "required",
     ),
     check(

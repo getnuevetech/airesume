@@ -4,7 +4,24 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set("Content-Type", "application/json");
   }
   const response = await fetch(path, { ...init, headers, credentials: "include" });
-  const data = (await response.json().catch(() => ({}))) as T & { error?: string };
-  if (!response.ok) throw new Error(data.error || "Request failed.");
+  const data = (await response.json().catch(() => ({}))) as T & {
+    error?: string;
+    mfaRequired?: boolean;
+    mfaEnrolled?: boolean;
+    mustChangePassword?: boolean;
+  };
+  if (!response.ok) {
+    const err = new Error(data.error || "Request failed.") as Error & {
+      status?: number;
+      mfaRequired?: boolean;
+      mfaEnrolled?: boolean;
+      mustChangePassword?: boolean;
+    };
+    err.status = response.status;
+    err.mfaRequired = Boolean(data.mfaRequired);
+    err.mfaEnrolled = Boolean(data.mfaEnrolled);
+    err.mustChangePassword = Boolean(data.mustChangePassword);
+    throw err;
+  }
   return data;
 }

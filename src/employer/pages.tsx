@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
+import { MfaGate, useMfaGate } from "../components/MfaGate";
 
 type EmployerProfile = { companyName: string; website: string; blurb: string };
 type Candidate = {
@@ -71,6 +72,7 @@ const PIPELINE_STATUSES = ["Saved", "Reviewing", "Interviewing", "Offer", "Hired
 export function EmployerShell() {
   const { user, ready, signOut } = useApp();
   const navigate = useNavigate();
+  const { needsGate, checked } = useMfaGate();
 
   useEffect(() => {
     if (!ready) return;
@@ -79,6 +81,15 @@ export function EmployerShell() {
   }, [ready, user, navigate]);
 
   if (!ready || !user || user.role !== "employer") return null;
+  if (!checked) return null;
+  if (needsGate) {
+    return (
+      <MfaGate
+        title="Employer MFA required"
+        lede="Employer access requires an authenticator app. Enroll once, then enter a 6-digit code for this session."
+      />
+    );
+  }
 
   return (
     <div className="account-shell">

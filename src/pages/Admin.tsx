@@ -4,9 +4,11 @@ import { api } from "../api";
 import { useApp } from "../context/AppContext";
 import { useSiteContent } from "../content/siteContent";
 import type { User } from "../data";
+import { MfaGate, useMfaGate } from "../components/MfaGate";
 import { AiAdmin, JobsAdmin, PaymentsAdmin, PlansAdmin } from "./admin/Controls";
 import { HomepageEditor } from "./admin/HomepageEditor";
 import { LaunchReadinessAdmin } from "./admin/LaunchReadinessAdmin";
+import { MfaPolicyAdmin } from "./admin/MfaPolicyAdmin";
 
 type Mail = { id: string; to_email: string; subject: string; body: string };
 type Audit = {
@@ -31,93 +33,98 @@ type CostBucket = {
 type AuditSummary = { last24Hours: CostBucket; last7Days: CostBucket; last30Days: CostBucket };
 
 export function AdminPage() {
-  const { user, ready, refresh } = useApp();
+  const { user, ready, refresh, notify } = useApp();
   const { content } = useSiteContent();
   const navigate = useNavigate();
   const [tab, setTab] = useState<
-    "home" | "launch" | "users" | "admins" | "employers" | "mail" | "ai" | "plans" | "payments" | "jobs"
+    "home" | "launch" | "security" | "users" | "admins" | "employers" | "mail" | "ai" | "plans" | "payments" | "jobs"
   >("home");
-  const [mfa, setMfa] = useState<{ required: boolean; enrolled: boolean; verified: boolean } | null>(null);
-  const [mfaSetup, setMfaSetup] = useState<{ secret: string; otpauthUrl: string } | null>(null);
-  const [mfaCode, setMfaCode] = useState("");
-  const [mfaError, setMfaError] = useState("");
+  const { needsGate: needsMfaGate, checked: mfaChecked } = useMfaGate();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [nextPassword, setNextPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
 
   useEffect(() => {
-    if (ready && user?.role !== "admin") navigate("/signin", { replace: true });
-    if (ready && user?.mustChangePassword) navigate("/account/settings", { replace: true });
+    if (ready && !user) navigate("/signin", { replace: true });
+    else if (ready && user && user.role !== "admin") navigate("/signin", { replace: true });
   }, [ready, user, navigate]);
 
-  useEffect(() => {
-    if (!user || user.role !== "admin") return;
-    void api<{ required: boolean; enrolled: boolean; verified: boolean }>("/api/admin/mfa")
-      .then(setMfa)
-      .catch((err: Error & { mfaRequired?: boolean; status?: number }) => {
-        const message = String(err.message || "");
-        if (err.mfaRequired || /mfa/i.test(message)) {
-          setMfa({ required: true, enrolled: Boolean(user.mfaEnrolled), verified: Boolean(user.mfaVerified) });
-        }
+  if (!ready) return null;
+  if (!user || user.role !== "admin") return null;
+
+  async function updateBootstrapPassword(event: FormEvent) {
+    event.preventDefault();
+    setPasswordError("");
+    setPasswordBusy(true);
+    try {
+      await api("/api/account/password", {
+        method: "POST",
+        body: JSON.stringify({ current: currentPassword, password: nextPassword }),
       });
-  }, [user]);
-
-  if (!user || user.role !== "admin" || user.mustChangePassword) return null;
-
-  const needsMfaGate = Boolean(mfa?.required && (!mfa.enrolled || !mfa.verified));
-
-  async function setupMfa() {
-    setMfaError("");
-    try {
-      const data = await api<{ secret: string; otpauthUrl: string }>("/api/admin/mfa/setup", { method: "POST", body: "{}" });
-      setMfaSetup(data);
-    } catch (err) {
-      setMfaError(err instanceof Error ? err.message : "MFA setup failed.");
-    }
-  }
-
-  async function enableOrVerifyMfa() {
-    setMfaError("");
-    try {
-      const path = mfa?.enrolled || user?.mfaEnrolled ? "/api/admin/mfa/verify" : "/api/admin/mfa/enable";
-      await api(path, { method: "POST", body: JSON.stringify({ code: mfaCode }) });
-      setMfaCode("");
-      setMfaSetup(null);
+      setCurrentPassword("");
+      setNextPassword("");
+      notify("Admin password updated.");
       await refresh();
-      const status = await api<{ required: boolean; enrolled: boolean; verified: boolean }>("/api/admin/mfa");
-      setMfa(status);
     } catch (err) {
-      setMfaError(err instanceof Error ? err.message : "Invalid code.");
+      setPasswordError(err instanceof Error ? err.message : "Could not update the password.");
+    } finally {
+      setPasswordBusy(false);
     }
   }
+
+  if (user.mustChangePassword) {
+    return (
+      <div className="admin-gate">
+        <section className="admin-card">
+          <h1>Set your admin password</h1>
+          <p className="lede">
+            You signed in as Site Admin with the bootstrap password. Choose a new password to open the Admin console.
+            This is not the candidate account dashboard.
+          </p>
+          {passwordError ? <p className="form-error">{passwordError}</p> : null}
+          <form onSubmit={(event) => void updateBootstrapPassword(event)}>
+            <label className="field">
+              <span>Current bootstrap password</span>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </label>
+            <label className="field">
+              <span>New admin password</span>
+              <input
+                type="password"
+                value={nextPassword}
+                onChange={(event) => setNextPassword(event.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
+            </label>
+            <button className="btn btn-primary btn-sm" type="submit" disabled={passwordBusy}>
+              {passwordBusy ? "Saving…" : "Save admin password"}
+            </button>
+          </form>
+          <p className="role">
+            <Link to="/">Back to site</Link>
+          </p>
+        </section>
+      </div>
+    );
+  }
+
+  if (!mfaChecked) return null;
 
   if (needsMfaGate) {
     return (
-      <div className="admin-shell">
-        <main className="admin-main">
-          <section className="admin-card">
-            <h1>Admin MFA required</h1>
-            <p className="lede">Production admin access requires an authenticator app. Enroll once, then enter a 6-digit code for this session.</p>
-            {mfaError ? <p className="form-error">{mfaError}</p> : null}
-            {!mfa?.enrolled && !user?.mfaEnrolled ? (
-              <button className="btn btn-primary btn-sm" type="button" onClick={() => void setupMfa()}>
-                Generate authenticator secret
-              </button>
-            ) : null}
-            {mfaSetup ? (
-              <div className="role">
-                <p>Secret: <code>{mfaSetup.secret}</code></p>
-                <p className="role">otpauth: {mfaSetup.otpauthUrl}</p>
-              </div>
-            ) : null}
-            <label className="field">
-              <span>Authenticator code</span>
-              <input value={mfaCode} onChange={(event) => setMfaCode(event.target.value)} inputMode="numeric" maxLength={6} />
-            </label>
-            <button className="btn btn-primary btn-sm" type="button" onClick={() => void enableOrVerifyMfa()}>
-              {mfa?.enrolled || user?.mfaEnrolled ? "Verify MFA" : "Enable MFA"}
-            </button>
-            <p className="role"><Link to="/">Back to site</Link></p>
-          </section>
-        </main>
-      </div>
+      <MfaGate
+        title="Admin MFA required"
+        lede="Admin access requires an authenticator app. Enroll once, then enter a 6-digit code for this session."
+      />
     );
   }
 
@@ -132,6 +139,9 @@ export function AdminPage() {
         </button>
         <button type="button" className={tab === "launch" ? "on" : ""} onClick={() => setTab("launch")}>
           Launch
+        </button>
+        <button type="button" className={tab === "security" ? "on" : ""} onClick={() => setTab("security")}>
+          Security
         </button>
         <button type="button" className={tab === "users" ? "on" : ""} onClick={() => setTab("users")}>
           Users
@@ -161,6 +171,7 @@ export function AdminPage() {
       <main className="admin-main">
         {tab === "home" ? <HomepageEditor /> : null}
         {tab === "launch" ? <LaunchReadinessAdmin /> : null}
+        {tab === "security" ? <MfaPolicyAdmin /> : null}
         {tab === "users" ? <PeopleEditor roleFilter="user" /> : null}
         {tab === "admins" ? <PeopleEditor roleFilter="admin" /> : null}
         {tab === "employers" ? <PeopleEditor roleFilter="employer" /> : null}

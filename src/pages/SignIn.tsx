@@ -9,6 +9,10 @@ export function SignInPage() {
   const navigate = useNavigate();
   useEffect(() => {
     if (!user) return;
+    if (user.mustChangePassword) {
+      navigate(user.role === "admin" ? "/admin" : "/account/settings", { replace: true });
+      return;
+    }
     navigate(user.role === "admin" ? "/admin" : user.role === "employer" ? "/employer" : "/account", { replace: true });
   }, [user, navigate]);
   const [email, setEmail] = useState("");

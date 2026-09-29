@@ -1,6 +1,7 @@
 import { NavLink, Outlet, Link, Navigate, useLocation } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { AccountProvider, useAccount } from "./AccountContext";
+import { MfaGate, useMfaGate } from "../components/MfaGate";
 
 const ITEMS = [
   { to: "/account", label: "Home", icon: "home", end: true },
@@ -19,6 +20,7 @@ const ITEMS = [
 export function AccountShell() {
   const { user } = useApp();
   const location = useLocation();
+  const { needsGate, checked } = useMfaGate();
   if (!user) {
     return (
       <div className="container page-hero">
@@ -30,8 +32,22 @@ export function AccountShell() {
   if (user.role === "employer") {
     return <Navigate to="/employer" replace />;
   }
+  if (user.role === "admin" && user.mustChangePassword) {
+    return <Navigate to="/admin" replace />;
+  }
   if (user.mustChangePassword && location.pathname !== "/account/settings") {
     return <Navigate to="/account/settings" replace />;
+  }
+  if (!user.mustChangePassword) {
+    if (!checked) return null;
+    if (needsGate) {
+      return (
+        <MfaGate
+          title="Authenticator required"
+          lede="Your account type requires an authenticator app. Enroll once, then enter a 6-digit code for this session."
+        />
+      );
+    }
   }
   return (
     <AccountProvider>

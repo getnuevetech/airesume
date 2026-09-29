@@ -4,8 +4,9 @@ import { fileURLToPath } from "node:url";
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 import { seedPromptRegistry } from "./prompt-registry.mjs";
+import { seedMfaPolicy } from "./mfa-policy.mjs";
 
-export const SCHEMA_VERSION = 24;
+export const SCHEMA_VERSION = 25;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -616,6 +617,7 @@ export function migrate() {
   }
 
   seedPromptRegistry();
+  seedMfaPolicy();
 }
 
 export function featureLabels(features) {
