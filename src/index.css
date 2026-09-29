@@ -1149,7 +1149,7 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
   background: #f6f8fb;
 }
 .admin-gate .admin-card {
-  width: min(480px, 100%);
+  width: min(520px, 100%);
   margin: 0;
   padding: 28px 28px 24px;
 }

@@ -101,7 +101,7 @@ export function MfaGate({
             {mfaSetup.qrDataUrl ? (
               <div className="mfa-qr">
                 <img src={mfaSetup.qrDataUrl} alt="Authenticator QR code" width={220} height={220} />
-                <p className="role">Scan with Google Authenticator, Authy, 1Password, or any TOTP app.</p>
+                <p className="role">Scan with Google Authenticator, Authy, 1Password, or any authenticator app.</p>
               </div>
             ) : (
               <p className="form-error">QR code could not be generated. Enter the secret manually below.</p>
