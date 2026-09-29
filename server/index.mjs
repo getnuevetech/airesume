@@ -49,6 +49,18 @@ import {
   publicMfaPolicy,
   saveMfaPolicy,
 } from "./mfa-policy.mjs";
+import {
+  adminAccessSummary,
+  adminHasPermission,
+  createAccessLevel,
+  deleteAccessLevel,
+  getAccessLevel,
+  listAccessLevels,
+  publicPermissionCatalog,
+  seedAdminAccessLevels,
+  SUPER_LEVEL_ID,
+  updateAccessLevel,
+} from "./admin-access.mjs";
 import { computeLaunchReadiness } from "./launch-readiness.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -57,6 +69,7 @@ const defaultHomepage = JSON.parse(readFileSync(homepageFile, "utf8"));
 
 function seed() {
   purgeExpiredDrafts();
+  seedAdminAccessLevels();
   const existing = db.prepare("SELECT value FROM settings WHERE key = 'homepage'").get();
   if (!existing) {
     db.prepare("INSERT INTO settings (key, value) VALUES ('homepage', ?)").run(JSON.stringify(defaultHomepage));
@@ -76,9 +89,9 @@ function seed() {
     const password = process.env.ADMIN_PASSWORD || "JobPilot-Admin-2026";
     const mustChange = process.env.ADMIN_PASSWORD ? 0 : 1;
     db.prepare(
-      `INSERT INTO users (id, name, email, password_hash, provider, role, status, password_must_change, created_at)
-       VALUES (?, 'Site Admin', ?, ?, 'email', 'admin', 'active', ?, ?)`,
-    ).run(id("usr"), email, hashPassword(password), mustChange, Date.now());
+      `INSERT INTO users (id, name, email, password_hash, provider, role, status, password_must_change, created_at, admin_access_level_id)
+       VALUES (?, 'Site Admin', ?, ?, 'email', 'admin', 'active', ?, ?, ?)`,
+    ).run(id("usr"), email, hashPassword(password), mustChange, Date.now(), SUPER_LEVEL_ID);
     try {
       const note = mustChange
         ? `email: ${email}\npassword: ${password}\nnote: change this password on first sign-in\n`
@@ -229,6 +242,15 @@ function allowedWhilePasswordChange(req) {
   return false;
 }
 
+function enrichPublicUser(row) {
+  const base = publicUser(row);
+  if (!base) return null;
+  if (base.role !== "admin") {
+    return { ...base, accessLevelId: null, accessLevelName: null, isSuperAdmin: false, permissions: [] };
+  }
+  return { ...base, ...adminAccessSummary(row) };
+}
+
 function requireUser(req, res) {
   const user = currentUser(req);
   if (!user) {
@@ -243,11 +265,22 @@ function requireUser(req, res) {
   return user;
 }
 
-function requireAdmin(req, res) {
+function requireAdmin(req, res, permission = null) {
   const user = requireUser(req, res);
   if (!user) return null;
   if (user.role !== "admin") {
     res.status(403).json({ error: "Admin access required." });
+    return null;
+  }
+  if (!adminHasPermission(user, "admin.portal.access")) {
+    res.status(403).json({ error: "Admin portal access is not granted for this access level.", permission: "admin.portal.access" });
+    return null;
+  }
+  if (permission && !adminHasPermission(user, permission)) {
+    res.status(403).json({
+      error: "Your admin access level does not include this action.",
+      permission,
+    });
     return null;
   }
   return user;
@@ -275,7 +308,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.get("/api/admin/launch-readiness", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireAdmin(req, res, "admin.launch.read")) return;
   res.json(computeLaunchReadiness());
 });
 
@@ -285,7 +318,7 @@ app.get("/api/content/homepage", (_req, res) => {
 });
 
 app.get("/api/auth/me", (req, res) => {
-  res.json({ user: publicUser(currentUser(req)) });
+  res.json({ user: enrichPublicUser(currentUser(req)) });
 });
 
 app.post("/api/auth/login", (req, res) => {
@@ -314,7 +347,7 @@ app.post("/api/auth/login", (req, res) => {
     return;
   }
   setSession(res, user.id, req);
-  res.json({ user: publicUser(user) });
+  res.json({ user: enrichPublicUser(user) });
 });
 
 app.post("/api/auth/register", (req, res) => {
@@ -348,7 +381,7 @@ app.post("/api/auth/register", (req, res) => {
   ).run(userId, name, email, hashPassword(password), Date.now(), Date.now());
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
   setSession(res, userId);
-  res.json({ user: publicUser(user) });
+  res.json({ user: enrichPublicUser(user) });
 });
 
 app.post("/api/auth/logout", (req, res) => {
@@ -673,7 +706,7 @@ app.post("/api/onboarding/activate", async (req, res) => {
       syncProfileVersion(userId);
       setSession(res, userId, req);
       const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
-      res.json({ user: publicUser(user), pending: false });
+      res.json({ user: enrichPublicUser(user), pending: false });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Could not create the account." });
     }
@@ -714,7 +747,7 @@ app.post("/api/onboarding/verify", (req, res) => {
     syncProfileVersion(userId);
     setSession(res, userId, req);
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
-    res.json({ user: publicUser(user), pending: false });
+    res.json({ user: enrichPublicUser(user), pending: false });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Could not activate the account." });
   }
@@ -856,12 +889,12 @@ app.post("/api/admin/mfa/enable", handleMfaEnable);
 app.post("/api/admin/mfa/verify", handleMfaVerify);
 
 app.get("/api/admin/mfa-policy", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireAdmin(req, res, "admin.security.mfa_policy.read")) return;
   res.json(publicMfaPolicy());
 });
 
 app.put("/api/admin/mfa-policy", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireAdmin(req, res, "admin.security.mfa_policy.write")) return;
   const incoming = { roles: {} };
   for (const role of ["admin", "employer", "user"]) {
     const row = Array.isArray(req.body?.roles)
@@ -877,14 +910,60 @@ app.put("/api/admin/mfa-policy", (req, res) => {
   res.json({ ok: true, ...publicMfaPolicy() });
 });
 
+app.get("/api/admin/access-levels", (req, res) => {
+  if (!requireAdmin(req, res, "admin.access_levels.read")) return;
+  res.json({
+    ...publicPermissionCatalog(),
+    levels: listAccessLevels(),
+  });
+});
+
+app.post("/api/admin/access-levels", (req, res) => {
+  if (!requireAdmin(req, res, "admin.access_levels.write")) return;
+  const result = createAccessLevel({
+    name: req.body.name,
+    detail: req.body.detail,
+    permissions: req.body.permissions,
+  });
+  if (!result.ok) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, level: result.level, levels: listAccessLevels() });
+});
+
+app.put("/api/admin/access-levels/:id", (req, res) => {
+  if (!requireAdmin(req, res, "admin.access_levels.write")) return;
+  const result = updateAccessLevel(req.params.id, {
+    name: req.body.name,
+    detail: req.body.detail,
+    permissions: req.body.permissions,
+  });
+  if (!result.ok) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, level: result.level, levels: listAccessLevels() });
+});
+
+app.delete("/api/admin/access-levels/:id", (req, res) => {
+  if (!requireAdmin(req, res, "admin.access_levels.write")) return;
+  const result = deleteAccessLevel(req.params.id);
+  if (!result.ok) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, levels: listAccessLevels() });
+});
+
 app.get("/api/admin/homepage", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireAdmin(req, res, "admin.homepage.read")) return;
   const row = db.prepare("SELECT value FROM settings WHERE key = 'homepage'").get();
   res.json(JSON.parse(row.value));
 });
 
 app.put("/api/admin/homepage", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireAdmin(req, res, "admin.homepage.write")) return;
   const next = req.body;
   if (!next?.hero?.titleLines || !Array.isArray(next.nav) || !Array.isArray(next.footer?.links)) {
     res.status(400).json({ error: "Homepage content is incomplete." });
@@ -895,7 +974,7 @@ app.put("/api/admin/homepage", (req, res) => {
 });
 
 app.post("/api/admin/upload", upload.single("file"), (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireAdmin(req, res, "admin.homepage.upload")) return;
   if (!req.file) {
     res.status(400).json({ error: "Choose an image." });
     return;
@@ -912,9 +991,25 @@ app.post("/api/admin/upload", upload.single("file"), (req, res) => {
 });
 
 app.get("/api/admin/users", (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const users = db.prepare("SELECT * FROM users ORDER BY created_at DESC").all().map(publicUser);
-  res.json({ users });
+  const admin = requireAdmin(req, res);
+  if (!admin) return;
+  const canUsers = adminHasPermission(admin, "admin.users.read");
+  const canAdmins = adminHasPermission(admin, "admin.admins.read");
+  const canEmployers = adminHasPermission(admin, "admin.employers.read");
+  if (!canUsers && !canAdmins && !canEmployers) {
+    res.status(403).json({ error: "Your admin access level does not include this action.", permission: "admin.users.read" });
+    return;
+  }
+  const users = db
+    .prepare("SELECT * FROM users ORDER BY created_at DESC")
+    .all()
+    .filter((row) => {
+      if (row.role === "admin") return canAdmins;
+      if (row.role === "employer") return canEmployers;
+      return canUsers;
+    })
+    .map(enrichPublicUser);
+  res.json({ users, levels: canAdmins || adminHasPermission(admin, "admin.admins.level.write") ? listAccessLevels() : [] });
 });
 
 app.patch("/api/admin/users/:id", (req, res) => {
@@ -928,6 +1023,8 @@ app.patch("/api/admin/users/:id", (req, res) => {
   const role = req.body.role === "admin" || req.body.role === "user" ? req.body.role : user.role;
   const status = req.body.status === "disabled" || req.body.status === "active" ? req.body.status : user.status;
   const planId = req.body.planId ? String(req.body.planId) : user.plan_id || "free";
+  let accessLevelId = user.admin_access_level_id || null;
+
   if (user.id === admin.id && (role !== "admin" || status !== "active")) {
     res.status(400).json({ error: "You cannot remove your own admin access." });
     return;
@@ -936,17 +1033,87 @@ app.patch("/api/admin/users/:id", (req, res) => {
     res.status(400).json({ error: "That plan does not exist." });
     return;
   }
-  db.prepare("UPDATE users SET role = ?, status = ?, plan_id = ? WHERE id = ?").run(role, status, planId, user.id);
+
+  if (status !== user.status) {
+    const statusPerm =
+      user.role === "admin"
+        ? "admin.admins.status.write"
+        : user.role === "employer"
+          ? "admin.employers.status.write"
+          : "admin.users.status.write";
+    if (!adminHasPermission(admin, statusPerm)) {
+      res.status(403).json({ error: "Your admin access level does not include this action.", permission: statusPerm });
+      return;
+    }
+  }
+  if (req.body.planId && planId !== (user.plan_id || "free")) {
+    const planPerm =
+      user.role === "admin"
+        ? "admin.admins.plan.write"
+        : user.role === "employer"
+          ? "admin.employers.plan.write"
+          : "admin.users.plan.write";
+    if (!adminHasPermission(admin, planPerm)) {
+      res.status(403).json({ error: "Your admin access level does not include this action.", permission: planPerm });
+      return;
+    }
+  }
+  if (role !== user.role) {
+    if (user.role === "user" && role === "admin") {
+      if (!adminHasPermission(admin, "admin.users.promote_admin")) {
+        res.status(403).json({ error: "Your admin access level does not include this action.", permission: "admin.users.promote_admin" });
+        return;
+      }
+      accessLevelId = req.body.accessLevelId || SUPER_LEVEL_ID;
+      if (!getAccessLevel(accessLevelId)) accessLevelId = SUPER_LEVEL_ID;
+    } else if (user.role === "admin" && role === "user") {
+      if (!adminHasPermission(admin, "admin.admins.demote")) {
+        res.status(403).json({ error: "Your admin access level does not include this action.", permission: "admin.admins.demote" });
+        return;
+      }
+      accessLevelId = null;
+    } else {
+      res.status(400).json({ error: "That role change is not supported." });
+      return;
+    }
+  }
+  if (req.body.accessLevelId !== undefined && (role === "admin" || user.role === "admin")) {
+    if (!adminHasPermission(admin, "admin.admins.level.write")) {
+      res.status(403).json({ error: "Your admin access level does not include this action.", permission: "admin.admins.level.write" });
+      return;
+    }
+    const nextLevel = String(req.body.accessLevelId || SUPER_LEVEL_ID);
+    if (!getAccessLevel(nextLevel)) {
+      res.status(400).json({ error: "That access level does not exist." });
+      return;
+    }
+    accessLevelId = nextLevel;
+  }
+  if (role === "admin" && !accessLevelId) accessLevelId = SUPER_LEVEL_ID;
+
+  db.prepare("UPDATE users SET role = ?, status = ?, plan_id = ?, admin_access_level_id = ? WHERE id = ?").run(
+    role,
+    status,
+    planId,
+    role === "admin" ? accessLevelId : null,
+    user.id,
+  );
   if (status === "disabled") db.prepare("DELETE FROM sessions WHERE user_id = ?").run(user.id);
-  res.json({ user: publicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id)) });
+  res.json({ user: enrichPublicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id)) });
 });
 
 app.post("/api/admin/users", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  const admin = requireAdmin(req, res);
+  if (!admin) return;
   const name = String(req.body.name || "").trim();
   const email = String(req.body.email || "").trim().toLowerCase();
   const password = String(req.body.password || "");
   const role = req.body.role === "admin" ? "admin" : "user";
+  const createPerm = role === "admin" ? "admin.admins.create" : "admin.users.create";
+  if (!adminHasPermission(admin, createPerm)) {
+    res.status(403).json({ error: "Your admin access level does not include this action.", permission: createPerm });
+    return;
+  }
   if (!req.body.consent) {
     res.status(400).json({ error: "Confirm that this person has agreed to the terms." });
     return;
@@ -959,19 +1126,42 @@ app.post("/api/admin/users", (req, res) => {
     res.status(409).json({ error: "That email is already in use." });
     return;
   }
+  let accessLevelId = null;
+  if (role === "admin") {
+    accessLevelId = String(req.body.accessLevelId || SUPER_LEVEL_ID);
+    if (!getAccessLevel(accessLevelId)) {
+      res.status(400).json({ error: "That access level does not exist." });
+      return;
+    }
+    if (accessLevelId !== SUPER_LEVEL_ID && !adminHasPermission(admin, "admin.admins.level.write")) {
+      res.status(403).json({ error: "Your admin access level does not include this action.", permission: "admin.admins.level.write" });
+      return;
+    }
+  }
   const userId = id("usr");
   db.prepare(
-    `INSERT INTO users (id, name, email, password_hash, provider, role, status, consent_at, created_at)
-     VALUES (?, ?, ?, ?, 'email', ?, 'active', ?, ?)`,
-  ).run(userId, name, email, hashPassword(password), role, Date.now(), Date.now());
-  res.json({ user: publicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(userId)) });
+    `INSERT INTO users (id, name, email, password_hash, provider, role, status, consent_at, created_at, admin_access_level_id)
+     VALUES (?, ?, ?, ?, 'email', ?, 'active', ?, ?, ?)`,
+  ).run(userId, name, email, hashPassword(password), role, Date.now(), Date.now(), accessLevelId);
+  res.json({ user: enrichPublicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(userId)) });
 });
 
 app.post("/api/admin/users/:id/reset-link", async (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  const admin = requireAdmin(req, res);
+  if (!admin) return;
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
   if (!user || user.provider !== "email") {
     res.status(400).json({ error: "Password reset links are for email accounts." });
+    return;
+  }
+  const resetPerm =
+    user.role === "admin"
+      ? "admin.admins.reset_link"
+      : user.role === "employer"
+        ? "admin.employers.reset_link"
+        : "admin.users.reset_link";
+  if (!adminHasPermission(admin, resetPerm)) {
+    res.status(403).json({ error: "Your admin access level does not include this action.", permission: resetPerm });
     return;
   }
   const token = randomBytes(24).toString("hex");
@@ -991,12 +1181,12 @@ app.post("/api/admin/users/:id/reset-link", async (req, res) => {
 });
 
 app.get("/api/admin/email", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireAdmin(req, res, "admin.email.read")) return;
   res.json({ settings: publicMailSettings() });
 });
 
 app.put("/api/admin/email", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireAdmin(req, res, "admin.email.write")) return;
   const fromEmail = String(req.body.fromEmail || "").trim();
   if (fromEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fromEmail)) {
     res.status(400).json({ error: "Enter a valid from address." });
@@ -1006,7 +1196,7 @@ app.put("/api/admin/email", (req, res) => {
 });
 
 app.post("/api/admin/email/test", async (req, res) => {
-  const admin = requireAdmin(req, res);
+  const admin = requireAdmin(req, res, "admin.email.test");
   if (!admin) return;
   const to = String(req.body.to || admin.email).trim();
   const delivery = await deliverMail({
@@ -1022,29 +1212,38 @@ app.post("/api/admin/email/test", async (req, res) => {
 });
 
 app.get("/api/admin/outbox", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireAdmin(req, res, "admin.email.outbox.read")) return;
   const messages = db.prepare("SELECT * FROM mail_outbox ORDER BY created_at DESC LIMIT 50").all();
   res.json({ messages });
 });
 
 app.get("/api/admin/audit", (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const entries = db
-    .prepare("SELECT * FROM ai_audit ORDER BY created_at DESC LIMIT 100")
-    .all()
-    .map((entry) => ({
-      id: entry.id,
-      userId: entry.user_id,
-      functionName: entry.function_name,
-      provider: entry.provider,
-      model: entry.model,
-      status: entry.status,
-      detail: entry.detail || "",
-      createdAt: entry.created_at,
-      costMicros: entry.cost_micros || 0,
-      costLabel: moneyFromMicros(entry.cost_micros || 0),
-    }));
-  res.json({ entries, summary: auditCostSummary() });
+  const admin = requireAdmin(req, res);
+  if (!admin) return;
+  const canAudit = adminHasPermission(admin, "admin.audit.read");
+  const canCosts = adminHasPermission(admin, "admin.audit.costs.read");
+  if (!canAudit && !canCosts) {
+    res.status(403).json({ error: "Your admin access level does not include this action.", permission: "admin.audit.read" });
+    return;
+  }
+  const entries = canAudit
+    ? db
+        .prepare("SELECT * FROM ai_audit ORDER BY created_at DESC LIMIT 100")
+        .all()
+        .map((entry) => ({
+          id: entry.id,
+          userId: entry.user_id,
+          functionName: entry.function_name,
+          provider: entry.provider,
+          model: entry.model,
+          status: entry.status,
+          detail: entry.detail || "",
+          createdAt: entry.created_at,
+          costMicros: entry.cost_micros || 0,
+          costLabel: moneyFromMicros(entry.cost_micros || 0),
+        }))
+    : [];
+  res.json({ entries, summary: canCosts ? auditCostSummary() : null });
 });
 
 app.post("/api/account/password", (req, res) => {
@@ -1080,7 +1279,7 @@ app.post("/api/account/password", (req, res) => {
   } catch {
     // Best-effort wipe of the bootstrap password copy.
   }
-  res.json({ ok: true, user: publicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id)) });
+  res.json({ ok: true, user: enrichPublicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id)) });
 });
 
 app.get("/api/account/export", (req, res) => {

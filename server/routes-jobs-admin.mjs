@@ -16,7 +16,7 @@ export function registerJobsAdmin(app, ctx) {
   } = ctx;
 
   app.get("/api/admin/jobs", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.jobs.read")) return;
     const sources = db.prepare("SELECT * FROM job_sources ORDER BY created_at").all();
     const names = new Map(sources.map((source) => [source.id, source.name]));
     res.json({
@@ -40,7 +40,7 @@ export function registerJobsAdmin(app, ctx) {
   });
 
   app.post("/api/admin/job-sources", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.jobs.sources.create")) return;
     const name = String(req.body.name || "").trim();
     if (name.length < 2) {
       res.status(400).json({ error: "Name the feed." });
@@ -70,7 +70,7 @@ export function registerJobsAdmin(app, ctx) {
   });
 
   app.put("/api/admin/job-sources/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.jobs.sources.write")) return;
     const source = db.prepare("SELECT * FROM job_sources WHERE id = ?").get(req.params.id);
     if (!source) {
       res.status(404).json({ error: "Feed not found." });
@@ -110,7 +110,7 @@ export function registerJobsAdmin(app, ctx) {
   });
 
   app.delete("/api/admin/job-sources/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.jobs.sources.delete")) return;
     const source = db.prepare("SELECT * FROM job_sources WHERE id = ?").get(req.params.id);
     if (!source) {
       res.status(404).json({ error: "Feed not found." });
@@ -124,7 +124,7 @@ export function registerJobsAdmin(app, ctx) {
   });
 
   app.post("/api/admin/jobs/pull", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.jobs.pull")) return;
     const requested = String(req.body.sourceId || "");
     const sources = requested
       ? db.prepare("SELECT * FROM job_sources WHERE id = ? AND kind != 'manual'").all(requested)
@@ -147,7 +147,7 @@ export function registerJobsAdmin(app, ctx) {
   });
 
   app.delete("/api/admin/jobs/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.jobs.delete")) return;
     const job = db.prepare("SELECT id FROM jobs WHERE id = ?").get(req.params.id);
     if (!job) {
       res.status(404).json({ error: "Job not found." });
@@ -159,7 +159,7 @@ export function registerJobsAdmin(app, ctx) {
   });
 
   app.post("/api/admin/jobs", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.jobs.create")) return;
     const title = String(req.body.title || "").trim();
     const company = String(req.body.company || "").trim();
     if (!title || !company) {

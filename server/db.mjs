@@ -122,5 +122,6 @@ export function publicUser(row) {
     hasPassword: Boolean(row.password_hash),
     mfaEnrolled: Boolean(row.totp_secret && row.totp_enabled_at),
     mfaVerified: Boolean(row.__session?.mfa_at),
+    accessLevelId: row.admin_access_level_id || null,
   };
 }

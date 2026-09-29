@@ -5,8 +5,9 @@ import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 import { seedPromptRegistry } from "./prompt-registry.mjs";
 import { disableAllMfaPolicy, seedMfaPolicy } from "./mfa-policy.mjs";
+import { seedAdminAccessLevels } from "./admin-access.mjs";
 
-export const SCHEMA_VERSION = 26;
+export const SCHEMA_VERSION = 27;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -89,6 +90,7 @@ export function migrate() {
   addColumn("users", "password_must_change", "INTEGER DEFAULT 0");
   addColumn("users", "totp_secret", "TEXT DEFAULT ''");
   addColumn("users", "totp_enabled_at", "INTEGER");
+  addColumn("users", "admin_access_level_id", "TEXT");
   addColumn("sessions", "mfa_at", "INTEGER");
   addColumn("profiles", "headline", "TEXT DEFAULT ''");
   addColumn("profiles", "photo_url", "TEXT DEFAULT ''");
@@ -644,6 +646,7 @@ export function migrate() {
 
   seedPromptRegistry();
   seedMfaPolicy();
+  seedAdminAccessLevels();
 }
 
 export function featureLabels(features) {
