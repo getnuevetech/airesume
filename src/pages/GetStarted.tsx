@@ -4,8 +4,16 @@ import { api } from "../api";
 import { TermsAgreement } from "../components/TermsAgreement";
 import { UploadPanel } from "../components/UploadPanel";
 import { useApp } from "../context/AppContext";
+import { optionsForPreferenceKey, type PreferenceOption } from "../preferenceOptions";
 
-type PrefField = { key: string; label: string; placeholder: string; question: string };
+type PrefField = {
+  key: string;
+  label: string;
+  placeholder: string;
+  question: string;
+  inputType?: string;
+  options?: PreferenceOption[];
+};
 
 type Draft = {
   draftId: string;
@@ -88,10 +96,31 @@ export function GetStartedPage() {
       return listed.filter((field) => !String(prefValues[field.key as keyof typeof prefValues] || "").trim());
     }
     const fields: PrefField[] = [
-      { key: "salary", label: "Target salary", placeholder: "Optional", question: "What minimum salary are you targeting?" },
-      { key: "workArrangement", label: "Work arrangement", placeholder: "Remote, hybrid, or on-site", question: "Are you open to remote, hybrid, or on-site work?" },
-      { key: "locations", label: "Locations", placeholder: "Optional", question: "Which locations are acceptable?" },
-      { key: "workAuthorization", label: "Work authorization", placeholder: "You confirm this. We do not guess it.", question: "Are you authorized to work in the target country?" },
+      {
+        key: "salary",
+        label: "Target salary",
+        placeholder: "Select a range",
+        question: "What salary range are you targeting?",
+        inputType: "select",
+        options: optionsForPreferenceKey("salary") || [],
+      },
+      {
+        key: "workArrangement",
+        label: "Work arrangement",
+        placeholder: "Select an option",
+        question: "Are you open to remote, hybrid, or on-site work?",
+        inputType: "select",
+        options: optionsForPreferenceKey("workArrangement") || [],
+      },
+      { key: "locations", label: "Locations", placeholder: "Optional", question: "Which locations are acceptable?", inputType: "text" },
+      {
+        key: "workAuthorization",
+        label: "Work authorization",
+        placeholder: "Select an option",
+        question: "Are you authorized to work in the target country?",
+        inputType: "select",
+        options: optionsForPreferenceKey("workAuthorization") || [],
+      },
     ];
     return fields.filter((field) => {
       if (field.key === "locations" && city.trim()) return false;
@@ -280,9 +309,14 @@ export function GetStartedPage() {
           </p>
         ))}
         {draft.questions.length ? (
-          <p className="role" role="status">
-            {draft.questions.join(" ")}
-          </p>
+          <div className="pref-questions" role="status">
+            <p className="role">Please review these details before activating:</p>
+            <ul className="fact-list">
+              {draft.questions.map((question) => (
+                <li key={question}>{question}</li>
+              ))}
+            </ul>
+          </div>
         ) : null}
         {missingPrefs.length ? (
           <div className="pref-questions">
@@ -340,16 +374,34 @@ export function GetStartedPage() {
           <span>Summary</span>
           <textarea rows={4} value={summary} onChange={(event) => setSummary(event.target.value)} />
         </label>
-        {missingPrefs.map((field) => (
-          <label className="field" key={field.key}>
-            <span>{field.label}</span>
-            <input
-              value={prefValues[field.key as keyof typeof prefValues]}
-              onChange={(event) => setters[field.key]?.(event.target.value)}
-              placeholder={field.placeholder}
-            />
-          </label>
-        ))}
+        {missingPrefs.map((field) => {
+          const options = field.options?.length ? field.options : optionsForPreferenceKey(field.key);
+          const value = prefValues[field.key as keyof typeof prefValues];
+          if (field.inputType === "select" || options) {
+            return (
+              <label className="field" key={field.key}>
+                <span>{field.label}</span>
+                <select value={value} onChange={(event) => setters[field.key]?.(event.target.value)} required>
+                  {(options || []).map((option) => (
+                    <option key={`${field.key}-${option.value || "empty"}`} value={option.value} disabled={!option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
+          }
+          return (
+            <label className="field" key={field.key}>
+              <span>{field.label}</span>
+              <input
+                value={value}
+                onChange={(event) => setters[field.key]?.(event.target.value)}
+                placeholder={field.placeholder}
+              />
+            </label>
+          );
+        })}
         <label className="check-row">
           <input type="checkbox" checked={usePassword} onChange={(event) => setUsePassword(event.target.checked)} />
           <span>Set a password now instead of email activation</span>

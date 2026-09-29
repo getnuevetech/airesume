@@ -1,0 +1,25 @@
+{
+  "salaryRanges": [
+    { "value": "", "label": "Select a range" },
+    { "value": "Under $40,000", "label": "Under $40,000" },
+    { "value": "$40,000 – $60,000", "label": "$40,000 – $60,000" },
+    { "value": "$60,000 – $80,000", "label": "$60,000 – $80,000" },
+    { "value": "$80,000 – $100,000", "label": "$80,000 – $100,000" },
+    { "value": "$100,000 – $125,000", "label": "$100,000 – $125,000" },
+    { "value": "$125,000 – $150,000", "label": "$125,000 – $150,000" },
+    { "value": "$150,000 – $200,000", "label": "$150,000 – $200,000" },
+    { "value": "$200,000+", "label": "$200,000+" }
+  ],
+  "workArrangements": [
+    { "value": "", "label": "Select an option" },
+    { "value": "Remote", "label": "Remote" },
+    { "value": "Hybrid", "label": "Hybrid" },
+    { "value": "On-site", "label": "On-site" },
+    { "value": "Flexible", "label": "Flexible (any)" }
+  ],
+  "workAuthorizations": [
+    { "value": "", "label": "Select an option" },
+    { "value": "Yes", "label": "Yes" },
+    { "value": "No", "label": "No" }
+  ]
+}

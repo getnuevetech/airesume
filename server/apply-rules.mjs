@@ -1,5 +1,7 @@
 /** Application tracker statuses and autopilot eligibility rules. */
 
+import { parseTargetSalary } from "./preference-options.mjs";
+
 export const TRACKER_STATUSES = [
   "Found",
   "Reviewed",
@@ -115,7 +117,7 @@ export function autoDecision(job, match, preferences = {}, user = {}) {
     }
   }
 
-  const wantedSalary = Number(String(preferences.salary || "").replace(/[^0-9]/g, ""));
+  const wantedSalary = parseTargetSalary(preferences.salary);
   if (wantedSalary) {
     const max = Number(job.salary_max || job.salaryMax || 0);
     const min = Number(job.salary_min || job.salaryMin || 0);

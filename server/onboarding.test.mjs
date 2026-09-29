@@ -27,6 +27,10 @@ test("onboarding helpers cover prefs, drafts, export, and activation", async () 
     const missing = missingPreferenceFields({}, { city: "" });
     assert.ok(missing.some((item) => item.key === "salary"));
     assert.ok(missing.some((item) => item.key === "workAuthorization"));
+    assert.equal(missing.find((item) => item.key === "salary")?.inputType, "select");
+    assert.ok((missing.find((item) => item.key === "salary")?.options || []).length > 2);
+    assert.equal(missing.find((item) => item.key === "workArrangement")?.inputType, "select");
+    assert.equal(missing.find((item) => item.key === "workAuthorization")?.inputType, "select");
     assert.equal(
       missingPreferenceFields({ salary: "120k", workArrangement: "remote", locations: "TX", workAuthorization: "authorized" }, {}).length,
       0,
