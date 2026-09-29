@@ -1,6 +1,7 @@
-/** TOTP MFA helpers (RFC 6238) — no external OTP dependency. */
+/** TOTP MFA helpers (RFC 6238) — QR via `qrcode` for authenticator enrollment. */
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import QRCode from "qrcode";
 import { mfaRequiredForRole } from "./mfa-policy.mjs";
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -27,6 +28,17 @@ export function otpauthUrl({ secret, email, issuer = "JobPilot Admin" }) {
   const label = encodeURIComponent(`${issuer}:${email}`);
   const iss = encodeURIComponent(issuer);
   return `otpauth://totp/${label}?secret=${secret}&issuer=${iss}&digits=6&period=30`;
+}
+
+/** PNG data URL for authenticator apps to scan. */
+export async function otpauthQrDataUrl(url, { width = 220, margin = 2 } = {}) {
+  return QRCode.toDataURL(String(url || ""), {
+    errorCorrectionLevel: "M",
+    type: "image/png",
+    margin,
+    width,
+    color: { dark: "#0c1830", light: "#ffffff" },
+  });
 }
 
 function base32ToBuffer(secret) {

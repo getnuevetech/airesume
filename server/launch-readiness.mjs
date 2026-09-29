@@ -71,8 +71,8 @@ export function computeLaunchReadiness(options = {}) {
       mfaRequired,
       mfaRequired
         ? `Admin MFA is required (${adminWhen === "session" ? "re-verify every 12 hours" : "at every sign-in"}). Change under Admin → Security.`
-        : "Admin MFA is off in settings. Enable it under Admin → Security (or set REQUIRE_ADMIN_MFA=1) before public launch.",
-      "required",
+        : "Admin MFA is off (opt-in). Enable under Admin → Security or set REQUIRE_ADMIN_MFA=1 before public launch.",
+      "recommended",
     ),
     check(
       "admin_mfa_enrolled",
@@ -80,8 +80,8 @@ export function computeLaunchReadiness(options = {}) {
       adminMfaEnrolled,
       adminMfaEnrolled
         ? "An admin account has TOTP enabled."
-        : "No admin has enrolled TOTP yet. Complete Admin MFA setup before launch.",
-      "required",
+        : "No admin has enrolled TOTP yet. Complete Admin MFA setup when you turn MFA on.",
+      "recommended",
     ),
     check(
       "smtp",

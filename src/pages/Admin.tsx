@@ -123,7 +123,7 @@ export function AdminPage() {
     return (
       <MfaGate
         title="Admin MFA required"
-        lede="Admin access requires an authenticator app. Enroll once, then enter a 6-digit code for this session."
+        lede="Admin access requires an authenticator app. Scan the QR code once, then enter a 6-digit code for this session."
       />
     );
   }

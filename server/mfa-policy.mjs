@@ -22,11 +22,11 @@ function parse(value, fallback) {
   }
 }
 
-export function defaultMfaPolicy(env = process.env) {
-  const production = String(env.NODE_ENV || "") === "production";
+export function defaultMfaPolicy(_env = process.env) {
+  // MFA is opt-in via Admin → Security until launch enables it intentionally.
   return {
     roles: {
-      admin: { enabled: production, when: "session" },
+      admin: { enabled: false, when: "session" },
       employer: { enabled: false, when: "login" },
       user: { enabled: false, when: "login" },
     },
@@ -71,6 +71,11 @@ export function saveMfaPolicy(input, env = process.env) {
 
 export function seedMfaPolicy(env = process.env) {
   if (db.prepare("SELECT value FROM settings WHERE key = ?").get(MFA_POLICY_SETTING)) return getMfaPolicy(env);
+  return saveMfaPolicy(defaultMfaPolicy(env), env);
+}
+
+/** Force all roles off (used when shipping MFA as opt-in). */
+export function disableAllMfaPolicy(env = process.env) {
   return saveMfaPolicy(defaultMfaPolicy(env), env);
 }
 
