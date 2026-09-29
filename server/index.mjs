@@ -261,9 +261,9 @@ function audit(entry) {
     id("ai"),
     entry.userId || null,
     entry.functionName,
-    entry.provider,
-    entry.model,
-    entry.status,
+    entry.provider || "unknown",
+    entry.model || "unknown",
+    entry.status || "done",
     redactSensitive(entry.detail || "", { maxLen: 500 }),
     Date.now(),
     Math.max(0, Number(entry.costMicros) || 0),
@@ -1139,6 +1139,14 @@ if (process.env.NODE_ENV === "production" && existsSync(distDir)) {
 }
 
 const port = Number(process.env.PORT || 3000);
+app.use((err, _req, res, next) => {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  const message = err instanceof Error ? err.message : "Request failed.";
+  res.status(Number(err?.status) || 500).json({ error: message });
+});
 app.listen(port, "0.0.0.0", () => {
   console.log(`JobPilot API listening on ${port}`);
 });

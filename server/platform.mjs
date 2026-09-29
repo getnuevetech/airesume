@@ -7,7 +7,7 @@ import { extractRequirements, matchJob } from "./match.mjs";
 import { authenticitySignals, normalizeJobListing } from "./job-schema.mjs";
 import { extractJobRequirements } from "./job-requirements.mjs";
 import { computeApplicationReadiness } from "./readiness.mjs";
-import { claimsSupported, tailoredDocument } from "./resume-guard.mjs";
+import { claimsSupported, tailoredDocument, normalizeResumePath } from "./resume-guard.mjs";
 import { buildClarificationRecommendations } from "./upscale-clarify.mjs";
 import { TRACKER_STATUSES, startOfUtcDay } from "./apply-rules.mjs";
 import { draftQuestions } from "./questions.mjs";
@@ -195,47 +195,74 @@ function diagnose(doc) {
 async function reviewDocument(user, version) {
   const doc = parse(version.document, {});
   const local = diagnose(doc);
+  const profile = db.prepare("SELECT facts FROM profiles WHERE user_id = ?").get(user.id);
+  const facts = parse(profile?.facts, []);
   const ai = await completeJson(
     "resume_diagnostic",
-    "Review this resume JSON. Return JSON {rating, feedback: string[], recommendations: [{id, title, detail, kind, path, proposed}]}. kind is note or rewrite. Never invent employers, tools, dates, or numbers. proposed must only rephrase text already present.",
+    "Review this resume JSON. Return JSON {rating, feedback: string[], recommendations: [{id, title, detail, kind, path, proposed}]}. kind is note or rewrite. Never invent employers, tools, dates, or numbers. proposed must only rephrase text already present. Prefer paths like employment.0.bullets.0.",
     JSON.stringify(doc).slice(0, 12000),
   );
   let result = local;
   if (ai.json && Array.isArray(ai.json.recommendations)) {
     const source = sourceText(doc);
-    const recommendations = ai.json.recommendations
+    const aiRecommendations = ai.json.recommendations
       .filter((item) => item && item.title)
       .map((item, index) => ({
         id: String(item.id || `ai-${index}`),
         title: String(item.title),
         detail: String(item.detail || ""),
         kind: item.kind === "rewrite" ? "rewrite" : "note",
-        path: String(item.path || ""),
+        path: normalizeResumePath(item.path || ""),
         proposed: item.proposed ? String(item.proposed) : "",
       }))
-      .filter((item) => item.kind !== "rewrite" || (item.proposed && claimsSupported(item.proposed, source)));
+      .filter((item) => item.kind !== "rewrite" || (item.proposed && item.path && claimsSupported(item.proposed, source, facts)));
+
+    const localRewrites = local.recommendations.filter((item) => item.kind === "rewrite");
+    const localClarify = local.recommendations.filter((item) => item.kind === "clarify");
+    const aiRewrites = aiRecommendations.filter((item) => item.kind === "rewrite");
+    const aiNotes = aiRecommendations.filter((item) => item.kind !== "rewrite");
+    const recommendations = [
+      ...localRewrites,
+      ...aiRewrites.filter((item) => !localRewrites.some((localItem) => localItem.path === item.path)),
+      ...aiNotes,
+    ];
+    for (const item of localClarify) {
+      if (!recommendations.some((existing) => existing.id === item.id)) recommendations.push(item);
+    }
     result = {
       rating: Math.max(1, Math.min(100, Number(ai.json.rating) || local.rating)),
       feedback: Array.isArray(ai.json.feedback) && ai.json.feedback.length ? ai.json.feedback.map(String) : local.feedback,
       recommendations: recommendations.length ? recommendations : local.recommendations,
     };
-    const clarify = local.recommendations.filter((item) => item.kind === "clarify");
-    for (const item of clarify) {
-      if (!result.recommendations.some((existing) => existing.id === item.id)) {
-        result.recommendations.push(item);
-      }
-    }
   }
   const reviewId = id("rev");
   db.prepare(
     `INSERT INTO resume_reviews (id, user_id, version_id, rating, feedback, recommendations, provider, model, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(reviewId, user.id, version.id, result.rating, JSON.stringify(result.feedback), JSON.stringify(result.recommendations), ai.provider, ai.model, Date.now());
-  return { id: reviewId, ...result, provider: ai.provider, model: ai.model, versionId: version.id, costMicros: ai.costMicros || 0 };
+  ).run(
+    reviewId,
+    user.id,
+    version.id,
+    result.rating,
+    JSON.stringify(result.feedback),
+    JSON.stringify(result.recommendations),
+    ai.provider || "Built-in rules",
+    ai.model || "rules-v1",
+    Date.now(),
+  );
+  return {
+    id: reviewId,
+    ...result,
+    provider: ai.provider || "Built-in rules",
+    model: ai.model || "rules-v1",
+    versionId: version.id,
+    costMicros: ai.costMicros || 0,
+  };
 }
 
 function setPath(doc, path, value) {
-  const parts = path.split(".");
+  const parts = normalizeResumePath(path).split(".").filter(Boolean);
+  if (!parts.length) return false;
   let cursor = doc;
   for (let index = 0; index < parts.length - 1; index += 1) {
     const key = Number.isInteger(Number(parts[index])) && String(Number(parts[index])) === parts[index] ? Number(parts[index]) : parts[index];

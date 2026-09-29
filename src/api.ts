@@ -4,6 +4,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set("Content-Type", "application/json");
   }
   const response = await fetch(path, { ...init, headers, credentials: "include" });
+<<<<<<< HEAD
   const data = (await response.json().catch(() => ({}))) as T & {
     error?: string;
     mfaRequired?: boolean;
@@ -22,6 +23,11 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     err.mfaEnrolled = Boolean(data.mfaEnrolled);
     err.mustChangePassword = Boolean(data.mustChangePassword);
     throw err;
+=======
+  const data = (await response.json().catch(() => ({}))) as T & { error?: string };
+  if (!response.ok) {
+    throw new Error(data.error || `Request failed (${response.status}).`);
+>>>>>>> d25296d (Fix Upscale Request failed for Autopilot users.)
   }
   return data;
 }
