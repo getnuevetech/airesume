@@ -11,9 +11,15 @@ type MfaStatus = {
   role?: string;
 };
 
+type MfaSetup = {
+  secret: string;
+  otpauthUrl: string;
+  qrDataUrl?: string;
+};
+
 export function MfaGate({
   title = "Authenticator required",
-  lede = "This account type requires an authenticator app. Enroll once, then enter a 6-digit code for this session.",
+  lede = "This account type requires an authenticator app. Scan the QR code once, then enter a 6-digit code for this session.",
   onVerified,
 }: {
   title?: string;
@@ -22,10 +28,11 @@ export function MfaGate({
 }) {
   const { user, refresh } = useApp();
   const [mfa, setMfa] = useState<MfaStatus | null>(null);
-  const [mfaSetup, setMfaSetup] = useState<{ secret: string; otpauthUrl: string } | null>(null);
+  const [mfaSetup, setMfaSetup] = useState<MfaSetup | null>(null);
   const [mfaCode, setMfaCode] = useState("");
   const [mfaError, setMfaError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showManualSecret, setShowManualSecret] = useState(false);
 
   useEffect(() => {
     void api<MfaStatus>("/api/mfa")
@@ -45,8 +52,9 @@ export function MfaGate({
   async function setupMfa() {
     setMfaError("");
     setBusy(true);
+    setShowManualSecret(false);
     try {
-      const data = await api<{ secret: string; otpauthUrl: string }>("/api/mfa/setup", { method: "POST", body: "{}" });
+      const data = await api<MfaSetup>("/api/mfa/setup", { method: "POST", body: "{}" });
       setMfaSetup(data);
     } catch (err) {
       setMfaError(err instanceof Error ? err.message : "MFA setup failed.");
@@ -85,15 +93,30 @@ export function MfaGate({
         {mfaError ? <p className="form-error">{mfaError}</p> : null}
         {!enrolled ? (
           <button className="btn btn-primary btn-sm" type="button" disabled={busy} onClick={() => void setupMfa()}>
-            Generate authenticator secret
+            {mfaSetup ? "Regenerate QR code" : "Show authenticator QR code"}
           </button>
         ) : null}
         {mfaSetup ? (
           <div className="mfa-secret">
-            <p>
-              Secret: <code>{mfaSetup.secret}</code>
-            </p>
-            <p className="role">otpauth: {mfaSetup.otpauthUrl}</p>
+            {mfaSetup.qrDataUrl ? (
+              <div className="mfa-qr">
+                <img src={mfaSetup.qrDataUrl} alt="Authenticator QR code" width={220} height={220} />
+                <p className="role">Scan with Google Authenticator, Authy, 1Password, or any TOTP app.</p>
+              </div>
+            ) : (
+              <p className="form-error">QR code could not be generated. Enter the secret manually below.</p>
+            )}
+            <button className="text-btn" type="button" onClick={() => setShowManualSecret((value) => !value)}>
+              {showManualSecret ? "Hide manual secret" : "Can't scan? Enter secret manually"}
+            </button>
+            {showManualSecret || !mfaSetup.qrDataUrl ? (
+              <div className="mfa-manual">
+                <p>
+                  Secret: <code>{mfaSetup.secret}</code>
+                </p>
+                <p className="role">Account type: TOTP · 6 digits · 30 seconds</p>
+              </div>
+            ) : null}
           </div>
         ) : null}
         <form onSubmit={(event) => void enableOrVerifyMfa(event)}>
@@ -101,7 +124,7 @@ export function MfaGate({
             <span>Authenticator code</span>
             <input
               value={mfaCode}
-              onChange={(event) => setMfaCode(event.target.value)}
+              onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
               inputMode="numeric"
               maxLength={6}
               autoComplete="one-time-code"

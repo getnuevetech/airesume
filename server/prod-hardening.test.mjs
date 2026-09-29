@@ -12,7 +12,7 @@ import { migrate, SCHEMA_VERSION } from "./schema.mjs";
 import { db } from "./db.mjs";
 
 test("schema version includes admin MFA and homepage CTA patches", () => {
-  assert.ok(SCHEMA_VERSION >= 25);
+  assert.ok(SCHEMA_VERSION >= 26);
   migrate();
   assert.ok(db.prepare("PRAGMA table_info(users)").all().some((column) => column.name === "totp_secret"));
   assert.ok(db.prepare("PRAGMA table_info(sessions)").all().some((column) => column.name === "mfa_at"));
@@ -30,6 +30,15 @@ test("totp generate and verify round-trip", () => {
   const code = generateTotpCode(secret);
   assert.equal(verifyTotpCode(secret, code), true);
   assert.equal(verifyTotpCode(secret, "000000"), false);
+});
+
+test("otpauth QR data URL is a scannable PNG", async () => {
+  const { otpauthUrl, otpauthQrDataUrl } = await import("./admin-mfa.mjs");
+  const secret = generateTotpSecret();
+  const url = otpauthUrl({ secret, email: "admin@jobpilot.app", issuer: "JobPilot Admin" });
+  const dataUrl = await otpauthQrDataUrl(url);
+  assert.match(dataUrl, /^data:image\/png;base64,/);
+  assert.ok(dataUrl.length > 200);
 });
 
 test("redactSensitive strips passwords tokens and long resumes", () => {

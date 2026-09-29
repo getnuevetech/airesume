@@ -37,6 +37,7 @@ import { applySecurityHeaders, rateLimit } from "./security.mjs";
 import { redactSensitive } from "./security-redact.mjs";
 import {
   generateTotpSecret,
+  otpauthQrDataUrl,
   otpauthUrl,
   verifyTotpCode,
 } from "./admin-mfa.mjs";
@@ -769,7 +770,7 @@ function handleMfaStatus(req, res) {
   res.json(mfaStatusPayload(user));
 }
 
-function handleMfaSetup(req, res) {
+async function handleMfaSetup(req, res) {
   const user = currentUser(req);
   if (!user) {
     res.status(401).json({ error: "Sign in required." });
@@ -786,10 +787,18 @@ function handleMfaSetup(req, res) {
   const secret = generateTotpSecret();
   db.prepare("UPDATE users SET totp_secret = ? WHERE id = ?").run(secret, user.id);
   const issuer = user.role === "admin" ? "JobPilot Admin" : user.role === "employer" ? "JobPilot Employer" : "JobPilot";
+  const url = otpauthUrl({ secret, email: user.email, issuer });
+  let qrDataUrl = "";
+  try {
+    qrDataUrl = await otpauthQrDataUrl(url);
+  } catch {
+    qrDataUrl = "";
+  }
   res.json({
     secret,
-    otpauthUrl: otpauthUrl({ secret, email: user.email, issuer }),
-    note: "Add this secret to your authenticator, then submit a 6-digit code to enable MFA.",
+    otpauthUrl: url,
+    qrDataUrl,
+    note: "Scan the QR code with your authenticator app, then submit a 6-digit code to enable MFA.",
   });
 }
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   defaultMfaPolicy,
+  disableAllMfaPolicy,
   getMfaPolicy,
   mfaRequiredForRole,
   mfaVerifiedFresh,
@@ -14,15 +15,16 @@ import { adminMfaRequired } from "./admin-mfa.mjs";
 import { migrate, SCHEMA_VERSION } from "./schema.mjs";
 import { db } from "./db.mjs";
 
-test("schema 25+ seeds MFA policy settings", () => {
-  assert.ok(SCHEMA_VERSION >= 25);
+test("schema 26+ seeds MFA policy settings off by default", () => {
+  assert.ok(SCHEMA_VERSION >= 26);
   migrate();
-  seedMfaPolicy({ NODE_ENV: "development" });
+  disableAllMfaPolicy();
+  seedMfaPolicy({ NODE_ENV: "production" });
   const policy = getMfaPolicy();
-  assert.equal(typeof policy.roles.admin.enabled, "boolean");
-  assert.ok(["login", "session"].includes(policy.roles.admin.when));
+  assert.equal(policy.roles.admin.enabled, false);
   assert.equal(policy.roles.employer.enabled, false);
   assert.equal(policy.roles.user.enabled, false);
+  assert.ok(["login", "session"].includes(policy.roles.admin.when));
 });
 
 test("MFA policy enable/disable by account type and when", () => {
@@ -84,7 +86,9 @@ test("normalizeMfaPolicy rejects unknown when values", () => {
   assert.equal(policy.roles.user.when, "session");
 });
 
-test("default MFA policy enables admin only in production", () => {
-  assert.equal(defaultMfaPolicy({ NODE_ENV: "production" }).roles.admin.enabled, true);
+test("default MFA policy keeps all roles off until Admin enables them", () => {
+  assert.equal(defaultMfaPolicy({ NODE_ENV: "production" }).roles.admin.enabled, false);
   assert.equal(defaultMfaPolicy({ NODE_ENV: "development" }).roles.admin.enabled, false);
+  assert.equal(defaultMfaPolicy({ NODE_ENV: "production" }).roles.employer.enabled, false);
+  assert.equal(defaultMfaPolicy({ NODE_ENV: "production" }).roles.user.enabled, false);
 });

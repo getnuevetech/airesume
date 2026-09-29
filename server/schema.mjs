@@ -4,9 +4,9 @@ import { fileURLToPath } from "node:url";
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 import { seedPromptRegistry } from "./prompt-registry.mjs";
-import { seedMfaPolicy } from "./mfa-policy.mjs";
+import { disableAllMfaPolicy, seedMfaPolicy } from "./mfa-policy.mjs";
 
-export const SCHEMA_VERSION = 25;
+export const SCHEMA_VERSION = 26;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -617,6 +617,7 @@ export function migrate() {
     }
   }
 
+<<<<<<< HEAD
   // Mention image resumes in the default drop hint without wiping custom CMS copy.
   if (previous < 25) {
     try {
@@ -635,6 +636,11 @@ export function migrate() {
     } catch {
       // Ignore malformed homepage rows in isolated tests.
     }
+=======
+  // MFA is opt-in for now: clear any previously seeded production-on defaults.
+  if (previous < 26) {
+    disableAllMfaPolicy();
+>>>>>>> 96642a9 (Add MFA QR enrollment and keep MFA off by default.)
   }
 
   seedPromptRegistry();

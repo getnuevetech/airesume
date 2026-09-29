@@ -1178,6 +1178,29 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
   border: 1px solid #e7edf3;
   word-break: break-all;
 }
+.admin-gate .mfa-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+.admin-gate .mfa-qr img {
+  width: 220px;
+  height: 220px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e7edf3;
+}
+.admin-gate .mfa-manual {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e7edf3;
+}
+.admin-gate .mfa-secret .text-btn {
+  margin-top: 4px;
+}
 .admin-nav {
   background: var(--ink);
   color: #fff;
