@@ -617,7 +617,6 @@ export function migrate() {
     }
   }
 
-<<<<<<< HEAD
   // Mention image resumes in the default drop hint without wiping custom CMS copy.
   if (previous < 25) {
     try {
@@ -636,11 +635,11 @@ export function migrate() {
     } catch {
       // Ignore malformed homepage rows in isolated tests.
     }
-=======
+  }
+
   // MFA is opt-in for now: clear any previously seeded production-on defaults.
   if (previous < 26) {
     disableAllMfaPolicy();
->>>>>>> 96642a9 (Add MFA QR enrollment and keep MFA off by default.)
   }
 
   seedPromptRegistry();
