@@ -3,6 +3,11 @@ import { existsSync, unlinkSync } from "node:fs";
 import { basename, join } from "node:path";
 import { db, hashPassword, id, sha256, uploadsDir } from "./db.mjs";
 import { deliverMail } from "./mail.mjs";
+import {
+  SALARY_RANGE_OPTIONS,
+  WORK_ARRANGEMENT_OPTIONS,
+  WORK_AUTHORIZATION_OPTIONS,
+} from "./preference-options.mjs";
 
 export const DRAFT_RETENTION_MS = 1000 * 60 * 60 * 24 * 30;
 
@@ -23,16 +28,20 @@ export function missingPreferenceFields(preferences = {}, profile = {}) {
     missing.push({
       key: "salary",
       label: "Target salary",
-      placeholder: "Optional",
-      question: "What minimum salary are you targeting?",
+      placeholder: "Select a range",
+      question: "What salary range are you targeting?",
+      inputType: "select",
+      options: SALARY_RANGE_OPTIONS,
     });
   }
   if (!String(prefs.workArrangement || "").trim()) {
     missing.push({
       key: "workArrangement",
       label: "Work arrangement",
-      placeholder: "Remote, hybrid, or on-site",
+      placeholder: "Select an option",
       question: "Are you open to remote, hybrid, or on-site work?",
+      inputType: "select",
+      options: WORK_ARRANGEMENT_OPTIONS,
     });
   }
   if (!String(prefs.locations || "").trim() && !String(profile.city || "").trim()) {
@@ -41,14 +50,18 @@ export function missingPreferenceFields(preferences = {}, profile = {}) {
       label: "Locations",
       placeholder: "Cities or regions you will consider",
       question: "Which locations are acceptable?",
+      inputType: "text",
+      options: [],
     });
   }
   if (!String(prefs.workAuthorization || "").trim()) {
     missing.push({
       key: "workAuthorization",
       label: "Work authorization",
-      placeholder: "You confirm this. We do not guess it.",
-      question: "Are you authorized to work in your target country, and do you require sponsorship?",
+      placeholder: "Select an option",
+      question: "Are you authorized to work in your target country?",
+      inputType: "select",
+      options: WORK_AUTHORIZATION_OPTIONS,
     });
   }
   return missing;

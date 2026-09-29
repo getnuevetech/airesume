@@ -75,3 +75,49 @@ test("reconcile agrees when reviewer passes", () => {
   assert.equal(result.status, "agree");
   assert.equal(result.decisions[0].action, "agree");
 });
+
+test("reconcile humanizes employment path labels instead of dumping raw paths", () => {
+  const result = reconcileProducerReviewer({
+    source: "Alex Rivera\nAcme Corp — Product Manager 2020-2022\nBeta Inc — Engineer 2018-2020",
+    profile: {
+      name: "Alex Rivera",
+      email: "alex@example.com",
+      skills: ["SQL"],
+      employment: [
+        { title: "Product Manager", employer: "Acme Corp", dates: "2020-2022", bullets: [] },
+        { title: "Engineer", employer: "Beta Inc", dates: "2018-2020", bullets: [] },
+      ],
+      education: [],
+      facts: [],
+      questions: ["What full name should appear on your account?"],
+      warnings: [],
+      review: { status: "pass", unsupported: [] },
+    },
+    reviewer: {
+      status: "fail",
+      unsupported: [
+        "employment[0].dates",
+        "employment[1].dates",
+        "employment[2].dates",
+        "employment[3].dates",
+        "employment[4].dates",
+        "employment[5].dates",
+      ],
+      notes: [],
+    },
+  });
+
+  const joined = result.profile.questions.join(" | ");
+  assert.equal(/employment\[\d+\]\.dates/i.test(joined), false);
+  assert.ok(result.profile.questions.some((item) => /employment dates/i.test(item)));
+  assert.ok(result.profile.questions.includes("What full name should appear on your account?"));
+});
+
+test("humanizeClaimLabel maps employment paths to readable copy", async () => {
+  const { humanizeClaimLabel } = await import("./ai-reconcile.mjs");
+  assert.equal(
+    humanizeClaimLabel("employment[0].dates", [{ title: "Manager", employer: "Acme" }]),
+    "Confirm the dates for Manager at Acme.",
+  );
+  assert.equal(/employment\[0\]/.test(humanizeClaimLabel("employment[0].dates", [])), false);
+});

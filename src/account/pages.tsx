@@ -3,6 +3,11 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { openCookieSettings } from "../components/CookieSettings";
 import { useApp } from "../context/AppContext";
+import {
+  SALARY_RANGE_OPTIONS,
+  WORK_ARRANGEMENT_OPTIONS,
+  WORK_AUTHORIZATION_OPTIONS,
+} from "../preferenceOptions";
 import { useAccount } from "./AccountContext";
 import { ResumeSheet } from "./ResumeSheet";
 import type { AccountData, ResumeView } from "./types";
@@ -981,10 +986,46 @@ function ProfileView({
         <h2>Search preferences</h2>
         {editing ? (
           <>
-            <label className="field"><span>Target salary</span><input value={salary} onChange={(event) => setSalary(event.target.value)} /></label>
+            <label className="field">
+              <span>Target salary</span>
+              <select value={salary} onChange={(event) => setSalary(event.target.value)}>
+                {SALARY_RANGE_OPTIONS.map((option) => (
+                  <option key={`salary-${option.value || "empty"}`} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+                {salary && !SALARY_RANGE_OPTIONS.some((option) => option.value === salary) ? (
+                  <option value={salary}>{salary}</option>
+                ) : null}
+              </select>
+            </label>
             <label className="field"><span>Locations</span><input value={locations} onChange={(event) => setLocations(event.target.value)} /></label>
-            <label className="field"><span>Work arrangement</span><input value={workArrangement} onChange={(event) => setWorkArrangement(event.target.value)} /></label>
-            <label className="field"><span>Work authorization</span><input value={workAuthorization} onChange={(event) => setWorkAuthorization(event.target.value)} /></label>
+            <label className="field">
+              <span>Work arrangement</span>
+              <select value={workArrangement} onChange={(event) => setWorkArrangement(event.target.value)}>
+                {WORK_ARRANGEMENT_OPTIONS.map((option) => (
+                  <option key={`arr-${option.value || "empty"}`} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+                {workArrangement && !WORK_ARRANGEMENT_OPTIONS.some((option) => option.value === workArrangement) ? (
+                  <option value={workArrangement}>{workArrangement}</option>
+                ) : null}
+              </select>
+            </label>
+            <label className="field">
+              <span>Work authorization</span>
+              <select value={workAuthorization} onChange={(event) => setWorkAuthorization(event.target.value)}>
+                {WORK_AUTHORIZATION_OPTIONS.map((option) => (
+                  <option key={`auth-${option.value || "empty"}`} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+                {workAuthorization && !WORK_AUTHORIZATION_OPTIONS.some((option) => option.value === workAuthorization) ? (
+                  <option value={workAuthorization}>{workAuthorization}</option>
+                ) : null}
+              </select>
+            </label>
             <label className="check-row"><input type="checkbox" checked={shareContact} onChange={(event) => setShareContact(event.target.checked)} /> Show email and phone on the public resume</label>
           </>
         ) : (

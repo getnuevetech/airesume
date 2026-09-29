@@ -1,6 +1,7 @@
 /** Hybrid job match scoring and requirement extraction (deterministic). */
 
 import { citeSkillFact, skillsForMatching } from "./fact-ledger.mjs";
+import { parseTargetSalary } from "./preference-options.mjs";
 
 const WEIGHTS = {
   coreExperience: 25,
@@ -193,7 +194,7 @@ function locationScore(preferences, job) {
 }
 
 function salaryScore(preferences, job) {
-  const wanted = Number(String(preferences.salary || "").replace(/[^0-9]/g, ""));
+  const wanted = parseTargetSalary(preferences.salary);
   if (!wanted) return 0.7;
   const max = Number(job.salary_max || job.salaryMax || 0);
   const min = Number(job.salary_min || job.salaryMin || 0);
