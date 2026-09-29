@@ -31,7 +31,7 @@ type CostBucket = {
 type AuditSummary = { last24Hours: CostBucket; last7Days: CostBucket; last30Days: CostBucket };
 
 export function AdminPage() {
-  const { user, ready, refresh } = useApp();
+  const { user, ready, refresh, notify } = useApp();
   const { content } = useSiteContent();
   const navigate = useNavigate();
   const [tab, setTab] = useState<
@@ -41,14 +41,18 @@ export function AdminPage() {
   const [mfaSetup, setMfaSetup] = useState<{ secret: string; otpauthUrl: string } | null>(null);
   const [mfaCode, setMfaCode] = useState("");
   const [mfaError, setMfaError] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [nextPassword, setNextPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
 
   useEffect(() => {
-    if (ready && user?.role !== "admin") navigate("/signin", { replace: true });
-    if (ready && user?.mustChangePassword) navigate("/account/settings", { replace: true });
+    if (ready && !user) navigate("/signin", { replace: true });
+    else if (ready && user && user.role !== "admin") navigate("/signin", { replace: true });
   }, [ready, user, navigate]);
 
   useEffect(() => {
-    if (!user || user.role !== "admin") return;
+    if (!user || user.role !== "admin" || user.mustChangePassword) return;
     void api<{ required: boolean; enrolled: boolean; verified: boolean }>("/api/admin/mfa")
       .then(setMfa)
       .catch((err: Error & { mfaRequired?: boolean; status?: number }) => {
@@ -59,7 +63,72 @@ export function AdminPage() {
       });
   }, [user]);
 
-  if (!user || user.role !== "admin" || user.mustChangePassword) return null;
+  if (!ready) return null;
+  if (!user || user.role !== "admin") return null;
+
+  async function updateBootstrapPassword(event: FormEvent) {
+    event.preventDefault();
+    setPasswordError("");
+    setPasswordBusy(true);
+    try {
+      await api("/api/account/password", {
+        method: "POST",
+        body: JSON.stringify({ current: currentPassword, password: nextPassword }),
+      });
+      setCurrentPassword("");
+      setNextPassword("");
+      notify("Admin password updated.");
+      await refresh();
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : "Could not update the password.");
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
+
+  if (user.mustChangePassword) {
+    return (
+      <div className="admin-shell">
+        <main className="admin-main">
+          <section className="admin-card">
+            <h1>Set your admin password</h1>
+            <p className="lede">
+              You signed in as Site Admin with the bootstrap password. Choose a new password to open the Admin console.
+              This is not the candidate account dashboard.
+            </p>
+            {passwordError ? <p className="form-error">{passwordError}</p> : null}
+            <form onSubmit={(event) => void updateBootstrapPassword(event)}>
+              <label className="field">
+                <span>Current bootstrap password</span>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>New admin password</span>
+                <input
+                  type="password"
+                  value={nextPassword}
+                  onChange={(event) => setNextPassword(event.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                />
+              </label>
+              <button className="btn btn-primary btn-sm" type="submit" disabled={passwordBusy}>
+                {passwordBusy ? "Saving…" : "Save admin password"}
+              </button>
+            </form>
+            <p className="role"><Link to="/">Back to site</Link></p>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   const needsMfaGate = Boolean(mfa?.required && (!mfa.enrolled || !mfa.verified));
 

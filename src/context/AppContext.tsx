@@ -101,7 +101,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setUser(data.user);
           notify(`Welcome back, ${data.user.name.split(" ")[0]}.`);
           if (data.user.mustChangePassword) {
-            navigate("/account/settings");
+            navigate(data.user.role === "admin" ? "/admin" : "/account/settings");
           } else if (data.user.role === "admin") {
             navigate("/admin");
           } else if (data.user.role === "employer") {

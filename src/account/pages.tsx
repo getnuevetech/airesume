@@ -2194,6 +2194,10 @@ export function SettingsPage() {
               notify("Password updated.");
               await refresh();
               if (result.user && !result.user.mustChangePassword) {
+                if (result.user.role === "admin") {
+                  navigate("/admin", { replace: true });
+                  return;
+                }
                 void reload?.();
               }
             })

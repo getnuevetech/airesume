@@ -30,6 +30,9 @@ export function AccountShell() {
   if (user.role === "employer") {
     return <Navigate to="/employer" replace />;
   }
+  if (user.role === "admin" && user.mustChangePassword) {
+    return <Navigate to="/admin" replace />;
+  }
   if (user.mustChangePassword && location.pathname !== "/account/settings") {
     return <Navigate to="/account/settings" replace />;
   }
