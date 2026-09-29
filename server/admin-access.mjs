@@ -410,6 +410,7 @@ export function seedAdminAccessLevels() {
         `INSERT INTO admin_access_levels (id, name, detail, is_super, created_at)
          VALUES (?, ?, ?, ?, ?)`,
       ).run(preset.id, preset.name, preset.detail, preset.isSuper ? 1 : 0, Date.now());
+      replaceLevelPermissions(preset.id, preset.permissions);
     } else if (preset.isSuper) {
       db.prepare("UPDATE admin_access_levels SET name = ?, detail = ?, is_super = 1 WHERE id = ?").run(
         preset.name,
@@ -417,19 +418,19 @@ export function seedAdminAccessLevels() {
         preset.id,
       );
     }
-    if (preset.isSuper || !existing) {
-      replaceLevelPermissions(preset.id, preset.permissions);
-    }
   }
 
   // Keep Super Admin permission set complete as new keys are added.
-  replaceLevelPermissions(SUPER_LEVEL_ID, ADMIN_PERMISSION_KEYS);
+  const superCount = db
+    .prepare("SELECT COUNT(*) AS count FROM admin_access_level_permissions WHERE level_id = ?")
+    .get(SUPER_LEVEL_ID);
+  if (Number(superCount?.count || 0) !== ADMIN_PERMISSION_KEYS.length) {
+    replaceLevelPermissions(SUPER_LEVEL_ID, ADMIN_PERMISSION_KEYS);
+  }
 
-  const admins = db.prepare("SELECT id, admin_access_level_id FROM users WHERE role = 'admin'").all();
+  const admins = db.prepare("SELECT id FROM users WHERE role = 'admin' AND (admin_access_level_id IS NULL OR admin_access_level_id = '')").all();
   for (const admin of admins) {
-    if (!admin.admin_access_level_id) {
-      db.prepare("UPDATE users SET admin_access_level_id = ? WHERE id = ?").run(SUPER_LEVEL_ID, admin.id);
-    }
+    db.prepare("UPDATE users SET admin_access_level_id = ? WHERE id = ?").run(SUPER_LEVEL_ID, admin.id);
   }
 }
 
