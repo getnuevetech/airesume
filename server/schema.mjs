@@ -3,8 +3,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
+import { seedPromptRegistry } from "./prompt-registry.mjs";
 
-export const SCHEMA_VERSION = 23;
+export const SCHEMA_VERSION = 24;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -425,6 +426,20 @@ export function migrate() {
     );
   `);
   addColumn("checkouts", "disclosure_version", "TEXT DEFAULT ''");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_prompt_versions (
+      id TEXT PRIMARY KEY,
+      function_key TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      note TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft',
+      created_at INTEGER NOT NULL,
+      published_at INTEGER,
+      created_by TEXT DEFAULT '',
+      UNIQUE(function_key, version)
+    );
+  `);
 
   const provider = db.prepare("SELECT id FROM ai_providers LIMIT 1").get();
   if (!provider) {
@@ -599,6 +614,8 @@ export function migrate() {
       // Ignore malformed homepage rows in isolated tests.
     }
   }
+
+  seedPromptRegistry();
 }
 
 export function featureLabels(features) {

@@ -1,5 +1,6 @@
 import { db } from "./db.mjs";
 import { estimateCostMicros } from "./ai-cost.mjs";
+import { resolveSystemPrompt } from "./prompt-registry.mjs";
 
 const enabledProviderSql = "SELECT 1 AS assignment_enabled, ai_providers.* FROM ai_providers WHERE enabled = 1 ORDER BY kind = 'deterministic' DESC, created_at LIMIT 1";
 
@@ -19,22 +20,23 @@ export async function completeJson(functionKey, system, user) {
   const assignment = assignmentFor(functionKey);
   const provider = assignment?.name || "Built-in rules";
   const model = assignment?.model || "rules-v1";
+  const systemPrompt = resolveSystemPrompt(functionKey, system);
   if (!assignment || !assignment.assignment_enabled || !assignment.enabled || assignment.kind === "deterministic") {
     return { json: null, provider, model, kind: "deterministic", costMicros: 0 };
   }
   try {
-    const text = await callProvider(assignment, system, user);
+    const text = await callProvider(assignment, systemPrompt, user);
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     const json = start >= 0 && end > start ? JSON.parse(text.slice(start, end + 1)) : null;
     const costMicros = estimateCostMicros({
       kind: assignment.kind,
       model,
-      system,
+      system: systemPrompt,
       user,
       response: text,
     });
-    return { json, provider, model, kind: assignment.kind, costMicros };
+    return { json, provider, model, kind: assignment.kind, costMicros, promptSource: systemPrompt === system ? "code" : "registry" };
   } catch (error) {
     return {
       json: null,

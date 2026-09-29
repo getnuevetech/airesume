@@ -78,7 +78,8 @@ export function startOfUtcDay(now = Date.now()) {
 
 /**
  * Decide what autopilot may do with a matched job.
- * Never returns "apply" — only ready (user/auto queue) or review required.
+ * Returns ready / review / skip. Silent transmit (Applied) is a separate admin-gated step
+ * in the auto-apply route when readiness clears — this helper never returns "apply".
  * @returns {{ action: "skip" | "ready" | "review", reason: string }}
  */
 export function autoDecision(job, match, preferences = {}, user = {}) {

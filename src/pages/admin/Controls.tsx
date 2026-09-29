@@ -3,34 +3,33 @@ import { api } from "../../api";
 
 type Provider = { id: string; name: string; kind: string; model: string; enabled: boolean; apiKey: string; hasKey: boolean };
 type Assignment = { function_key: string; provider_id: string; enabled: number };
-type AiPayload = { functions: { key: string; label: string; detail: string }[]; providers: Provider[]; assignments: Assignment[] };
-type Plan = {
+type PromptVersion = {
   id: string;
-  name: string;
-  blurb: string;
-  monthlyCents: number;
-  yearlyCents: number;
-  features: Record<string, boolean | number>;
-  popular: boolean;
-  active: boolean;
+  version: number;
+  body?: string;
+  note: string;
+  status?: string;
+  createdAt?: number;
+  publishedAt?: number | null;
+  createdBy?: string;
+  bodyPreview?: string;
 };
-type Gateway = { id: string; name: string; kind: string; enabled: boolean; mode: string; publicKey: string; secretKey: string };
-type FeedConfig = { url: string; format: string; authType: string; username: string; headerName: string; employer: string; hasSecret: boolean };
-type Source = { id: string; name: string; kind: string; config: FeedConfig; enabled: boolean; lastPulledAt: number | null };
-type Job = {
-  id: string;
-  title: string;
-  company: string;
-  category: string;
-  role: string;
-  verification: string;
-  location: string;
-  sourceId: string;
-  sourceName: string;
-  primaryCompany: string;
-  primaryUrl: string;
-  primaryEmail: string;
-  active: boolean;
+type PromptFunction = {
+  key: string;
+  label: string;
+  detail: string;
+  defaultBody: string;
+  published: PromptVersion | null;
+  draft: PromptVersion | null;
+  history: PromptVersion[];
+};
+type AiPayload = {
+  functions: { key: string; label: string; detail: string }[];
+  providers: Provider[];
+  assignments: Assignment[];
+  promptRegistryEnabled: boolean;
+  silentAutoApplyEnabled: boolean;
+  prompts: PromptFunction[];
 };
 
 export function AiAdmin() {
@@ -41,9 +40,14 @@ export function AiAdmin() {
   const [kind, setKind] = useState("openai");
   const [model, setModel] = useState("gpt-4o-mini");
   const [apiKey, setApiKey] = useState("");
+  const [registryOn, setRegistryOn] = useState(false);
+  const [silentOn, setSilentOn] = useState(false);
 
   async function load() {
-    setData(await api<AiPayload>("/api/admin/ai"));
+    const payload = await api<AiPayload>("/api/admin/ai");
+    setData(payload);
+    setRegistryOn(Boolean(payload.promptRegistryEnabled));
+    setSilentOn(Boolean(payload.silentAutoApplyEnabled));
   }
 
   useEffect(() => {
@@ -63,6 +67,27 @@ export function AiAdmin() {
     }
   }
 
+  async function saveSwitches(next: { promptRegistryEnabled?: boolean; silentAutoApplyEnabled?: boolean }) {
+    setError("");
+    try {
+      const result = await api<{ promptRegistryEnabled: boolean; silentAutoApplyEnabled: boolean }>("/api/admin/ai/switches", {
+        method: "PUT",
+        body: JSON.stringify(next),
+      });
+      setRegistryOn(result.promptRegistryEnabled);
+      setSilentOn(result.silentAutoApplyEnabled);
+      setMessage(
+        [
+          result.promptRegistryEnabled ? "Prompt registry on." : "Prompt registry off — code defaults used.",
+          result.silentAutoApplyEnabled ? "Silent Auto-Apply on." : "Silent Auto-Apply off — queue Ready only.",
+        ].join(" "),
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save switches.");
+    }
+  }
+
   if (!data) return <p>{error || "Loading AI pipelines…"}</p>;
 
   return (
@@ -71,6 +96,36 @@ export function AiAdmin() {
       <p className="lede">Each function is coded in the product. Edit a pipeline’s name, provider, model, and key, or remove it. A disabled pipeline is hidden from every function and cannot run. Functions on a removed or disabled pipeline move to one that is still on.</p>
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="role">{message}</p> : null}
+
+      <section className="admin-card">
+        <h2>Platform switches</h2>
+        <p className="role">Kill switches default off. Turning Silent Auto-Apply on lets Autopilot transmit when rules and readiness clear — users must still authorize Auto-Apply on their account.</p>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={registryOn}
+            onChange={(event) => {
+              const enabled = event.target.checked;
+              setRegistryOn(enabled);
+              void saveSwitches({ promptRegistryEnabled: enabled });
+            }}
+          />
+          Versioned prompt registry (use published admin prompts instead of code defaults)
+        </label>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={silentOn}
+            onChange={(event) => {
+              const enabled = event.target.checked;
+              setSilentOn(enabled);
+              void saveSwitches({ silentAutoApplyEnabled: enabled });
+            }}
+          />
+          Silent Auto-Apply (transmit when Autopilot rules and readiness clear)
+        </label>
+      </section>
+
       <form className="admin-card admin-grid" onSubmit={add}>
         <label className="field">
           <span>Name</span>
@@ -102,6 +157,7 @@ export function AiAdmin() {
         const choices = data.providers.filter((provider) => provider.enabled);
         const assignment = data.assignments.find((row) => row.function_key === item.key);
         const selected = choices.find((provider) => provider.id === assignment?.provider_id);
+        const prompt = data.prompts?.find((row) => row.key === item.key);
         return (
           <section className="admin-card" key={item.key}>
             <h2>{item.label}</h2>
@@ -123,9 +179,131 @@ export function AiAdmin() {
                 ))}
               </select>
             </label>
+            {prompt ? (
+              <PromptEditor
+                prompt={prompt}
+                registryOn={registryOn}
+                onChanged={load}
+                onError={setError}
+                onMessage={setMessage}
+              />
+            ) : null}
           </section>
         );
       })}
+    </div>
+  );
+}
+
+function PromptEditor({
+  prompt,
+  registryOn,
+  onChanged,
+  onError,
+  onMessage,
+}: {
+  prompt: PromptFunction;
+  registryOn: boolean;
+  onChanged: () => Promise<void>;
+  onError: (message: string) => void;
+  onMessage: (message: string) => void;
+}) {
+  const [body, setBody] = useState(prompt.draft?.body || prompt.published?.body || prompt.defaultBody || "");
+  const [note, setNote] = useState(prompt.draft?.note || "");
+
+  useEffect(() => {
+    setBody(prompt.draft?.body || prompt.published?.body || prompt.defaultBody || "");
+    setNote(prompt.draft?.note || "");
+  }, [prompt]);
+
+  return (
+    <div className="admin-card" style={{ marginTop: "0.75rem", boxShadow: "none" }}>
+      <h3>Prompt versions</h3>
+      <p className="role">
+        {registryOn ? "Registry is on — published text is used at runtime." : "Registry is off — code defaults are used until you turn it on."}
+        {prompt.published ? ` Published v${prompt.published.version}.` : " No published version yet."}
+        {prompt.draft ? ` Draft v${prompt.draft.version} waiting to publish.` : ""}
+      </p>
+      <label className="field">
+        <span>System prompt</span>
+        <textarea rows={8} value={body} onChange={(event) => setBody(event.target.value)} />
+      </label>
+      <label className="field">
+        <span>Note</span>
+        <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Why this change" />
+      </label>
+      <div className="admin-actions">
+        <button
+          className="btn btn-ghost btn-sm"
+          type="button"
+          onClick={() => {
+            onError("");
+            void api(`/api/admin/ai/prompts/${prompt.key}`, {
+              method: "PUT",
+              body: JSON.stringify({ body, note }),
+            })
+              .then(() => {
+                onMessage(`Draft saved for ${prompt.label}.`);
+                return onChanged();
+              })
+              .catch((err: Error) => onError(err.message));
+          }}
+        >
+          Save draft
+        </button>
+        <button
+          className="btn btn-primary btn-sm"
+          type="button"
+          onClick={() => {
+            onError("");
+            void api(`/api/admin/ai/prompts/${prompt.key}`, {
+              method: "PUT",
+              body: JSON.stringify({ body, note }),
+            })
+              .then(() => api(`/api/admin/ai/prompts/${prompt.key}/publish`, { method: "POST", body: "{}" }))
+              .then(() => {
+                onMessage(`Published ${prompt.label}.`);
+                return onChanged();
+              })
+              .catch((err: Error) => onError(err.message));
+          }}
+        >
+          Publish
+        </button>
+      </div>
+      {prompt.history.length ? (
+        <div style={{ marginTop: "0.75rem" }}>
+          <p className="role">History</p>
+          {prompt.history.map((row) => (
+            <article key={row.id} style={{ display: "flex", gap: "0.75rem", alignItems: "center", justifyContent: "space-between", marginTop: "0.35rem" }}>
+              <p className="role" style={{ margin: 0 }}>
+                v{row.version} · {row.status}
+                {row.note ? ` · ${row.note}` : ""}
+              </p>
+              {row.status !== "published" ? (
+                <button
+                  className="text-btn"
+                  type="button"
+                  onClick={() => {
+                    onError("");
+                    void api(`/api/admin/ai/prompts/${prompt.key}/rollback`, {
+                      method: "POST",
+                      body: JSON.stringify({ versionId: row.id }),
+                    })
+                      .then(() => {
+                        onMessage(`Rolled ${prompt.label} back to v${row.version}.`);
+                        return onChanged();
+                      })
+                      .catch((err: Error) => onError(err.message));
+                  }}
+                >
+                  Rollback
+                </button>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -226,6 +404,35 @@ const emptyPlan = {
   popular: false,
   active: true,
   features: { profile_edit: true, job_limit: 5, template_limit: 2, match_explain_limit: 5, resume_review_limit: 3 } as Record<string, boolean | number>,
+};
+
+type Plan = {
+  id: string;
+  name: string;
+  blurb: string;
+  monthlyCents: number;
+  yearlyCents: number;
+  features: Record<string, boolean | number>;
+  popular: boolean;
+  active: boolean;
+};
+type Gateway = { id: string; name: string; kind: string; enabled: boolean; mode: string; publicKey: string; secretKey: string };
+type FeedConfig = { url: string; format: string; authType: string; username: string; headerName: string; employer: string; hasSecret: boolean };
+type Source = { id: string; name: string; kind: string; config: FeedConfig; enabled: boolean; lastPulledAt: number | null };
+type Job = {
+  id: string;
+  title: string;
+  company: string;
+  category: string;
+  role: string;
+  verification: string;
+  location: string;
+  sourceId: string;
+  sourceName: string;
+  primaryCompany: string;
+  primaryUrl: string;
+  primaryEmail: string;
+  active: boolean;
 };
 
 export function PlansAdmin() {
