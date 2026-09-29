@@ -19,6 +19,14 @@ export function claimsSupported(proposed, source, facts = []) {
   return numbersIn(proposed).every((number) => blob.includes(number));
 }
 
+/** Normalize AI paths like employment[0].bullets[1] → employment.0.bullets.1 */
+export function normalizeResumePath(path) {
+  return String(path || "")
+    .replace(/\[(\d+)\]/g, ".$1")
+    .replace(/^\.+/, "")
+    .trim();
+}
+
 /**
  * Ensure every employer / skill token in the document appears in facts or source text.
  * Used after tailoring so we never invent entities.

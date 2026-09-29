@@ -3,7 +3,7 @@
 import { db, id } from "./db.mjs";
 import { reviewQuota } from "./quota.mjs";
 import { applyClarificationAnswer, markRecommendationAnswered } from "./upscale-clarify.mjs";
-import { claimsSupported } from "./resume-guard.mjs";
+import { claimsSupported, normalizeResumePath } from "./resume-guard.mjs";
 
 export function registerResume(app, ctx) {
   const {
@@ -167,55 +167,75 @@ export function registerResume(app, ctx) {
     const user = requireUser(req, res);
     if (!user) return;
     if (!requireFeature(user, "resume_upscale", res)) return;
-    const review = db.prepare("SELECT * FROM resume_reviews WHERE id = ? AND user_id = ?").get(String(req.body.reviewId || ""), user.id);
-    const version = review
-      ? db.prepare("SELECT * FROM resume_versions WHERE id = ? AND user_id = ?").get(review.version_id, user.id)
-      : null;
-    if (!review || !version) {
-      res.status(400).json({ error: "Run a review before applying recommendations." });
-      return;
-    }
-    const selected = new Set((req.body.recommendationIds || []).map(String));
-    const recommendations = parse(review.recommendations, []).filter(
-      (item) => selected.has(item.id) && item.kind === "rewrite" && item.proposed && item.path,
-    );
-    if (!recommendations.length) {
-      res.status(400).json({
-        error: "Select at least one rewrite. Clarifications save to the Fact Ledger first; notes stay guidance-only.",
+    try {
+      const review = db.prepare("SELECT * FROM resume_reviews WHERE id = ? AND user_id = ?").get(String(req.body.reviewId || ""), user.id);
+      const version = review
+        ? db.prepare("SELECT * FROM resume_versions WHERE id = ? AND user_id = ?").get(review.version_id, user.id)
+        : null;
+      if (!review || !version) {
+        res.status(400).json({ error: "Run a review before applying recommendations." });
+        return;
+      }
+      const selectedIds = Array.isArray(req.body.recommendationIds) ? req.body.recommendationIds.map(String) : [];
+      const selected = new Set(selectedIds);
+      const recommendations = parse(review.recommendations, []).filter(
+        (item) => selected.has(String(item.id)) && item.kind === "rewrite" && item.proposed && item.path,
+      );
+      if (!recommendations.length) {
+        res.status(400).json({
+          error: "Select at least one rewrite. Clarifications save to the Fact Ledger first; notes stay guidance-only.",
+        });
+        return;
+      }
+      const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
+      const facts = profile ? parse(profile.facts, []) : [];
+      const doc = parse(version.document, {});
+      const source = sourceText(doc);
+      const applied = [];
+      const blockedClaims = [];
+      const badPaths = [];
+      for (const item of recommendations) {
+        const path = normalizeResumePath(item.path);
+        if (!claimsSupported(item.proposed, source, facts)) {
+          blockedClaims.push(String(item.id));
+          continue;
+        }
+        if (setPath(doc, path, item.proposed)) applied.push(String(item.id));
+        else badPaths.push(String(item.id));
+      }
+      if (!applied.length) {
+        if (badPaths.length && !blockedClaims.length) {
+          res.status(400).json({
+            error: "Those recommendations point at resume lines that are no longer on this version. Run Analyze again, then retry Upscale.",
+          });
+          return;
+        }
+        res.status(400).json({
+          error:
+            "Those recommendations could not be applied without adding unsupported claims. Answer clarifications to add verified numbers to the Fact Ledger first.",
+        });
+        return;
+      }
+      const count = db.prepare("SELECT COUNT(*) AS count FROM resume_versions WHERE user_id = ? AND kind = 'upscale'").get(user.id).count + 1;
+      const versionId = id("ver");
+      db.prepare(
+        `INSERT INTO resume_versions (id, user_id, label, kind, document, rendered, parent_id, active, created_at)
+         VALUES (?, ?, ?, 'upscale', ?, ?, ?, 0, ?)`,
+      ).run(versionId, user.id, `Upscale ${count}`, JSON.stringify(doc), renderDocument(doc), version.id, Date.now());
+      audit({
+        userId: user.id,
+        functionName: "resume_upscale",
+        provider: review.provider || "Built-in rules",
+        model: review.model || "rules-v1",
+        status: "version",
+        detail: versionId,
       });
-      return;
-    }
-    const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
-    const facts = profile ? parse(profile.facts, []) : [];
-    const doc = parse(version.document, {});
-    const source = sourceText(doc);
-    const applied = [];
-    for (const item of recommendations) {
-      if (!claimsSupported(item.proposed, source, facts)) continue;
-      if (setPath(doc, item.path, item.proposed)) applied.push(item.id);
-    }
-    if (!applied.length) {
-      res.status(400).json({
-        error:
-          "Those recommendations could not be applied without adding unsupported claims. Answer clarifications to add verified numbers to the Fact Ledger first.",
+      res.json({ versionId, applied, skippedClaims: blockedClaims, skippedPaths: badPaths });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : "Could not create the Upscale version.",
       });
-      return;
     }
-    const count = db.prepare("SELECT COUNT(*) AS count FROM resume_versions WHERE user_id = ? AND kind = 'upscale'").get(user.id).count + 1;
-    const versionId = id("ver");
-    db.prepare(
-      `INSERT INTO resume_versions (id, user_id, label, kind, document, rendered, parent_id, active, created_at)
-       VALUES (?, ?, ?, 'upscale', ?, ?, ?, 0, ?)`,
-    ).run(versionId, user.id, `Upscale ${count}`, JSON.stringify(doc), renderDocument(doc), version.id, Date.now());
-    audit({
-      userId: user.id,
-      functionName: "resume_upscale",
-      provider: review.provider,
-      model: review.model,
-      status: "version",
-      detail: versionId,
-    });
-    res.json({ versionId, applied });
   });
 
   app.post("/api/resume/versions/:id/activate", (req, res) => {

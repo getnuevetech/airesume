@@ -11,7 +11,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     mustChangePassword?: boolean;
   };
   if (!response.ok) {
-    const err = new Error(data.error || "Request failed.") as Error & {
+    const err = new Error(data.error || `Request failed (${response.status}).`) as Error & {
       status?: number;
       mfaRequired?: boolean;
       mfaEnrolled?: boolean;

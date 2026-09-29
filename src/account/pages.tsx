@@ -1006,6 +1006,13 @@ export function ResumePage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [clarifyAnswers, setClarifyAnswers] = useState<Record<string, string>>({});
   const [clarifyBusy, setClarifyBusy] = useState("");
+  const reviewId = data?.review?.id || "";
+
+  useEffect(() => {
+    setSelected([]);
+    setClarifyAnswers({});
+  }, [reviewId]);
+
   if (!data) return null;
   return (
     <Gate feature="resume_review">
