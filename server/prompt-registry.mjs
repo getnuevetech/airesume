@@ -18,6 +18,7 @@ const FUNCTION_META = [
   { key: "job_primary", label: "Primary recruiter", detail: "Finds the hiring company in a feed listing when the poster is an aggregator." },
   { key: "job_match", label: "Job match", detail: "Explains how a job fits the career profile." },
   { key: "image_enhance", label: "Photo enhancement", detail: "Chooses safe contrast, color, and sharpness for a headshot." },
+  { key: "resume_ocr", label: "Resume OCR", detail: "Reads text from resume photos and scanned images before career extraction." },
 ];
 
 function settingValue(key, fallback = "0") {

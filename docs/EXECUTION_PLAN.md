@@ -99,6 +99,7 @@ Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply
 
 - Versioned admin prompt registry with publish/rollback + Admin on/off switch
 - Silent Auto-Apply transmit when rules/readiness clear + Admin kill switch (default off)
+- Resume image OCR via Admin `resume_ocr` AI pipeline (PNG/JPG/WEBP/GIF)
 
 ## Pricing gates (implemented in admin plan matrix)
 

@@ -1,6 +1,7 @@
 import { prompts } from "./ai.mjs";
 import { completeJson } from "./ai-run.mjs";
 import { reconcileProducerReviewer } from "./ai-reconcile.mjs";
+import { isResumeImageFilename, ocrResumeImage } from "./resume-ocr.mjs";
 
 const SKILL_WORDS = [
   "Product management",
@@ -679,5 +680,22 @@ export async function readResumeFile(filename, buffer) {
       .replace(/[ \t]{2,}/g, " ");
   }
   if (lower.endsWith(".pdf")) return readPdf(buffer);
+  if (isResumeImageFilename(lower)) {
+    const ocr = await ocrResumeImage({ filename, buffer });
+    return ocr.text || "";
+  }
   return "";
+}
+
+/**
+ * Load resume text from PDF/DOCX/TXT or OCR an image via the Resume OCR pipeline.
+ * @returns {Promise<{ text: string, ocr: null | { provider: string, model: string, costMicros: number, error?: string } }>}
+ */
+export async function loadResumeText(filename, buffer) {
+  if (isResumeImageFilename(filename)) {
+    const ocr = await ocrResumeImage({ filename, buffer });
+    return { text: ocr.text || "", ocr };
+  }
+  const text = await readResumeFile(filename, buffer);
+  return { text, ocr: null };
 }

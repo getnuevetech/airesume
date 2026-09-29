@@ -9,7 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "start": "NODE_ENV=production node server/index.mjs",
     "preview": "vite preview --host",
-    "test": "node --test server/smoke.test.mjs server/extract-feeds.test.mjs server/onboarding.test.mjs server/job-intel.test.mjs server/apply-quality.test.mjs server/slice-e.test.mjs server/deferred-hardening.test.mjs server/homepage-conversion.test.mjs server/legal-consent.test.mjs server/fact-provenance.test.mjs server/extension-autofill.test.mjs server/job-coach.test.mjs server/prod-hardening.test.mjs server/prompt-registry.test.mjs"
+    "test": "node --test server/smoke.test.mjs server/extract-feeds.test.mjs server/onboarding.test.mjs server/job-intel.test.mjs server/apply-quality.test.mjs server/slice-e.test.mjs server/deferred-hardening.test.mjs server/homepage-conversion.test.mjs server/legal-consent.test.mjs server/fact-provenance.test.mjs server/extension-autofill.test.mjs server/job-coach.test.mjs server/prod-hardening.test.mjs server/prompt-registry.test.mjs server/resume-ocr.test.mjs"
   },
   "dependencies": {
     "express": "^5.2.1",

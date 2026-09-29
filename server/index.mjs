@@ -14,7 +14,8 @@ import {
   id,
   publicUser,
 } from "./db.mjs";
-import { cleanResumeText, extractCareerProfile, readResumeFile } from "./extract.mjs";
+import { cleanResumeText, extractCareerProfile, loadResumeText } from "./extract.mjs";
+import { isResumeImageFilename } from "./resume-ocr.mjs";
 import { registerPlatform, syncProfileVersion } from "./platform.mjs";
 import { deliverMail, publicMailSettings, saveMailSettings } from "./mail.mjs";
 import { auditCostSummary, moneyFromMicros } from "./ai-cost.mjs";
@@ -501,8 +502,9 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
   }
   const filename = req.file.originalname || "resume.txt";
   const lower = filename.toLowerCase();
-  if (!/\.(pdf|docx|txt|md)$/.test(lower)) {
-    res.status(400).json({ error: "Use a PDF, DOCX, or TXT file." });
+  const imageResume = isResumeImageFilename(lower);
+  if (!/\.(pdf|docx|txt|md|png|jpe?g|webp|gif)$/.test(lower)) {
+    res.status(400).json({ error: "Use a PDF, DOCX, TXT, or image resume (PNG, JPG, WEBP)." });
     return;
   }
   if (req.body.consent !== "1" && req.body.consent !== true && req.body.consent !== "true") {
@@ -510,21 +512,29 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
     return;
   }
   let text = "";
+  let ocr = null;
   try {
-    text = await readResumeFile(filename, req.file.buffer);
+    const loaded = await loadResumeText(filename, req.file.buffer);
+    text = loaded.text;
+    ocr = loaded.ocr;
   } catch {
-    const kind = lower.endsWith(".pdf") ? "PDF" : "file";
+    const kind = imageResume ? "image" : lower.endsWith(".pdf") ? "PDF" : "file";
     res.status(400).json({
-      error: `We could not read that ${kind}. Use a DOCX or TXT resume, or a PDF whose text you can highlight.`,
+      error: imageResume
+        ? "We could not read that image. Try a clearer PNG or JPG photo of the full resume, or upload a PDF/DOCX/TXT file."
+        : `We could not read that ${kind}. Use a DOCX or TXT resume, a PDF whose text you can highlight, or a clear resume image.`,
     });
     return;
   }
   text = cleanResumeText(text).slice(0, 20000);
   if (text.trim().length < 20) {
+    const ocrHint = ocr?.error ? ` ${ocr.error}` : "";
     res.status(400).json({
-      error: lower.endsWith(".pdf")
-        ? "This PDF has no selectable text, so it looks like a scan or a picture. Save it as DOCX or TXT, or upload a PDF where the words can be highlighted."
-        : "We could not read enough text from that file. Upload a DOCX, TXT, or PDF with selectable text.",
+      error: imageResume
+        ? `We could not read enough text from that image.${ocrHint} Assign a vision AI to Resume OCR in Admin, or upload a clearer photo / a PDF or DOCX.`
+        : lower.endsWith(".pdf")
+          ? "This PDF has no selectable text, so it looks like a scan or a picture. Upload a PNG/JPG of the pages, or a PDF/DOCX/TXT with selectable text."
+          : "We could not read enough text from that file. Upload a DOCX, TXT, PDF with selectable text, or a clear resume image.",
     });
     return;
   }
@@ -537,6 +547,16 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
     JSON.stringify(payload),
     Date.now(),
   );
+  if (ocr) {
+    audit({
+      functionName: "resume_ocr",
+      provider: ocr.provider,
+      model: ocr.model,
+      status: text.trim().length >= 20 ? "done" : "empty",
+      detail: filename,
+      costMicros: ocr.costMicros || 0,
+    });
+  }
   audit({
     functionName: "career_profile_extraction",
     provider: extracted.provider,
@@ -576,6 +596,9 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
     questions: extracted.questions,
     warnings: extracted.warnings || [],
     missingPreferences,
+    ocr: ocr
+      ? { provider: ocr.provider, model: ocr.model, used: true }
+      : null,
   });
 });
 
