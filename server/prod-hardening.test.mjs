@@ -12,7 +12,7 @@ import { migrate, SCHEMA_VERSION } from "./schema.mjs";
 import { db } from "./db.mjs";
 
 test("schema version includes admin MFA and homepage CTA patches", () => {
-  assert.ok(SCHEMA_VERSION >= 26);
+  assert.ok(SCHEMA_VERSION >= 27);
   migrate();
   assert.ok(db.prepare("PRAGMA table_info(users)").all().some((column) => column.name === "totp_secret"));
   assert.ok(db.prepare("PRAGMA table_info(sessions)").all().some((column) => column.name === "mfa_at"));
