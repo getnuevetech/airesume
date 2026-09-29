@@ -5,7 +5,7 @@ import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 import { seedPromptRegistry } from "./prompt-registry.mjs";
 
-export const SCHEMA_VERSION = 24;
+export const SCHEMA_VERSION = 25;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -19,6 +19,7 @@ export const AI_FUNCTIONS = [
   { key: "job_primary", label: "Primary recruiter", detail: "Finds the hiring company in a feed listing when the poster is an aggregator." },
   { key: "job_match", label: "Job match", detail: "Explains how a job fits the career profile." },
   { key: "image_enhance", label: "Photo enhancement", detail: "Chooses safe contrast, color, and sharpness for a headshot." },
+  { key: "resume_ocr", label: "Resume OCR", detail: "Reads text from resume photos and scanned images before career extraction." },
 ];
 
 export const RESUME_TEMPLATES = [
@@ -607,6 +608,26 @@ export function migrate() {
         const current = homepage?.hero?.continueLabel;
         if (!current || current === "Select a resume to continue") {
           homepage.hero = { ...(homepage.hero || {}), continueLabel: "Submit Resume" };
+          db.prepare("UPDATE settings SET value = ? WHERE key = 'homepage'").run(JSON.stringify(homepage));
+        }
+      }
+    } catch {
+      // Ignore malformed homepage rows in isolated tests.
+    }
+  }
+
+  // Mention image resumes in the default drop hint without wiping custom CMS copy.
+  if (previous < 25) {
+    try {
+      const existing = db.prepare("SELECT value FROM settings WHERE key = 'homepage'").get();
+      if (existing?.value) {
+        const homepage = JSON.parse(existing.value);
+        const current = homepage?.hero?.dropHint;
+        if (!current || current === "PDF, DOCX or TXT (up to 10MB)") {
+          homepage.hero = {
+            ...(homepage.hero || {}),
+            dropHint: "PDF, DOCX, TXT, or a clear resume photo (up to 10MB)",
+          };
           db.prepare("UPDATE settings SET value = ? WHERE key = 'homepage'").run(JSON.stringify(homepage));
         }
       }

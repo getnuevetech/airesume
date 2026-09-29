@@ -14,8 +14,17 @@ function isAllowedResume(file: File) {
   if (name.endsWith(".doc") && !name.endsWith(".docx")) {
     return "Save the older Word .doc file as DOCX, then upload that.";
   }
-  const allowed = name.endsWith(".pdf") || name.endsWith(".docx") || name.endsWith(".txt") || name.endsWith(".md");
-  if (!allowed) return "Use a PDF, DOCX, or TXT file.";
+  const allowed =
+    name.endsWith(".pdf") ||
+    name.endsWith(".docx") ||
+    name.endsWith(".txt") ||
+    name.endsWith(".md") ||
+    name.endsWith(".png") ||
+    name.endsWith(".jpg") ||
+    name.endsWith(".jpeg") ||
+    name.endsWith(".webp") ||
+    name.endsWith(".gif");
+  if (!allowed) return "Use a PDF, DOCX, TXT, or image resume (PNG, JPG, WEBP).";
   if (file.size > 10 * 1024 * 1024) return "That file is over 10MB.";
   if (file.size === 0) return "That file is empty.";
   return "";
@@ -113,7 +122,7 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
         id={inputId}
         className="file-input"
         type="file"
-        accept=".pdf,.docx,.txt,.md,application/pdf,text/plain"
+        accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp,.gif,application/pdf,text/plain,image/png,image/jpeg,image/webp,image/gif"
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";

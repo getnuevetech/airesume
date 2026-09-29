@@ -59,9 +59,19 @@ Rules:
 
 const IMAGE_ENHANCE_V1 = `Return JSON {contrast, color, sharpness} as numbers from 1 to 1.35. These tune the existing photo. Do not describe a different person.`;
 
+const RESUME_OCR_V1 = `You read a resume image with OCR.
+Return strict JSON {"text": string}.
+Rules:
+- text is the full readable resume content in reading order (top to bottom, left to right).
+- Preserve line breaks between sections, jobs, and bullets.
+- Copy only text visible in the image. Never invent employers, dates, skills, numbers, or contact details.
+- If a word is illegible, omit it rather than guessing.
+- If the image is not a resume or has no readable text, return {"text":""}.`;
+
 export const prompts = {
   CAREER_EXTRACTION_V1: EXTRACTION_V1,
   CAREER_REVIEW_V1: REVIEW_V1,
+  RESUME_OCR_V1,
 };
 
 /** Default system prompt body keyed by AI_FUNCTIONS.key */
@@ -77,6 +87,7 @@ export const DEFAULT_PROMPTS = {
   job_primary: JOB_PRIMARY_V1,
   job_match: JOB_MATCH_V1,
   image_enhance: IMAGE_ENHANCE_V1,
+  resume_ocr: RESUME_OCR_V1,
 };
 
 export function routing() {

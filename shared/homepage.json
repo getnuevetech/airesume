@@ -16,7 +16,7 @@
     "titleLines": ["Better applications.", "Less time.", "Lower cost."],
     "lede": "Upload your resume. We build your career profile, find the jobs you are best positioned for, tailor each application, and help you apply efficiently — without inventing experience.",
     "dropTitle": "Drag & drop your resume here",
-    "dropHint": "PDF, DOCX or TXT (up to 10MB)",
+    "dropHint": "PDF, DOCX, TXT, or a clear resume photo (up to 10MB)",
     "uploadLabel": "Upload Resume",
     "continueLabel": "Submit Resume",
     "changeFileLabel": "Choose a different file",
