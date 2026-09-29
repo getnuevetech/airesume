@@ -9,6 +9,7 @@ import { applyKitMetrics, recordApplyKitEvent } from "./apply-kit-metrics.mjs";
 import { computeApplicationReadiness } from "./readiness.mjs";
 import { ensureFollowUpReminder } from "./follow-ups.mjs";
 import { AUTO_APPLY_AUTH_VERSION, autoApplyAuthorizationPayload, validateAutoApplyEnable } from "./auto-apply-auth.mjs";
+import { isSilentAutoApplyEnabled } from "./prompt-registry.mjs";
 
 export function registerApplications(app, ctx) {
   const {
@@ -410,7 +411,8 @@ export function registerApplications(app, ctx) {
     const existing = new Set(db.prepare("SELECT job_id FROM applications WHERE user_id = ?").all(user.id).map((item) => item.job_id));
     const dailyCap = Math.max(1, Math.min(25, Number(user.auto_daily_cap ?? 5) || 5));
     let used = autoCapUsed(user.id);
-    const summary = { ready: 0, reviewRequired: 0, skipped: 0, capped: false };
+    const summary = { ready: 0, reviewRequired: 0, skipped: 0, applied: 0, capped: false };
+    const silentOn = isSilentAutoApplyEnabled() && autoApplyAuthorizationPayload(user).authorized;
     const candidates = db
       .prepare("SELECT * FROM jobs WHERE active = 1")
       .all()
@@ -432,16 +434,52 @@ export function registerApplications(app, ctx) {
         decision = { action: "review", reason: "Listing is not cleared for autopilot submit." };
       }
       const status = decision.action === "ready" ? "Ready" : "Review required";
-      await createApplication(user, item.job, "auto", doc, preferences, facts, {
+      const result = await createApplication(user, item.job, "auto", doc, preferences, facts, {
         status,
         deliver: false,
         reason: decision.reason,
       });
       used += 1;
-      if (status === "Ready") summary.ready += 1;
+
+      // Admin kill switch + user authorization: transmit only when readiness is clear.
+      if (
+        silentOn &&
+        result.status === "Ready" &&
+        result.readiness?.state === "APPLICATION_READY" &&
+        result.id
+      ) {
+        const row = db.prepare("SELECT * FROM applications WHERE id = ?").get(result.id);
+        const versionRow = row?.version_id
+          ? db.prepare("SELECT * FROM resume_versions WHERE id = ? AND user_id = ?").get(row.version_id, user.id)
+          : null;
+        const rendered = String(versionRow?.rendered || "");
+        if (row && rendered) {
+          const delivery = await employerDelivery(user, item.job, rendered);
+          db.prepare("UPDATE applications SET status = 'Applied', delivery = ?, updated_at = ? WHERE id = ?").run(
+            delivery,
+            Date.now(),
+            row.id,
+          );
+          ensureFollowUpReminder({
+            userId: user.id,
+            applicationId: row.id,
+            status: "Applied",
+            company: row.target_company || item.job.primary_company || item.job.company || "",
+            title: item.job.title || "",
+          });
+          summary.applied += 1;
+          continue;
+        }
+      }
+
+      if (result.status === "Ready") summary.ready += 1;
       else summary.reviewRequired += 1;
     }
-    res.json({ ...summary, applied: 0, queued: summary.ready + summary.reviewRequired });
+    res.json({
+      ...summary,
+      silentAutoApply: silentOn,
+      queued: summary.ready + summary.reviewRequired,
+    });
   });
 
   app.patch("/api/applications/:id", (req, res) => {

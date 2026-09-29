@@ -91,11 +91,14 @@ Resume extraction/terms upload, OTP/privacy, job intel/readiness, Assisted Apply
 
 - Chrome Web Store submission (packaging notes ready in `extension/STORE.md`)
 - Managed TURN hosting
-- Silent Auto Apply submit
 - Employer feature expansion
 - Salary negotiation / recruiter outreach agents
 - SFU media stack
-- Versioned admin prompt registry with rollback
+
+### Shipped on request (post A–P)
+
+- Versioned admin prompt registry with publish/rollback + Admin on/off switch
+- Silent Auto-Apply transmit when rules/readiness clear + Admin kill switch (default off)
 
 ## Pricing gates (implemented in admin plan matrix)
 

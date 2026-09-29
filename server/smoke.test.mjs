@@ -139,7 +139,7 @@ test("tailoredDocument only reorders existing content", () => {
   );
 });
 
-test("autoDecision never chooses silent submit", () => {
+test("autoDecision queues ready or review — never returns apply action", () => {
   assert.ok(TRACKER_STATUSES.includes("Ready"));
   assert.ok(TRACKER_STATUSES.includes("Review required"));
   assert.ok(TRACKER_STATUSES.includes("Employer viewed"));

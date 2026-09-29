@@ -1,7 +1,17 @@
-/** Admin AI provider and assignment routes. */
+/** Admin AI provider, assignment, prompt registry, and automation switch routes. */
 
 import { db, id } from "./db.mjs";
 import { AI_FUNCTIONS } from "./schema.mjs";
+import {
+  listPromptRegistry,
+  savePromptDraft,
+  publishPrompt,
+  rollbackPrompt,
+  setPromptRegistryEnabled,
+  setSilentAutoApplyEnabled,
+  isPromptRegistryEnabled,
+  isSilentAutoApplyEnabled,
+} from "./prompt-registry.mjs";
 
 function publicProvider(row, maskSecret) {
   return { id: row.id, name: row.name, kind: row.kind, model: row.model, enabled: Boolean(row.enabled), apiKey: maskSecret(row.api_key), hasKey: Boolean(row.api_key) };
@@ -12,11 +22,60 @@ export function registerAdminAi(app, ctx) {
 
   app.get("/api/admin/ai", (req, res) => {
     if (!requireAdmin(req, res)) return;
+    const registry = listPromptRegistry();
     res.json({
       functions: AI_FUNCTIONS,
       providers: db.prepare("SELECT * FROM ai_providers ORDER BY created_at").all().map((row) => publicProvider(row, maskSecret)),
       assignments: db.prepare("SELECT * FROM ai_assignments").all(),
+      promptRegistryEnabled: registry.registryEnabled,
+      silentAutoApplyEnabled: registry.silentAutoApplyEnabled,
+      prompts: registry.functions,
     });
+  });
+
+  app.put("/api/admin/ai/switches", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    if (req.body.promptRegistryEnabled !== undefined) {
+      setPromptRegistryEnabled(Boolean(req.body.promptRegistryEnabled));
+    }
+    if (req.body.silentAutoApplyEnabled !== undefined) {
+      setSilentAutoApplyEnabled(Boolean(req.body.silentAutoApplyEnabled));
+    }
+    res.json({
+      ok: true,
+      promptRegistryEnabled: isPromptRegistryEnabled(),
+      silentAutoApplyEnabled: isSilentAutoApplyEnabled(),
+    });
+  });
+
+  app.put("/api/admin/ai/prompts/:functionKey", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const result = savePromptDraft(req.params.functionKey, req.body.body, req.body.note, "admin");
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, ...result, prompts: listPromptRegistry().functions });
+  });
+
+  app.post("/api/admin/ai/prompts/:functionKey/publish", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const result = publishPrompt(req.params.functionKey, "admin");
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, ...result, prompts: listPromptRegistry().functions });
+  });
+
+  app.post("/api/admin/ai/prompts/:functionKey/rollback", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const result = rollbackPrompt(req.params.functionKey, String(req.body.versionId || ""), "admin");
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, ...result, prompts: listPromptRegistry().functions });
   });
 
   app.post("/api/admin/ai/providers", (req, res) => {
