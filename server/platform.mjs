@@ -2,7 +2,7 @@ import { db, id } from "./db.mjs";
 import { completeJson } from "./ai-run.mjs";
 import { migrate, publicPlan } from "./schema.mjs";
 import { deliverMail } from "./mail.mjs";
-import { fetchFeedListings, normalizeFeedUrl, publicFeedConfig, resolvePrimary } from "./feeds.mjs";
+import { fetchFeedListings, localPrimary, normalizeFeedUrl, publicFeedConfig, resolvePrimary } from "./feeds.mjs";
 import { extractRequirements, matchJob } from "./match.mjs";
 import { authenticitySignals, normalizeJobListing } from "./job-schema.mjs";
 import { extractJobRequirements } from "./job-requirements.mjs";
@@ -337,6 +337,22 @@ async function categorizeAndVerify(job, siblings) {
   };
 }
 
+function categorizeAndVerifyLocal(job, siblings) {
+  const localCategory = job.category && CATEGORIES.includes(job.category) ? job.category : categorizeText(job.title, job.description);
+  const local = verifyJob({ ...job, category: localCategory }, siblings);
+  return {
+    category: localCategory,
+    role: String(job.role || job.title || "").slice(0, 80),
+    verification: local.verification,
+    note: local.note,
+    authenticity: {
+      flags: local.flags || [],
+      duplicates: local.duplicates || [],
+    },
+    costMicros: 0,
+  };
+}
+
 function jobKey(raw) {
   return String(raw.externalKey || `${raw.company}-${raw.title}`).slice(0, 180);
 }
@@ -445,37 +461,82 @@ async function pullSource(source) {
       sourceUrl: job.source_url,
       applyUrl: job.primary_url || "",
     }));
+    if (!rows.length) {
+      recordPullResult(source.id, "empty", "Catalog has no jobs to refresh yet.");
+      return 0;
+    }
   } else if (source.kind === "json" || source.kind === "rss") {
+    if (!config.url) {
+      throw new Error("Add a feed URL before pulling.");
+    }
     rows = await fetchFeedListings(source, config);
   } else {
-    return 0;
+    throw new Error(`This source kind (“${source.kind}”) cannot be pulled. Use a JSON, RSS, or HTML careers URL feed.`);
   }
+
   const siblings = rows.map((row, index) => ({ id: String(index), title: row.title, company: row.company }));
   const seen = new Set();
+  const saveErrors = [];
   for (let index = 0; index < rows.length; index += 1) {
     const row = { ...rows[index], id: String(index) };
-    const primary = await resolvePrimary(row);
-    const checked = await categorizeAndVerify(row, siblings);
-    if (primary.primaryCompany && primary.primaryCompany.toLowerCase() !== String(row.company).toLowerCase()) {
-      checked.note = `Apply to ${primary.primaryCompany}. ${checked.note}`;
+    try {
+      // Pull stays local/fast so feeds do not hang on per-job AI calls.
+      const primary = localPrimary(row);
+      const checked = categorizeAndVerifyLocal(row, siblings);
+      if (primary.primaryCompany && primary.primaryCompany.toLowerCase() !== String(row.company).toLowerCase()) {
+        checked.note = `Apply to ${primary.primaryCompany}. ${checked.note}`;
+      }
+      const requirements = extractRequirements({
+        title: row.title,
+        description: row.description || "",
+        skills: Array.isArray(row.skills) ? row.skills : [],
+        role: row.role || row.title,
+        category: checked.category,
+      });
+      seen.add(jobKey(row));
+      await saveJob(source.id, {
+        ...row,
+        ...checked,
+        ...primary,
+        note: checked.note,
+        authenticity: checked.authenticity,
+        requirements,
+      });
+    } catch (error) {
+      if (saveErrors.length < 3) {
+        saveErrors.push(error instanceof Error ? error.message : "Could not save a listing.");
+      }
     }
-    seen.add(jobKey(row));
-    await saveJob(source.id, {
-      ...row,
-      ...checked,
-      ...primary,
-      note: checked.note,
-      authenticity: checked.authenticity,
-    });
   }
+
+  if (!seen.size) {
+    const detail = saveErrors.length ? ` ${saveErrors.join(" · ")}` : "";
+    throw new Error(`Fetched ${rows.length} listing${rows.length === 1 ? "" : "s"} but none could be saved.${detail}`);
+  }
+
   if (source.kind !== "catalog") {
     const existing = db.prepare("SELECT id, external_key FROM jobs WHERE source_id = ? AND active = 1").all(source.id);
     for (const job of existing) {
       if (!seen.has(job.external_key)) db.prepare("UPDATE jobs SET active = 0 WHERE id = ?").run(job.id);
     }
   }
-  db.prepare("UPDATE job_sources SET last_pulled_at = ? WHERE id = ?").run(Date.now(), source.id);
+
+  const skipped = rows.length - seen.size;
+  const message =
+    skipped > 0
+      ? `Pulled ${seen.size} job${seen.size === 1 ? "" : "s"} (${skipped} listing${skipped === 1 ? "" : "s"} skipped).`
+      : `Pulled ${seen.size} job${seen.size === 1 ? "" : "s"}.`;
+  recordPullResult(source.id, "ok", message);
   return seen.size;
+}
+
+function recordPullResult(sourceId, status, message) {
+  db.prepare("UPDATE job_sources SET last_pulled_at = ?, last_pull_status = ?, last_pull_message = ? WHERE id = ?").run(
+    Date.now(),
+    String(status || ""),
+    String(message || "").slice(0, 500),
+    sourceId,
+  );
 }
 
 function feedUrlTaken(url, exceptId = "") {
@@ -506,6 +567,8 @@ function publicSource(source) {
     kind: source.kind,
     enabled: Boolean(source.enabled),
     lastPulledAt: source.last_pulled_at,
+    lastPullStatus: source.last_pull_status || "",
+    lastPullMessage: source.last_pull_message || "",
     config: publicFeedConfig(config),
   };
 }
