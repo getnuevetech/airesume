@@ -97,3 +97,92 @@ export function tailoredDocument(doc, job, match, facts = []) {
   }
   return next;
 }
+
+function sameBag(left, right) {
+  const a = [...left].map(String).sort();
+  const b = [...right].map(String).sort();
+  return a.length === b.length && a.every((item, index) => item === b[index]);
+}
+
+function roleKey(job) {
+  return `${job?.title || ""}|${job?.employer || ""}`.toLowerCase();
+}
+
+function roleLabel(job) {
+  return [job?.title, job?.employer].filter(Boolean).join(" at ");
+}
+
+/**
+ * Explain how a job-specific resume was reordered from the source resume.
+ * Only reports moves of skills, roles, and bullets that already exist.
+ */
+export function describeTailoring(original = {}, tailored = {}) {
+  const changes = [];
+  const origSkills = (original.skills || []).map(String);
+  const nextSkills = (tailored.skills || []).map(String);
+  if (sameBag(origSkills, nextSkills) && origSkills[0] && nextSkills[0] && origSkills[0] !== nextSkills[0]) {
+    changes.push({
+      kind: "skills",
+      before: origSkills.join(", "),
+      after: nextSkills.join(", "),
+      detail: `${nextSkills[0]} now leads the skills list.`,
+    });
+  }
+  const origJobs = original.employment || [];
+  const nextJobs = tailored.employment || [];
+  const origKeys = origJobs.map(roleKey);
+  const nextKeys = nextJobs.map(roleKey);
+  if (sameBag(origKeys, nextKeys) && origKeys[0] && nextKeys[0] && origKeys[0] !== nextKeys[0]) {
+    changes.push({
+      kind: "role",
+      before: roleLabel(origJobs[0]),
+      after: roleLabel(nextJobs[0]),
+      detail: `${roleLabel(nextJobs[0])} now leads experience.`,
+    });
+  }
+  if (sameBag(origKeys, nextKeys)) {
+    for (const next of nextJobs) {
+      const prev = origJobs.find((job) => roleKey(job) === roleKey(next));
+      if (!prev) continue;
+      const before = (prev.bullets || []).map(String);
+      const after = (next.bullets || []).map(String);
+      if (sameBag(before, after) && before[0] && after[0] && before[0] !== after[0]) {
+        changes.push({
+          kind: "bullet",
+          before: before[0],
+          after: after[0],
+          detail: `"${after[0]}" now leads ${roleLabel(next)}.`,
+        });
+      }
+    }
+  }
+  const company = String(tailored.target?.company || "");
+  const title = String(tailored.target?.title || "");
+  const target = [title, company].filter(Boolean).join(" at ");
+  const summary = changes.length
+    ? `Reordered your resume for ${target || "this role"}. No new employers, dates, or skills were added.`
+    : `Your resume already leads with the facts ${target ? `${target} asks for` : "this role asks for"}. Nothing new was added.`;
+  return { summary, changes };
+}
+
+/** Preview stored on an application version. Upload and upscale versions are not job tailors. */
+export function tailoringPreview(version, versions = []) {
+  if (!version || version.kind !== "application") return null;
+  let original = {};
+  let tailored = {};
+  try {
+    const parent = versions.find((row) => row.id === version.parent_id);
+    original = parent?.document ? JSON.parse(parent.document) : {};
+    tailored = version.document ? JSON.parse(version.document) : {};
+  } catch {
+    return null;
+  }
+  const described = describeTailoring(original, tailored);
+  return {
+    versionId: version.id,
+    label: version.label || "",
+    rendered: version.rendered || "",
+    summary: described.summary,
+    changes: described.changes,
+  };
+}

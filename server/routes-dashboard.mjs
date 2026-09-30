@@ -11,6 +11,7 @@ import { autoApplyAuthorizationPayload } from "./auto-apply-auth.mjs";
 import { billingDisclosurePayload } from "./billing-disclosure.mjs";
 import { iceConfigSummary, resolveIceServers } from "./webrtc-signaling.mjs";
 import { weeklyEfficiency } from "./weekly-efficiency.mjs";
+import { tailoringPreview } from "./resume-guard.mjs";
 
 function publicVersion(row) {
   return { id: row.id, label: row.label, kind: row.kind, active: Boolean(row.active), rendered: row.rendered, createdAt: row.created_at };
@@ -107,7 +108,8 @@ export function registerDashboard(app, ctx) {
     ranked = ranked.map((item) => (allowExplanation(user.id, item.job.id, quota) ? item : redactMatch(item)));
     const reviews = reviewQuota(user.id, access.features);
     const review = db.prepare("SELECT * FROM resume_reviews WHERE user_id = ? ORDER BY created_at DESC LIMIT 1").get(user.id);
-    const versions = db.prepare("SELECT * FROM resume_versions WHERE user_id = ? ORDER BY created_at DESC").all(user.id).map(publicVersion);
+    const versionRows = db.prepare("SELECT * FROM resume_versions WHERE user_id = ? ORDER BY created_at DESC").all(user.id);
+    const versions = versionRows.map(publicVersion);
     const responded = applications.filter((item) => isOutcomeStatus(item.status)).length;
     const submitted = applications.filter((item) => isSubmittedStatus(item.status)).length;
     const readyCount = applications.filter((item) => item.status === "Ready").length;
@@ -195,6 +197,7 @@ export function registerDashboard(app, ctx) {
           match: item.match_score,
           versionId: item.version_id,
           versionLabel: versionLabels.get(item.version_id) || "",
+          tailored: tailoringPreview(versionRows.find((row) => row.id === item.version_id), versionRows),
           questions: parse(item.questions, []),
         };
       }),
