@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–X are implemented (V is schema 29). Resume review quotes weak lines, asks before applying them, and saves the upscale as a separate resume. Slice Z shows the tailored resume after Assisted Apply. Job listings are shown as a readable posting, and a pasted job link is imported onto the top of that candidate’s list. Feed rows and pasted pages are reviewed before they are stored; pages that are not jobs wait in admin for add or discard. Admin MFA stays disabled for now and is not a beta blocker.
+Status: slices Q–Z are implemented (V is schema 29). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
@@ -41,9 +41,10 @@ Q  CI on every pull request
             → W  Weekly efficiency on the account overview
               → X  Name the roles behind this week's counts
                 → Z  Show the tailored resume after Assisted Apply
+                  → AA  Show a readable match on the job
 ```
 
-Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job.
+Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing.
 
 ---
 
@@ -223,6 +224,24 @@ Bootstrap and the README tell operators to open `http://<ip>/` and “use http, 
 - A match that moves SQL or the matching role to the front says so, and the full resume is visible.
 - A proposed skill that was not on the source resume is not listed as a change.
 - The public resume stays the previous version.
+
+---
+
+### Slice AA — Readable match
+
+**Goal:** A job card tells the candidate which resume skills fit and which required skills are missing. Fact Ledger ids stay on the match record.
+
+**Change**
+
+- `presentMatch` builds that view from the existing match. It does not print fact ids or semantic-overlap notes.
+- The job card shows “Fits your resume” and “Missing”. The overview uses the same summary on recommended roles.
+- A locked explanation stays hidden when the weekly quota is used up.
+
+**Acceptance**
+
+- A match that cites `SKILL-001` does not show that id to the candidate.
+- Missing required skills are listed separately from skills that fit.
+- The stored explanation still cites ledger ids for the audit path.
 
 ---
 

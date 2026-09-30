@@ -1392,6 +1392,9 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
 .quiet-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid #f0f3f6; text-decoration: none; }
 .quiet-row span { display: block; color: var(--muted); font-size: 13px; }
 .match-badge { background: var(--ink); color: #fff; border-radius: 999px; padding: 6px 10px; font-weight: 800; }
+.match-fit { margin-top: 12px; }
+.match-line { margin: 0 0 6px; font-size: 14px; line-height: 1.45; color: #24344a; }
+.match-line span { font-weight: 700; color: #16324f; margin-right: 8px; }
 .identity-card { display: flex; gap: 16px; align-items: center; }
 .identity-card img { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; }
 .experience-block { padding: 8px 0 12px; border-top: 1px solid #f0f3f6; }
