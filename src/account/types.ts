@@ -126,6 +126,16 @@ export type AccountData = {
     preparedThisWeek: number;
     trackedThisWeek: number;
     followUpsDue: number;
+    items: {
+      id: string;
+      title: string;
+      company: string;
+      status: string;
+      kind: string;
+      label: string;
+      href: string;
+    }[];
+    more: number;
     next: { href: string; title: string; detail: string };
     quotas: string[];
   };

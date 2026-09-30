@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { openCookieSettings } from "../components/CookieSettings";
 import { useApp } from "../context/AppContext";
@@ -22,6 +22,15 @@ function WeekCard({ week }: { week: NonNullable<AccountData["week"]> }) {
         <Tile label="Prepared" value={String(week.preparedThisWeek)} />
         <Tile label="Tracked" value={String(week.trackedThisWeek)} />
       </div>
+      {week.items?.map((item) => (
+        <Link className="quiet-row" key={item.id} to={item.href}>
+          <div>
+            <strong>{item.title}</strong>
+            <span>{[item.company, item.label, item.status].filter(Boolean).join(" · ")}</span>
+          </div>
+        </Link>
+      ))}
+      {week.more ? <p className="role">{week.more} more this week.</p> : null}
       {week.quotas.map((line) => <p className="role" key={line}>{line}</p>)}
       <Link className="btn btn-primary" to={week.next.href}>{week.next.title}</Link>
     </section>
@@ -1493,6 +1502,12 @@ export function JobsPage() {
 
 export function ApplicationsPage() {
   const { data, reload, setMessage, setError } = useAccount();
+  const location = useLocation();
+  useEffect(() => {
+    const id = location.hash.replace(/^#/, "");
+    if (!id || !data) return;
+    document.getElementById(id)?.scrollIntoView({ block: "start" });
+  }, [location.hash, data]);
   if (!data) return null;
   const statuses = data.statuses?.length
     ? data.statuses
@@ -1559,7 +1574,7 @@ export function ApplicationsPage() {
               ["Ready", "Review required", "Resume preparing"].includes(row.status),
             );
           return (
-          <article className="account-card" key={item.id}>
+          <article className="account-card" id={`application-${item.id}`} key={item.id}>
             <div className="job-card" style={{ padding: 0, boxShadow: "none", background: "transparent" }}>
               <div>
                 <h2>{item.title}</h2>
@@ -1860,7 +1875,7 @@ function FollowUpsPanel({
 
   if (!reminders.length && !metrics?.due) {
     return (
-      <section className="account-card">
+      <section className="account-card" id="follow-ups">
         <h2>Follow-up reminders</h2>
         <p className="role">Reminders appear after Applied, Employer viewed, Recruiter contact, Responded, Interview, Offer, or Hired.</p>
       </section>
@@ -1868,7 +1883,7 @@ function FollowUpsPanel({
   }
 
   return (
-    <section className="account-card">
+    <section className="account-card" id="follow-ups">
       <h2>Follow-up reminders</h2>
       <p className="role">
         {metrics ? `${metrics.due} due · ${metrics.open} open · ${metrics.done} done` : "Loading…"}

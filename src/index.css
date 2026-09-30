@@ -1384,6 +1384,7 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
 .account-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 18px; }
 .account-head h1 { font-size: 34px; }
 .account-card { background: #fff; border: 1px solid #e6edf3; border-radius: 18px; padding: 18px; margin: 12px 0; }
+.account-card:target { scroll-margin-top: 16px; box-shadow: 0 0 0 2px var(--green); }
 .account-card h2 { font-size: 18px; margin-bottom: 8px; }
 .account-split { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 12px; }
 .account-tile { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; }

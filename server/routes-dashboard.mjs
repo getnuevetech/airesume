@@ -119,7 +119,11 @@ export function registerDashboard(app, ctx) {
     const versionLabels = new Map(versions.map((item) => [item.id, item.label]));
     const recommendedCount = ranked.filter((item) => item.score >= 70 || item.label === "strong" || item.label === "good").length;
     const week = weeklyEfficiency({
-      applications,
+      applications: applications.map((item) => {
+        const job = jobsById.get(item.job_id);
+        const company = item.target_company || job?.primary_company || job?.company || "";
+        return { ...item, title: job?.title || "Role", company };
+      }),
       followUpsDue: followUps.due,
       ready: readyCount,
       recommended: recommendedCount,

@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–V are implemented (V is schema 29). Slice W (weekly efficiency on the account overview) is implemented. Admin MFA stays disabled for now and is not a beta blocker.
+Status: slices Q–W are implemented (V is schema 29). Slice X names the roles behind this week's counts and opens them in the tracker. Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
@@ -39,9 +39,10 @@ Q  CI on every pull request
         → U  Payments stay manual until signed webhooks exist
           → V  Admin RBAC on schema 29 (MFA stays off)
             → W  Weekly efficiency on the account overview
+              → X  Name the roles behind this week's counts
 ```
 
-Q–U are the beta gate. V is admin access levels. W is the next candidate-facing slice: the overview tells the user what happened this UTC week and the one next action.
+Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card.
 
 ---
 
@@ -187,6 +188,25 @@ Bootstrap and the README tell operators to open `http://<ip>/` and “use http, 
 
 ---
 
+### Slice X — Name this week's roles
+
+**Goal:** The overview counts are not enough. The candidate can see which roles were submitted, prepared, or tracked this week and open that card.
+
+**Change**
+
+- `weeklyEfficiency` returns up to five roles, newest activity first, plus how many more there are.
+- A submitted role is not also listed as tracked.
+- Follow-ups open `#follow-ups`. Assisted Apply opens the newest prepared application.
+- The tracker scrolls to that card.
+
+**Acceptance**
+
+- Activity before Monday UTC stays off the list.
+- Six in-week roles show five rows and a remainder of one.
+- The follow-up action targets the reminders section.
+
+---
+
 ## Ops the repo cannot finish
 
 These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them executable.
@@ -204,4 +224,4 @@ These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them
 
 ## Done when
 
-Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V and W are in the product and are not launch gates.
+Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, and X are in the product and are not launch gates.
