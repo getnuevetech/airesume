@@ -7,11 +7,18 @@ function cleanName(value) {
     .trim();
 }
 
+function skillName(value) {
+  const name = cleanName(value);
+  if (!name) return "";
+  if (/^(title|role|position|job title|company|employer|organization|org|location|based in|office)\s*:/i.test(name)) return "";
+  return name;
+}
+
 function names(values) {
   const seen = new Set();
   const out = [];
   for (const value of values || []) {
-    const name = cleanName(value);
+    const name = skillName(value);
     if (!name) continue;
     const key = name.toLowerCase();
     if (seen.has(key)) continue;

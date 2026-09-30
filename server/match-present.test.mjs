@@ -21,6 +21,17 @@ test("a match view names skills and hides fact ids", () => {
   assert.deepEqual(view.notes, ["Location fits your preferences."]);
 });
 
+test("paste field labels are not shown as missing skills", () => {
+  const view = presentMatch({
+    explanation: "Missing Title: Recruiter / Talent Acquisition, Company: Baupal GmbH, Location: Berlin.",
+    matched: [],
+    missing: ["Title: Recruiter / Talent Acquisition", "Company: Baupal GmbH", "Location: Berlin"],
+    matchedFacts: [],
+  });
+  assert.equal(view.summary, "Limited overlap with this listing.");
+  assert.deepEqual(view.gaps, []);
+});
+
 test("a match with no shared skills says the overlap is limited", () => {
   const view = presentMatch({
     explanation: "Limited overlap with the listing. Location is a stretch.",
