@@ -1,6 +1,8 @@
 /** Confirm one missing job skill into the Fact Ledger and the active resume. */
 
 import { applyClarificationAnswer } from "./upscale-clarify.mjs";
+import { matchJob } from "./match.mjs";
+import { tailoredDocument } from "./resume-guard.mjs";
 
 function sameSkill(left, right) {
   return String(left || "").trim().toLowerCase() === String(right || "").trim().toLowerCase();
@@ -46,4 +48,13 @@ export function confirmListedSkill({ profile = {}, facts = [], document = {}, mi
     document: { ...document, skills: nextSkills },
     fact: applied.fact,
   };
+}
+
+/**
+ * Rebuild the resume already prepared for this job from the resume that now includes the confirmed skill.
+ * Only reorders skills, roles, and bullets that are already on that resume.
+ */
+export function preparedResumeAfterConfirm({ document = {}, job = {}, facts = [], preferences = {} } = {}) {
+  const match = matchJob(document, preferences, job, { facts });
+  return tailoredDocument(document, job, match, facts);
 }

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { confirmListedSkill } from "./confirm-skill.mjs";
+import { confirmListedSkill, preparedResumeAfterConfirm } from "./confirm-skill.mjs";
+import { describeTailoring } from "./resume-guard.mjs";
 
 const profile = {
   summary: "Product manager.",
@@ -67,4 +68,31 @@ test("confirming a missing skill stores the listing spelling as a verified fact 
   assert.equal(again.already, true);
   assert.equal(again.facts.length, result.facts.length);
   assert.equal(again.facts.filter((fact) => fact.statement === "Roadmapping").length, 1);
+});
+
+test("rebuilding a prepared resume includes the confirmed skill and does not invent one", () => {
+  const document = {
+    summary: "Product manager.",
+    skills: ["Excel", "Product management", "SQL", "Data analysis"],
+    employment: [{ title: "Product Manager", employer: "Northstar", bullets: ["Owned the activation roadmap"] }],
+  };
+  const facts = [
+    { statement: "Data analysis", category: "skill", verified_by_user: true },
+    { statement: "Product management" },
+    { statement: "SQL" },
+    { statement: "Excel" },
+    { statement: "Northstar" },
+  ];
+  const job = {
+    title: "Growth Product Manager",
+    company: "Kindred",
+    requirements: JSON.stringify({ mandatory: ["Product management", "SQL", "Data analysis"], preferred: [] }),
+  };
+  const prepared = preparedResumeAfterConfirm({ document, job, facts, preferences: {} });
+  assert.ok(prepared.skills.includes("Data analysis"));
+  assert.ok(prepared.skills.indexOf("Data analysis") < prepared.skills.indexOf("Excel"));
+  assert.equal(prepared.skills.includes("Kubernetes"), false);
+  const described = describeTailoring(document, prepared);
+  assert.match(described.summary, /No new employers, dates, or skills were added|already leads/);
+  assert.equal(described.changes.some((change) => /Kubernetes/.test(`${change.detail} ${change.after}`)), false);
 });
