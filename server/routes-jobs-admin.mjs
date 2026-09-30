@@ -2,6 +2,7 @@
 
 import { db, id } from "./db.mjs";
 import { feedConfig, normalizeFeedUrl } from "./feeds.mjs";
+import { EXAMPLE_FEEDS, SUPPORTED_FEED_HINTS } from "./example-feeds.mjs";
 
 export function registerJobsAdmin(app, ctx) {
   const {
@@ -21,6 +22,8 @@ export function registerJobsAdmin(app, ctx) {
     const names = new Map(sources.map((source) => [source.id, source.name]));
     res.json({
       sources: sources.map(publicSource),
+      exampleFeeds: EXAMPLE_FEEDS,
+      hints: SUPPORTED_FEED_HINTS,
       jobs: db.prepare("SELECT * FROM jobs ORDER BY created_at DESC LIMIT 300").all().map((job) => ({
         id: job.id,
         title: job.title,
@@ -36,6 +39,49 @@ export function registerJobsAdmin(app, ctx) {
         primaryEmail: job.primary_email || "",
         active: Boolean(job.active),
       })),
+    });
+  });
+
+  app.post("/api/admin/job-sources/examples", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const added = [];
+    const skipped = [];
+    for (const example of EXAMPLE_FEEDS) {
+      let url = "";
+      try {
+        url = normalizeFeedUrl(example.url);
+      } catch (error) {
+        skipped.push({ name: example.name, reason: error instanceof Error ? error.message : "Invalid URL" });
+        continue;
+      }
+      if (feedUrlTaken(url)) {
+        skipped.push({ name: example.name, reason: "Already added" });
+        continue;
+      }
+      const config = feedConfig({
+        url,
+        format: example.format || "auto",
+        employer: example.employer || "",
+        authType: "none",
+      });
+      const sourceId = id("src");
+      db.prepare("INSERT INTO job_sources (id, name, kind, config, enabled, created_at) VALUES (?, ?, 'json', ?, 1, ?)").run(
+        sourceId,
+        example.name,
+        JSON.stringify(config),
+        Date.now(),
+      );
+      added.push(publicSource(db.prepare("SELECT * FROM job_sources WHERE id = ?").get(sourceId)));
+    }
+    res.json({
+      ok: true,
+      added,
+      skipped,
+      sources: db.prepare("SELECT * FROM job_sources ORDER BY created_at").all().map(publicSource),
+      message:
+        added.length
+          ? `Added ${added.length} verified example feed${added.length === 1 ? "" : "s"}. Use Pull enabled feeds to import jobs.`
+          : "All verified example feeds are already added.",
     });
   });
 
