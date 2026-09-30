@@ -1,5 +1,7 @@
 # Spec review, recommendations, and execution plan
 
+Historical review. Next work is `docs/IMPLEMENTATION_PLAN.md`. The gap list below was written against `main` through PR #32. Slices G–P and the later prompt-registry, silent Auto-Apply, and OCR work have since shipped. Do not rebuild those items from this file.
+
 Source: JobPilot Development Specification v1.2 (uploaded September 2026) reviewed against the as-built repository on `main` (through PR #32).
 
 ## Verdict
