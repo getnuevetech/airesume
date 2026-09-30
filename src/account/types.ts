@@ -119,6 +119,16 @@ export type AccountData = {
     unlimited: boolean;
     resetsAt: number;
   };
+  week?: {
+    weekStart: number;
+    resetsAt: number;
+    submittedThisWeek: number;
+    preparedThisWeek: number;
+    trackedThisWeek: number;
+    followUpsDue: number;
+    next: { href: string; title: string; detail: string };
+    quotas: string[];
+  };
   statuses: string[];
   stats: {
     resumeRating: number | null;
