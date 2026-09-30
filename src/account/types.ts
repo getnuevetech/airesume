@@ -135,6 +135,7 @@ export type AccountData = {
       label: string;
       href: string;
     }[];
+    roles: { id: string; kind: string; label: string }[];
     more: number;
     next: { href: string; title: string; detail: string };
     quotas: string[];

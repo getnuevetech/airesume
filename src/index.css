@@ -1351,8 +1351,8 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
 .stat strong, .mini-stats strong { display: block; font-size: 22px; }
 .stat span, .mini-stats span { color: var(--muted); font-size: 13px; }
 .cta-grid, .dash-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 18px; }
-.dash-tabs button { border: 0; background: #f3f6f8; border-radius: 999px; padding: 8px 14px; font-weight: 700; }
-.dash-tabs button.on { background: var(--ink); color: #fff; }
+.dash-tabs button, .dash-tabs a { border: 0; background: #f3f6f8; border-radius: 999px; padding: 8px 14px; font-weight: 700; text-decoration: none; color: inherit; }
+.dash-tabs button.on, .dash-tabs a.on { background: var(--ink); color: #fff; }
 .dash-photo, .profile-photo-row img { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; }
 .profile-photo-row { display: flex; gap: 10px; align-items: center; }
 .job-row { display: flex; justify-content: space-between; gap: 16px; border: 1px solid #e8edf3; border-radius: 16px; padding: 14px; margin: 10px 0; background: #fff; }

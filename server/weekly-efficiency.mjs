@@ -102,6 +102,7 @@ export function weeklyEfficiency({
     });
   }
   ranked.sort((a, b) => b.stamp - a.stamp || a.title.localeCompare(b.title));
+  const roles = ranked.map(({ id, kind, label }) => ({ id, kind, label }));
   const items = ranked.slice(0, ITEM_LIMIT).map(({ stamp: _stamp, ...item }) => item);
   const preparedHref = ranked.find((item) => item.kind === "prepared")?.href || "";
   const quotas = [
@@ -116,6 +117,7 @@ export function weeklyEfficiency({
     trackedThisWeek,
     followUpsDue: Number(followUpsDue) || 0,
     items,
+    roles,
     more: Math.max(0, ranked.length - items.length),
     next: nextAction({
       followUpsDue: Number(followUpsDue) || 0,

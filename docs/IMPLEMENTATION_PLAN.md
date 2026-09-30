@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–W are implemented (V is schema 29). Slice X names the roles behind this week's counts and opens them in the tracker. Admin MFA stays disabled for now and is not a beta blocker.
+Status: slices Q–X are implemented (V is schema 29). Slice Y opens the rest of this week in the tracker. Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
@@ -40,9 +40,10 @@ Q  CI on every pull request
           → V  Admin RBAC on schema 29 (MFA stays off)
             → W  Weekly efficiency on the account overview
               → X  Name the roles behind this week's counts
+                → Y  Open the rest of this week in the tracker
 ```
 
-Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card.
+Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists up to five roles. Y lets the tracker show every role that counted this week.
 
 ---
 
@@ -207,6 +208,24 @@ Bootstrap and the README tell operators to open `http://<ip>/` and “use http, 
 
 ---
 
+### Slice Y — This week in the tracker
+
+**Goal:** The overview keeps five roles. The tracker can show every role that counted this week, in the same order.
+
+**Change**
+
+- `weeklyEfficiency` returns `roles` for the full week, not only the five overview rows.
+- "N more this week" opens `/account/applications?week=1`.
+- The tracker has All and This week. In-week cards say Submitted, Prepared, or Tracked.
+
+**Acceptance**
+
+- Six in-week roles produce six `roles` and a remainder of one.
+- A role submitted this week appears once.
+- The This week tracker view is empty when nothing moved.
+
+---
+
 ## Ops the repo cannot finish
 
 These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them executable.
@@ -224,4 +243,4 @@ These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them
 
 ## Done when
 
-Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, and X are in the product and are not launch gates.
+Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V through Y are in the product and are not launch gates.

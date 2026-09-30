@@ -80,6 +80,8 @@ test("this week names roles and opens the newest prepared application", () => {
     ["prep-early", "prepared", "Prepared"],
   ]);
   assert.equal(week.items[0].href, "/account/applications#application-sub");
+  assert.deepEqual(week.roles.map((role) => role.id), ["sub", "prep-late", "track", "prep-early"]);
+  assert.equal(week.roles.filter((role) => role.id === "sub").length, 1);
   assert.equal(week.more, 0);
   assert.equal(week.next.href, "/account/applications#application-prep-late");
 });
@@ -97,6 +99,9 @@ test("the week list keeps five roles and counts the rest", () => {
   assert.equal(week.trackedThisWeek, 6);
   assert.equal(week.items.length, 5);
   assert.equal(week.items[0].id, "app-5");
+  assert.equal(week.roles.length, 6);
+  assert.equal(week.roles[0].id, "app-5");
+  assert.equal(week.roles[5].label, "Tracked");
   assert.equal(week.more, 1);
 });
 
