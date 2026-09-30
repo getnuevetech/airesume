@@ -732,9 +732,9 @@ export function JobsAdmin() {
     <div>
       <h1>Job feeds</h1>
       <p className="lede">
-        Add public job sources that do not require a candidate login: Greenhouse / Lever / Ashby board pages (we call their public JSON APIs),
-        careers pages, JSON feeds, or RSS/Atom. Set a default employer when the page omits the company name. Optional tokens are only for
-        documented public API keys — not for scraping behind a sign-in wall.
+        Add public employer job sources: Greenhouse / Lever / Ashby / Workable board pages, company careers pages, JSON feeds, or RSS/Atom.
+        Indeed, LinkedIn, ZipRecruiter, and similar job-search sites are not supported (they block public feed pulls). Set a default employer when
+        the page omits the company name.
       </p>
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="role">{message}</p> : null}
@@ -758,7 +758,7 @@ export function JobsAdmin() {
         <h2>Add a feed</h2>
         <div className="admin-grid">
           <label className="field"><span>Name</span><input value={feed.name} onChange={(event) => setFeed({ ...feed, name: event.target.value })} required /></label>
-          <label className="field"><span>Source URL</span><input value={feed.url} onChange={(event) => setFeed({ ...feed, url: event.target.value })} placeholder="https://boards.greenhouse.io/example or jobs.json / RSS" required /></label>
+          <label className="field"><span>Source URL</span><input value={feed.url} onChange={(event) => setFeed({ ...feed, url: event.target.value })} placeholder="https://boards.greenhouse.io/example (not Indeed search)" required /></label>
           <label className="field">
             <span>Format</span>
             <select value={feed.format} onChange={(event) => setFeed({ ...feed, format: event.target.value })}>

@@ -20,7 +20,66 @@ export function normalizeFeedUrl(value) {
   parsed.hash = "";
   parsed.hostname = parsed.hostname.toLowerCase();
   if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\/+$/, "");
-  return parsed.toString();
+  const normalized = parsed.toString();
+  assertSupportedFeedUrl(normalized);
+  return normalized;
+}
+
+/**
+ * Job aggregators / search engines do not expose a public pullable board API for this product.
+ * Reject them early with a clear message instead of a generic HTTP 403.
+ */
+export function unsupportedJobSiteMessage(value) {
+  let host = "";
+  try {
+    host = new URL(String(value || "").trim()).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+  const aggregators = [
+    {
+      match: /(^|\.)indeed\./,
+      name: "Indeed",
+      detail:
+        "Indeed search or job pages are not a public feed. Use an employer careers page or board instead (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, company /careers JSON/RSS).",
+    },
+    {
+      match: /(^|\.)linkedin\./,
+      name: "LinkedIn",
+      detail: "LinkedIn job search pages are not a public feed. Use the employer’s public careers board URL instead.",
+    },
+    {
+      match: /(^|\.)ziprecruiter\./,
+      name: "ZipRecruiter",
+      detail: "ZipRecruiter listings are not a public feed. Use the employer’s public careers board URL instead.",
+    },
+    {
+      match: /(^|\.)glassdoor\./,
+      name: "Glassdoor",
+      detail: "Glassdoor job pages are not a public feed. Use the employer’s public careers board URL instead.",
+    },
+    {
+      match: /(^|\.)simplyhired\./,
+      name: "SimplyHired",
+      detail: "SimplyHired search pages are not a public feed. Use the employer’s public careers board URL instead.",
+    },
+    {
+      match: /(^|\.)monster\./,
+      name: "Monster",
+      detail: "Monster job search pages are not a public feed. Use the employer’s public careers board URL instead.",
+    },
+  ];
+  for (const site of aggregators) {
+    if (site.match.test(host)) {
+      return `${site.name} URLs cannot be pulled as JobPilot feeds. ${site.detail}`;
+    }
+  }
+  return "";
+}
+
+export function assertSupportedFeedUrl(value) {
+  const message = unsupportedJobSiteMessage(value);
+  if (message) throw new Error(message);
 }
 
 /**
@@ -454,6 +513,8 @@ export async function resolvePrimary(listing) {
 }
 
 function blockedAccessMessage(status, url, triedApi = "") {
+  const unsupported = unsupportedJobSiteMessage(url);
+  if (unsupported) return unsupported;
   const api = triedApi || publicBoardApiUrl(url);
   let tip = "";
   try {
@@ -495,6 +556,7 @@ async function requestFeed(url, config, { preferJson = false } = {}) {
 
 export async function fetchFeedListings(source, config) {
   if (!config.url) throw new Error("Add a feed URL before pulling.");
+  assertSupportedFeedUrl(config.url);
   const plan = feedFetchPlan(config.url);
   let lastBlocked = null;
   let lastHttpError = null;

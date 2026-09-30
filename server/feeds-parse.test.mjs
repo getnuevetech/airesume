@@ -61,3 +61,13 @@ test("feedFetchPlan prefers public board API before the HTML careers URL", () =>
   assert.equal(plan[0].formatHint, "json");
   assert.ok(plan.some((item) => item.url.includes("boards.greenhouse.io/acme")));
 });
+
+test("Indeed and LinkedIn search URLs are rejected as unsupported feeds", async () => {
+  const { unsupportedJobSiteMessage, normalizeFeedUrl } = await import("./feeds.mjs");
+  const indeed =
+    "https://www.indeed.com/jobs?q=&l=Texas&from=searchOnHP%2Cwhereautocomplete&vjk=15d29256141b011a";
+  assert.match(unsupportedJobSiteMessage(indeed), /Indeed URLs cannot be pulled/i);
+  assert.throws(() => normalizeFeedUrl(indeed), /Indeed URLs cannot be pulled/i);
+  assert.throws(() => normalizeFeedUrl("https://www.linkedin.com/jobs/search/?keywords=engineer"), /LinkedIn/i);
+  assert.equal(unsupportedJobSiteMessage("https://boards.greenhouse.io/acme"), "");
+});
