@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { confirmListedSkill, preparedResumeAfterConfirm, preparedResumesAfterConfirm } from "./confirm-skill.mjs";
+import { confirmInsightGap, confirmListedSkill, preparedResumeAfterConfirm, preparedResumesAfterConfirm } from "./confirm-skill.mjs";
 import { describeTailoring } from "./resume-guard.mjs";
 
 const profile = {
@@ -95,6 +95,13 @@ test("rebuilding a prepared resume includes the confirmed skill and does not inv
   const described = describeTailoring(document, prepared);
   assert.match(described.summary, /No new employers, dates, or skills were added|already leads/);
   assert.equal(described.changes.some((change) => /Kubernetes/.test(`${change.detail} ${change.after}`)), false);
+});
+
+test("an insight gap can be confirmed only when insights already lists it", () => {
+  const gaps = [{ skill: "Python", demand: 4 }, { skill: "Title: Recruiter", demand: 2 }];
+  assert.equal(confirmInsightGap({ gaps, skill: "python" }), "Python");
+  assert.throws(() => confirmInsightGap({ gaps, skill: "Kubernetes" }), /not a gap in your insights/);
+  assert.throws(() => confirmInsightGap({ gaps, skill: "Title: Recruiter" }), /not a gap in your insights/);
 });
 
 test("every prepared resume includes the confirmed skill and leaves out an invented one", () => {

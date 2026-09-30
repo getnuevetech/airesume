@@ -25,6 +25,13 @@ function skillOwned(owned, skill) {
   return owned.some((item) => lower(item).includes(needle) || needle.includes(lower(item)));
 }
 
+function skillLabel(value) {
+  const name = String(value || "").replace(/\s+/g, " ").trim();
+  if (!name) return "";
+  if (/^(title|role|position|job title|company|employer|organization|org|location|based in|office)\s*:/i.test(name)) return "";
+  return name;
+}
+
 function countMapIncrement(map, key, weight = 1) {
   if (!key) return;
   const normalized = String(key).trim();
@@ -52,10 +59,10 @@ export function buildCareerInsights({ doc = {}, preferences = {}, jobs = [], app
 
   for (const job of jobs) {
     const requirements = parseRequirements(job);
-    for (const skill of requirements.mandatory || []) countMapIncrement(demand, skill, 2);
+    for (const skill of requirements.mandatory || []) countMapIncrement(demand, skillLabel(skill), 2);
     const listedSkills = Array.isArray(job.skills) ? job.skills : [];
-    for (const skill of listedSkills) countMapIncrement(demand, skill, 1);
-    for (const skill of requirements.preferred || []) countMapIncrement(preferredDemand, skill, 1);
+    for (const skill of listedSkills) countMapIncrement(demand, skillLabel(skill), 1);
+    for (const skill of requirements.preferred || []) countMapIncrement(preferredDemand, skillLabel(skill), 1);
     if (job.category) countMapIncrement(categories, job.category, 1);
     if (job.role) countMapIncrement(roles, job.role, 1);
   }

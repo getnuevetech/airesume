@@ -2,6 +2,8 @@
 
 import { db } from "./db.mjs";
 import { buildCareerInsights } from "./career-intel.mjs";
+import { confirmInsightGap, confirmListedSkill, confirmedSkillMessage } from "./confirm-skill.mjs";
+import { storeConfirmedSkill } from "./confirm-skill-store.mjs";
 import { answerJobCoach } from "./job-coach.mjs";
 import { followUpMetrics } from "./follow-ups.mjs";
 
@@ -13,6 +15,8 @@ export function registerCareer(app, ctx) {
     syncProfileVersion,
     activeVersion,
     parse,
+    renderDocument,
+    audit,
   } = ctx;
 
   function loadInsightContext(user) {
@@ -70,6 +74,76 @@ export function registerCareer(app, ctx) {
       insights: ctxData.insights,
       plan: ctxData.access.plan,
       limited: Boolean(ctxData.access.features.job_limit),
+    });
+  });
+
+  app.post("/api/career/confirm-skill", (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    if (!requireFeature(user, "job_browse", res)) return;
+    if (!requireFeature(user, "profile_edit", res)) return;
+    const loaded = loadInsightContext(user);
+    const version = loaded ? activeVersion(user.id) : null;
+    if (!loaded || !version) {
+      res.status(400).json({ error: "Upload a resume before confirming a skill." });
+      return;
+    }
+    let canonical = "";
+    try {
+      canonical = confirmInsightGap({ gaps: loaded.insights.gaps, skill: req.body?.skill });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Could not confirm that skill." });
+      return;
+    }
+    let result;
+    try {
+      result = confirmListedSkill({
+        profile: {
+          summary: loaded.profile.summary || "",
+          skills: parse(loaded.profile.skills, []),
+          employment: parse(loaded.profile.employment, []),
+          education: parse(loaded.profile.education, []),
+        },
+        facts: parse(loaded.profile.facts, []),
+        document: loaded.doc,
+        missing: [canonical],
+        skill: canonical,
+      });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Could not confirm that skill." });
+      return;
+    }
+    const preferences = parse(loaded.profile.preferences, {});
+    const stored = result.already
+      ? { prepared: 0, jobIds: [] }
+      : storeConfirmedSkill({
+          userId: user.id,
+          result,
+          preferences,
+          versionId: version.id,
+          renderDocument,
+        });
+    if (!result.already) {
+      audit?.({
+        userId: user.id,
+        functionName: "confirm_skill",
+        provider: "rules",
+        model: "fact-ledger",
+        status: "stored",
+        detail: result.fact?.fact_id || result.skill,
+      });
+    }
+    res.json({
+      ok: true,
+      already: Boolean(result.already),
+      prepared: stored.prepared,
+      skill: result.skill,
+      message: confirmedSkillMessage({
+        already: result.already,
+        skill: result.skill,
+        prepared: stored.prepared,
+        preparedThisJob: false,
+      }),
     });
   });
 

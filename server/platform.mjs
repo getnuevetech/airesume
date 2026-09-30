@@ -815,6 +815,8 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     syncProfileVersion,
     activeVersion,
     parse,
+    renderDocument,
+    audit,
   });
   registerInterview(app, {
     requireUser,
