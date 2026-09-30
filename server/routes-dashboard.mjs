@@ -10,6 +10,7 @@ import { followUpMetrics, syncFollowUpsForUser } from "./follow-ups.mjs";
 import { autoApplyAuthorizationPayload } from "./auto-apply-auth.mjs";
 import { billingDisclosurePayload } from "./billing-disclosure.mjs";
 import { iceConfigSummary, resolveIceServers } from "./webrtc-signaling.mjs";
+import { weeklyEfficiency } from "./weekly-efficiency.mjs";
 
 function publicVersion(row) {
   return { id: row.id, label: row.label, kind: row.kind, active: Boolean(row.active), rendered: row.rendered, createdAt: row.created_at };
@@ -116,6 +117,15 @@ export function registerDashboard(app, ctx) {
     syncFollowUpsForUser(user.id, applications, jobsById);
     const followUps = followUpMetrics(user.id);
     const versionLabels = new Map(versions.map((item) => [item.id, item.label]));
+    const recommendedCount = ranked.filter((item) => item.score >= 70 || item.label === "strong" || item.label === "good").length;
+    const week = weeklyEfficiency({
+      applications,
+      followUpsDue: followUps.due,
+      ready: readyCount,
+      recommended: recommendedCount,
+      matchQuota: quota,
+      reviewQuota: reviews,
+    });
     res.json({
       profile: profilePayload(profile, user, parse),
       plan: access.plan,
@@ -153,7 +163,7 @@ export function registerDashboard(app, ctx) {
         reviewRequired: reviewCount,
         responded,
         available: ranked.length,
-        recommended: ranked.filter((item) => item.score >= 70 || item.label === "strong" || item.label === "good").length,
+        recommended: recommendedCount,
         versions: versions.length,
         kitOpened: kitStats.kitsOpened,
         kitCompleted: kitStats.kitsCompleted,
@@ -161,6 +171,7 @@ export function registerDashboard(app, ctx) {
         followUpsDue: followUps.due,
         followUpsOpen: followUps.open,
       },
+      week,
       jobs: ranked.map((item) => jobCard(item.job, item, sourceNames, appliedIds.has(item.job.id))),
       applications: applications.map((item) => {
         const job = jobs.find((row) => row.id === item.job_id) || db.prepare("SELECT * FROM jobs WHERE id = ?").get(item.job_id);

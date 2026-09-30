@@ -12,6 +12,22 @@ import { useAccount } from "./AccountContext";
 import { ResumeSheet } from "./ResumeSheet";
 import type { AccountData, ResumeView } from "./types";
 
+function WeekCard({ week }: { week: NonNullable<AccountData["week"]> }) {
+  return (
+    <section className="account-card">
+      <h2>This week</h2>
+      <p className="lede">{week.next.detail}</p>
+      <div className="stat-grid">
+        <Tile label="Submitted" value={String(week.submittedThisWeek)} />
+        <Tile label="Prepared" value={String(week.preparedThisWeek)} />
+        <Tile label="Tracked" value={String(week.trackedThisWeek)} />
+      </div>
+      {week.quotas.map((line) => <p className="role" key={line}>{line}</p>)}
+      <Link className="btn btn-primary" to={week.next.href}>{week.next.title}</Link>
+    </section>
+  );
+}
+
 function Gate({ feature, children }: { feature?: string; children?: ReactNode }) {
   const { data } = useAccount();
   if (!data?.profile) {
@@ -57,6 +73,7 @@ export function OverviewPage() {
         <Tile label="Follow-ups due" value={String(data.stats.followUpsDue || 0)} />
         <Tile label="Submitted" value={String(data.stats.applied)} />
       </div>
+      {data.week ? <WeekCard week={data.week} /> : null}
       <div className="account-split">
         <section className="account-card">
           <h2>Recommended jobs</h2>
