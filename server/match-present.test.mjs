@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { presentMatch } from "./match-present.mjs";
+import { presentMatch, presentSkillFacts } from "./match-present.mjs";
 
 test("a match view names skills and hides fact ids", () => {
   const view = presentMatch({
@@ -30,6 +30,32 @@ test("paste field labels are not shown as missing skills", () => {
   });
   assert.equal(view.summary, "Limited overlap with this listing.");
   assert.deepEqual(view.gaps, []);
+});
+
+test("profile skill facts name the skill and hide the ledger id", () => {
+  const view = presentSkillFacts([
+    {
+      fact_id: "SKILL-001",
+      category: "skill",
+      statement: "Communication",
+      confidence: 1,
+      verified_by_user: true,
+      source_fact_ids: ["SKILL-001"],
+    },
+    {
+      fact_id: "SKILL-002",
+      category: "skill",
+      statement: "Kubernetes",
+      confidence: 0.2,
+      verified_by_user: false,
+    },
+    { fact_id: "EXP-001", category: "employment", statement: "Analyst at DataCo" },
+  ]);
+  assert.deepEqual(view, [
+    { name: "Communication", verified: true, confidence: 1 },
+    { name: "Kubernetes", verified: false, confidence: 0.2 },
+  ]);
+  assert.equal(JSON.stringify(view).includes("SKILL-001"), false);
 });
 
 test("a match with no shared skills says the overlap is limited", () => {

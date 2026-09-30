@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–Z are implemented (V is schema 29). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AC lets a candidate confirm one of those missing skills into the Fact Ledger. Slice AD writes that skill into the resume already prepared for the same job. Slice AE writes it into every resume already prepared for that candidate. Admin MFA stays disabled for now and is not a beta blocker.
+Status: slices Q–Z are implemented (V is schema 29). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AC lets a candidate confirm one of those missing skills into the Fact Ledger. Slice AD writes that skill into the resume already prepared for the same job. Slice AE writes it into every resume already prepared for that candidate. Slice AF lists those skills on the profile without Fact Ledger ids. Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
@@ -45,9 +45,10 @@ Q  CI on every pull request
                     → AC  Confirm a missing skill
                       → AD  Put that skill on the prepared resume
                         → AE  Put that skill on every prepared resume
+                          → AF  Show confirmed skills without ledger ids
 ```
 
-Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing. AC saves a confirmed gap onto the Fact Ledger and the active resume. AD updates the resume already prepared for that job so the confirmed skill is on it. AE updates every prepared resume for that candidate.
+Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing. AC saves a confirmed gap onto the Fact Ledger and the active resume. AD updates the resume already prepared for that job so the confirmed skill is on it. AE updates every prepared resume for that candidate. AF shows those skills on the profile by name.
 
 ---
 
@@ -302,6 +303,24 @@ Bootstrap and the README tell operators to open `http://<ip>/` and “use http, 
 
 ---
 
+### Slice AF — Show confirmed skills without ledger ids
+
+**Goal:** A confirmed skill is stored with a Fact Ledger id. The profile listed that id next to the skill. The candidate should see the skill name.
+
+**Change**
+
+- `presentSkillFacts` builds the profile list from skill facts. It keeps the name, whether the candidate verified it, and confidence. It does not include the ledger id.
+- The profile renders that list. A verified skill says Verified. An unverified skill shows its confidence. Employment facts stay off this list.
+- Stored facts still keep their ids for matching and audit.
+
+**Acceptance**
+
+- A Communication fact stored as `SKILL-001` appears as Communication · Verified.
+- The profile view does not include `SKILL-001`.
+- An unverified skill still shows its confidence.
+
+---
+
 ## Ops the repo cannot finish
 
 These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them executable.
@@ -319,4 +338,4 @@ These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them
 
 ## Done when
 
-Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, Z, AA, AC, AD, and AE are in the product and are not launch gates.
+Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, Z, AA, AC, AD, AE, and AF are in the product and are not launch gates.

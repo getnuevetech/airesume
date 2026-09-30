@@ -13,7 +13,7 @@ import { iceConfigSummary, resolveIceServers } from "./webrtc-signaling.mjs";
 import { weeklyEfficiency } from "./weekly-efficiency.mjs";
 import { tailoringPreview } from "./resume-guard.mjs";
 import { compareJobRank, importedAt, presentJobPosting } from "./job-posting.mjs";
-import { presentMatch } from "./match-present.mjs";
+import { presentMatch, presentSkillFacts } from "./match-present.mjs";
 
 function publicVersion(row) {
   return { id: row.id, label: row.label, kind: row.kind, active: Boolean(row.active), rendered: row.rendered, createdAt: row.created_at };
@@ -28,6 +28,7 @@ function profilePayload(profile, user, parse) {
     employment: parse(profile.employment, []),
     education: parse(profile.education, []),
     facts: parse(profile.facts, []),
+    skillFacts: presentSkillFacts(parse(profile.facts, [])),
     preferences: parse(profile.preferences, {}),
     resumeName: profile.resume_name || "",
     resumeFileUrl: profile.resume_file_url || "",
