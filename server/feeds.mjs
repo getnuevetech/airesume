@@ -99,24 +99,29 @@ function textOf(value) {
 export function listingsFromJson(body, fallbackCompany) {
   const list = Array.isArray(body)
     ? body
-    : body?.jobs || body?.data || body?.results || body?.postings || [];
+    : body?.jobs || body?.data || body?.results || body?.postings || body?.job_postings || body?.items || [];
   if (!Array.isArray(list)) return [];
   const rows = [];
   for (const item of list) {
-    if (!item || typeof item !== "object") continue;
-    const title = String(item.title || item.text || item.name || item.position || "").trim();
-    const named = String(item.company || item.company_name || item.organization || "").trim();
+    if (!item || typeof item === "string") continue;
+    if (typeof item !== "object") continue;
+    const title = String(item.title || item.text || item.name || item.position || item.job_title || "").trim();
+    const named = String(item.company || item.company_name || item.organization || item.companyName || "").trim();
     const employer = String(item.hiring_company || item.hiringCompany || item.client || item.primary_company || item.primaryCompany || "").trim();
-    const company = named || String(item.employer || fallbackCompany || "").trim();
+    const company = named || employer || String(item.employer || fallbackCompany || "").trim();
     if (!title || !company) continue;
     const applyUrl = String(item.apply_url || item.applyUrl || item.application_url || item.applicationUrl || "").trim();
     const sourceUrl = String(item.url || item.absolute_url || item.hostedUrl || item.link || applyUrl || "").trim();
+    const location =
+      textOf(item.location) ||
+      textOf(item.categories?.location) ||
+      String(item.location_name || item.locationName || "");
     rows.push({
-      externalKey: String(item.id || item.internal_job_id || `${company}-${title}`).slice(0, 180),
+      externalKey: String(item.id || item.internal_job_id || item.gh_jid || `${company}-${title}`).slice(0, 180),
       title,
       company,
-      employer,
-      location: textOf(item.location) || textOf(item.categories?.location) || String(item.location_name || ""),
+      employer: employer && employer !== company ? employer : "",
+      location,
       remoteType: String(item.remote_type || item.remoteType || item.workplaceType || ""),
       salaryMin: Number(item.salary_min || item.salaryMin) || null,
       salaryMax: Number(item.salary_max || item.salaryMax) || null,
@@ -360,21 +365,32 @@ export async function fetchFeedListings(source, config) {
     response = await fetch(config.url, { headers: feedHeaders(config), redirect: "follow", signal: AbortSignal.timeout(20000) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Feed request failed.";
+    if (/abort|timeout/i.test(message)) {
+      throw new Error("The feed timed out after 20 seconds. Check the URL or try again.");
+    }
     throw new Error(`Could not reach the feed. ${message}`);
   }
   if (response.status === 401 || response.status === 403) {
     throw new Error(
-      "This source blocked anonymous access. Prefer a public careers page or public JSON/RSS feed. Only add a token if the publisher documents a public API key.",
+      "This source blocked anonymous access (HTTP " +
+        response.status +
+        "). Prefer a public careers page or public JSON/RSS feed. Only add a token if the publisher documents a public API key.",
     );
   }
-  if (!response.ok) throw new Error(`Feed returned ${response.status}.`);
+  if (!response.ok) throw new Error(`Feed returned HTTP ${response.status}. Check the URL and access settings.`);
+  const bodyText = await response.text();
   const listings = parseFeedDocument(
-    await response.text(),
+    bodyText,
     response.headers.get("content-type") || "",
     config.employer || source.name,
     config.format || "auto",
     config.url,
   );
-  if (!listings.length) throw new Error("The source responded, but no jobs were in it. Check the URL and the default employer name.");
+  if (!listings.length) {
+    const hint = !config.employer
+      ? " If listings omit a company name, set “Default employer” on this feed."
+      : "";
+    throw new Error(`The source responded, but no jobs were found.${hint}`);
+  }
   return listings.map((listing) => ({ ...listing, sourceUrl: listing.sourceUrl || config.url }));
 }

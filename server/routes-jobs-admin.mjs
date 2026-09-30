@@ -128,19 +128,40 @@ export function registerJobsAdmin(app, ctx) {
     const requested = String(req.body.sourceId || "");
     const sources = requested
       ? db.prepare("SELECT * FROM job_sources WHERE id = ? AND kind != 'manual'").all(requested)
-      : db.prepare("SELECT * FROM job_sources WHERE enabled = 1 AND kind != 'manual'").all();
+      : db.prepare("SELECT * FROM job_sources WHERE enabled = 1 AND kind IN ('json', 'rss')").all();
     if (requested && !sources.length) {
       res.status(404).json({ error: "Feed not found." });
+      return;
+    }
+    if (!requested && !sources.length) {
+      res.json({
+        results: [],
+        message: "No enabled URL feeds to pull. Add a feed, check “Include in Pull enabled feeds”, then try again. The catalog is refreshed separately.",
+      });
       return;
     }
     const results = [];
     for (const source of sources) {
       try {
         const count = await pullSource(source);
-        results.push({ id: source.id, name: source.name, count });
+        const refreshed = db.prepare("SELECT * FROM job_sources WHERE id = ?").get(source.id);
+        results.push({
+          id: source.id,
+          name: source.name,
+          count,
+          status: refreshed?.last_pull_status || "ok",
+          message: refreshed?.last_pull_message || `Pulled ${count} jobs.`,
+        });
         audit({ functionName: "job_categorize", provider: "pipeline", model: "pull", status: "done", detail: source.name });
       } catch (error) {
-        results.push({ id: source.id, name: source.name, error: error instanceof Error ? error.message : "Pull failed" });
+        const message = error instanceof Error ? error.message : "Pull failed";
+        db.prepare("UPDATE job_sources SET last_pulled_at = ?, last_pull_status = ?, last_pull_message = ? WHERE id = ?").run(
+          Date.now(),
+          "error",
+          message.slice(0, 500),
+          source.id,
+        );
+        results.push({ id: source.id, name: source.name, error: message, status: "error", message });
       }
     }
     res.json({ results });

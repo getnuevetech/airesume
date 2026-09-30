@@ -418,7 +418,16 @@ type Plan = {
 };
 type Gateway = { id: string; name: string; kind: string; enabled: boolean; mode: string; publicKey: string; secretKey: string };
 type FeedConfig = { url: string; format: string; authType: string; username: string; headerName: string; employer: string; hasSecret: boolean };
-type Source = { id: string; name: string; kind: string; config: FeedConfig; enabled: boolean; lastPulledAt: number | null };
+type Source = {
+  id: string;
+  name: string;
+  kind: string;
+  config: FeedConfig;
+  enabled: boolean;
+  lastPulledAt: number | null;
+  lastPullStatus?: string;
+  lastPullMessage?: string;
+};
 type Job = {
   id: string;
   title: string;
@@ -636,11 +645,25 @@ export function JobsAdmin() {
   const [title, setTitle] = useState("");
   const [company, setCompany] = useState("");
   const [description, setDescription] = useState("");
+  const [pullingId, setPullingId] = useState<string | "all" | "">("");
+  const [pullResults, setPullResults] = useState<Record<string, { status: string; message: string }>>({});
 
   async function load() {
     const data = await api<{ sources: Source[]; jobs: Job[] }>("/api/admin/jobs");
     setSources(data.sources);
     setJobs(data.jobs);
+    setPullResults((current) => {
+      const next = { ...current };
+      for (const source of data.sources) {
+        if (!source.lastPullStatus && !source.lastPullMessage) continue;
+        if (next[source.id]?.status === "pulling") continue;
+        next[source.id] = {
+          status: source.lastPullStatus || (source.lastPullMessage ? "ok" : ""),
+          message: source.lastPullMessage || "",
+        };
+      }
+      return next;
+    });
   }
 
   useEffect(() => {
@@ -651,15 +674,57 @@ export function JobsAdmin() {
 
   async function pull(sourceId?: string) {
     setError("");
+    setMessage("");
+    setPullingId(sourceId || "all");
+    if (sourceId) {
+      setPullResults((current) => ({ ...current, [sourceId]: { status: "pulling", message: "Pulling…" } }));
+    } else {
+      setPullResults((current) => {
+        const next = { ...current };
+        for (const source of sources) {
+          if (source.enabled && (source.kind === "json" || source.kind === "rss")) {
+            next[source.id] = { status: "pulling", message: "Pulling…" };
+          }
+        }
+        return next;
+      });
+    }
     try {
-      const data = await api<{ results: { name: string; count?: number; error?: string }[] }>("/api/admin/jobs/pull", {
+      const data = await api<{
+        results: { id: string; name: string; count?: number; error?: string; status?: string; message?: string }[];
+        message?: string;
+      }>("/api/admin/jobs/pull", {
         method: "POST",
         body: JSON.stringify(sourceId ? { sourceId } : {}),
       });
-      setMessage(data.results.map((item) => `${item.name}: ${item.error || `${item.count} jobs`}`).join(" · ") || "No feeds to pull.");
+      const mapped: Record<string, { status: string; message: string }> = {};
+      for (const item of data.results) {
+        mapped[item.id] = {
+          status: item.error ? "error" : item.status || "ok",
+          message: item.error || item.message || (item.count != null ? `Pulled ${item.count} jobs.` : "Done."),
+        };
+      }
+      setPullResults((current) => ({ ...current, ...mapped }));
+      if (!data.results.length) {
+        setMessage(data.message || "No enabled URL feeds to pull.");
+      } else {
+        const failed = data.results.filter((item) => item.error).length;
+        const ok = data.results.length - failed;
+        setMessage(
+          failed
+            ? `Pull finished: ${ok} succeeded, ${failed} failed. See each feed card for details.`
+            : `Pull finished: ${ok} feed${ok === 1 ? "" : "s"} succeeded. See each feed card for details.`,
+        );
+      }
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Pull failed.");
+      const text = err instanceof Error ? err.message : "Pull failed.";
+      setError(text);
+      if (sourceId) {
+        setPullResults((current) => ({ ...current, [sourceId]: { status: "error", message: text } }));
+      }
+    } finally {
+      setPullingId("");
     }
   }
 
@@ -671,7 +736,9 @@ export function JobsAdmin() {
       </p>
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="role">{message}</p> : null}
-      <button className="btn btn-primary" type="button" onClick={() => void pull()}>Pull enabled feeds</button>
+      <button className="btn btn-primary" type="button" disabled={Boolean(pullingId)} onClick={() => void pull()}>
+        {pullingId === "all" ? "Pulling…" : "Pull enabled feeds"}
+      </button>
       <form
         className="admin-card"
         onSubmit={(event) => {
@@ -705,7 +772,15 @@ export function JobsAdmin() {
         <button className="btn btn-ghost" type="submit">Add feed</button>
       </form>
       {sources.map((source) => (
-        <FeedCard key={source.id} source={source} onPull={() => pull(source.id)} onChanged={load} onError={setError} />
+        <FeedCard
+          key={source.id}
+          source={source}
+          pullResult={pullResults[source.id]}
+          pulling={pullingId === source.id || (pullingId === "all" && pullResults[source.id]?.status === "pulling")}
+          onPull={() => pull(source.id)}
+          onChanged={load}
+          onError={setError}
+        />
       ))}
       <form
         className="admin-card"
@@ -805,7 +880,21 @@ function FeedAccess<T extends { authType: string; username: string; headerName: 
   );
 }
 
-function FeedCard({ source, onPull, onChanged, onError }: { source: Source; onPull: () => Promise<void>; onChanged: () => Promise<void>; onError: (message: string) => void }) {
+function FeedCard({
+  source,
+  pullResult,
+  pulling,
+  onPull,
+  onChanged,
+  onError,
+}: {
+  source: Source;
+  pullResult?: { status: string; message: string };
+  pulling?: boolean;
+  onPull: () => Promise<void>;
+  onChanged: () => Promise<void>;
+  onError: (message: string) => void;
+}) {
   const remote = source.kind === "json" || source.kind === "rss";
   const [name, setName] = useState(source.name);
   const [url, setUrl] = useState(source.config.url);
@@ -830,6 +919,8 @@ function FeedCard({ source, onPull, onChanged, onError }: { source: Source; onPu
   }, [source]);
 
   const pulled = source.lastPulledAt ? new Date(source.lastPulledAt).toLocaleString() : "not pulled yet";
+  const status = pullResult?.status || source.lastPullStatus || "";
+  const statusMessage = pullResult?.message || source.lastPullMessage || "";
 
   return (
     <form
@@ -843,7 +934,17 @@ function FeedCard({ source, onPull, onChanged, onError }: { source: Source; onPu
       }}
     >
       <h2>{source.name}</h2>
-      <p className="role">{source.kind} · {pulled}{source.config.hasSecret ? " · access saved" : ""}</p>
+      <p className="role">
+        {source.kind}
+        {source.config.format && source.config.format !== "auto" ? ` · ${source.config.format}` : ""}
+        {" · "}{pulled}
+        {source.config.hasSecret ? " · access saved" : ""}
+      </p>
+      {statusMessage ? (
+        <p className={status === "error" ? "form-error" : "role"} role={status === "error" ? "alert" : "status"}>
+          {status === "pulling" ? "Pulling…" : status === "error" ? `Pull failed: ${statusMessage}` : statusMessage}
+        </p>
+      ) : null}
       <div className="admin-grid">
         <label className="field"><span>Name</span><input value={name} onChange={(event) => setName(event.target.value)} required /></label>
         {remote ? <label className="field"><span>Source URL</span><input value={url} onChange={(event) => setUrl(event.target.value)} required /></label> : null}
@@ -875,7 +976,11 @@ function FeedCard({ source, onPull, onChanged, onError }: { source: Source; onPu
       <label className="check-row"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Include in Pull enabled feeds</label>
       <div className="admin-actions">
         <button className="btn btn-primary btn-sm" type="submit">Save feed</button>
-        {source.kind !== "manual" ? <button className="btn btn-ghost btn-sm" type="button" onClick={() => void onPull()}>Pull this feed</button> : null}
+        {source.kind !== "manual" ? (
+          <button className="btn btn-ghost btn-sm" type="button" disabled={pulling} onClick={() => void onPull()}>
+            {pulling ? "Pulling…" : "Pull this feed"}
+          </button>
+        ) : null}
         <button
           className="text-btn"
           type="button"
