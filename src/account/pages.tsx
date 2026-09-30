@@ -9,6 +9,7 @@ import {
   WORK_AUTHORIZATION_OPTIONS,
 } from "../preferenceOptions";
 import { useAccount } from "./AccountContext";
+import { CategoryBars, CountBars, ScorePill, ScoreRing } from "./charts";
 import { ResumeSheet } from "./ResumeSheet";
 import type { AccountData, ResumeView } from "./types";
 
@@ -54,11 +55,14 @@ function WeekCard({ week }: { week: NonNullable<AccountData["week"]> }) {
     <section className="account-card">
       <h2>This week</h2>
       <p className="lede">{week.next.detail}</p>
-      <div className="stat-grid">
-        <Tile label="Submitted" value={String(week.submittedThisWeek)} />
-        <Tile label="Prepared" value={String(week.preparedThisWeek)} />
-        <Tile label="Tracked" value={String(week.trackedThisWeek)} />
-      </div>
+      <CountBars
+        title="This week"
+        rows={[
+          { label: "Submitted", value: week.submittedThisWeek },
+          { label: "Prepared", value: week.preparedThisWeek },
+          { label: "Tracked", value: week.trackedThisWeek },
+        ]}
+      />
       {week.items?.map((item) => (
         <Link className="quiet-row" key={item.id} to={item.href}>
           <div>
@@ -112,13 +116,21 @@ export function OverviewPage() {
           <p className="lede">Your search at a glance. Open a section on the left when you want to work on it.</p>
         </div>
       </header>
-      <div className="stat-grid">
-        <Tile label="Resume rating" value={data.stats.resumeRating === null ? "—" : String(data.stats.resumeRating)} />
-        <Tile label="Recommended" value={String(data.stats.recommended)} />
-        <Tile label="Ready to submit" value={String(data.stats.ready || 0)} />
-        <Tile label="Follow-ups due" value={String(data.stats.followUpsDue || 0)} />
-        <Tile label="Submitted" value={String(data.stats.applied)} />
-      </div>
+      <section className="account-card chart-card">
+        <h2>Search snapshot</h2>
+        <div className="chart-layout">
+          <ScoreRing label="Resume rating" value={data.stats.resumeRating} />
+          <CountBars
+            title="Search snapshot"
+            rows={[
+              { label: "Recommended", value: data.stats.recommended },
+              { label: "Ready to submit", value: data.stats.ready || 0 },
+              { label: "Follow-ups due", value: data.stats.followUpsDue || 0 },
+              { label: "Submitted", value: data.stats.applied },
+            ]}
+          />
+        </div>
+      </section>
       {data.week ? <WeekCard week={data.week} /> : null}
       <div className="account-split">
         <section className="account-card">
@@ -131,7 +143,7 @@ export function OverviewPage() {
                 {job.fit?.summary ? <p className="role">{job.fit.summary}</p> : null}
                 {job.viaCompany ? <p className="role">Listed by {job.viaCompany}{job.sourceName ? ` on ${job.sourceName}` : ""}</p> : null}
               </div>
-              <span className="match-badge">{job.score}%</span>
+              <ScorePill score={job.score} />
             </div>
           )) : <p className="role">Matches show here after jobs are available on your plan.</p>}
           <Link className="text-btn" to="/account/jobs">See all jobs</Link>
@@ -284,20 +296,38 @@ export function InsightsPage() {
         </form>
         {!insights ? <p className="lede">Building insights…</p> : (
           <>
-            <div className="stat-grid">
-              <Tile label="Catalog roles" value={String(insights.summary.catalogJobs)} />
-              <Tile label="Strong matches" value={String(insights.summary.strongMatches)} />
-              <Tile label="Response rate" value={insights.summary.responseRate === null ? "—" : `${insights.summary.responseRate}%`} />
-              <Tile label="Interview rate" value={insights.summary.interviewRate == null ? "—" : `${insights.summary.interviewRate}%`} />
-            </div>
+            <section className="account-card chart-card">
+              <h2>Search pulse</h2>
+              <div className="chart-layout rings">
+                <ScoreRing label="Response rate" value={insights.summary.responseRate} />
+                <ScoreRing label="Interview rate" value={insights.summary.interviewRate ?? null} />
+                <CountBars
+                  title="Open roles"
+                  rows={[
+                    { label: "Catalog roles", value: insights.summary.catalogJobs },
+                    { label: "Strong matches", value: insights.summary.strongMatches },
+                  ]}
+                />
+              </div>
+            </section>
             {insights.outcomes ? (
               <section className="account-card">
                 <h2>Outcomes from your tracker</h2>
-                <p className="role">
-                  {insights.outcomes.advanced} advanced · {insights.outcomes.interviews} interviews · {insights.outcomes.offers} offers · {insights.outcomes.rejected} rejected
-                  {insights.outcomes.avgMatchAdvanced != null ? ` · avg match on advanced ${insights.outcomes.avgMatchAdvanced}%` : ""}
-                  {insights.outcomes.avgMatchStalled != null ? ` · avg match on stalled ${insights.outcomes.avgMatchStalled}%` : ""}
-                </p>
+                <CountBars
+                  title="Tracker outcomes"
+                  rows={[
+                    { label: "Advanced", value: insights.outcomes.advanced },
+                    { label: "Interviews", value: insights.outcomes.interviews },
+                    { label: "Offers", value: insights.outcomes.offers },
+                    { label: "Rejected", value: insights.outcomes.rejected },
+                  ]}
+                />
+                {insights.outcomes.avgMatchAdvanced != null || insights.outcomes.avgMatchStalled != null ? (
+                  <p className="role">
+                    {insights.outcomes.avgMatchAdvanced != null ? `Average match on advanced roles ${insights.outcomes.avgMatchAdvanced}%. ` : ""}
+                    {insights.outcomes.avgMatchStalled != null ? `Average match on stalled roles ${insights.outcomes.avgMatchStalled}%.` : ""}
+                  </p>
+                ) : null}
                 {insights.outcomes.winningSkills.length ? (
                   <div className="chips">
                     {insights.outcomes.winningSkills.map((item) => (
@@ -323,34 +353,31 @@ export function InsightsPage() {
                   </article>
                 )) : <p className="role">Add skills or browse jobs to unlock focus tips.</p>}
               </section>
-              <section className="account-card">
+              <section className="account-card chart-card">
                 <h2>Category outlook</h2>
-                {insights.categoryOutlook.length ? insights.categoryOutlook.map((row) => (
-                  <div className="quiet-row" key={row.category}>
-                    <div>
-                      <strong>{row.category}</strong>
-                      <p className="role">{row.jobs} roles · {row.strong} strong</p>
-                    </div>
-                    <span className="match-badge">{row.avgScore}%</span>
-                  </div>
-                )) : <p className="role">No active jobs yet.</p>}
+                {insights.categoryOutlook.length ? <CategoryBars rows={insights.categoryOutlook} /> : <p className="role">No active jobs yet.</p>}
               </section>
             </div>
             <div className="account-split">
               <section className="account-card">
                 <h2>Skills in demand you already have</h2>
-                <div className="chips">
-                  {insights.strengths.length ? insights.strengths.map((item) => (
-                    <span className="chip" key={item.skill}>{item.skill} · {item.demand}</span>
-                  )) : <p className="role">Confirm skills on your profile to see strengths.</p>}
-                </div>
+                {insights.strengths.length ? (
+                  <CountBars
+                    title="Skills in demand you already have"
+                    rows={insights.strengths.map((item) => ({ label: item.skill, value: item.demand }))}
+                  />
+                ) : <p className="role">Confirm skills on your profile to see strengths.</p>}
               </section>
               <section className="account-card">
                 <h2>High-demand gaps</h2>
                 <p className="role">Only confirm a skill from real experience. It is saved to the Fact Ledger.</p>
                 {insights.gaps.length ? insights.gaps.map((item) => (
                   <div className="gap-row" key={item.skill}>
-                    <span className="chip chip-gap">{item.skill} · {item.demand}</span>
+                    <span className="chip chip-gap">{item.skill}</span>
+                    <span className="demand-meter" aria-hidden="true">
+                      <span style={{ width: `${(item.demand / (insights.gaps[0]?.demand || 1)) * 100}%` }} />
+                    </span>
+                    <strong>{item.demand}</strong>
                     <button className="btn btn-ghost btn-sm" type="button" disabled={Boolean(pendingGap)} onClick={() => void confirmGap(item.skill)}>
                       {pendingGap === item.skill ? "Saving…" : `I have ${item.skill}`}
                     </button>
@@ -377,7 +404,7 @@ export function InsightsPage() {
                     <p>{job.company}</p>
                     {job.missing.length ? <p className="role">Gap: {job.missing.join(", ")}</p> : null}
                   </div>
-                  <span className="match-badge">{job.score}%</span>
+                  <ScorePill score={job.score} />
                 </div>
               )) : <p className="role">No strong matches in your current list.</p>}
               <Link className="text-btn" to="/account/jobs">Open jobs</Link>
@@ -883,16 +910,6 @@ type SpeechRecognitionLike = {
   onerror: (() => void) | null;
   onend: (() => void) | null;
 };
-
-function Tile({ label, value }: { label: string; value: string }) {
-  return (
-    <p className="stat account-tile">
-      <span className="tile-mark" aria-hidden="true">{label.slice(0, 1)}</span>
-      <strong>{value}</strong>
-      <span>{label}</span>
-    </p>
-  );
-}
 
 export function ProfilePage() {
   const { user, refresh } = useApp();
@@ -1645,6 +1662,13 @@ export function JobsPage() {
             <p className="eyebrow">Jobs</p>
             <h1>Tailored to your resume</h1>
             <p className="lede">{data.stats.available} roles in this list. {data.stats.recommended} are strong matches.</p>
+            <CountBars
+              title="This job list"
+              rows={[
+                { label: "In this list", value: data.stats.available },
+                { label: "Strong matches", value: data.stats.recommended },
+              ]}
+            />
             {data.matchQuota && !data.matchQuota.unlimited ? (
               <p className="role">Match explanations this week: {data.matchQuota.used} used, {data.matchQuota.remaining} left on {data.plan.name}.</p>
             ) : null}
@@ -1680,7 +1704,7 @@ export function JobsPage() {
               <MatchFit job={job} canConfirm={Boolean(data.features.profile_edit)} onConfirm={(skill) => confirmSkill(job.id, skill)} />
             </div>
             <div className="job-side">
-              <span className="match-badge">{job.score}%</span>
+              <ScorePill score={job.score} />
               {job.label ? <p className="role">{job.label}</p> : null}
               {job.applied ? <p className="role">In your tracker</p> : (
                 <div className="job-actions">
@@ -1741,15 +1765,30 @@ export function ApplicationsPage() {
             <p className="eyebrow">Applications</p>
             <h1>Tracker</h1>
             <p className="lede">
-              {data.stats.tracked ?? data.stats.applied} in your tracker. {data.stats.ready || 0} ready. {data.stats.reviewRequired || 0} need review.
               Assisted Apply is the default — review the kit, paste into the employer form, then mark Applied.
-              {typeof data.stats.kitCompletionRate === "number"
-                ? ` Kit completion ${data.stats.kitCompletionRate}% (${data.stats.kitCompleted || 0}/${data.stats.kitOpened || 0}).`
-                : ""}
-              {data.stats.followUpsDue ? ` ${data.stats.followUpsDue} follow-up${data.stats.followUpsDue === 1 ? "" : "s"} due.` : ""}
             </p>
           </div>
         </header>
+        <section className="account-card chart-card">
+          <h2>Tracker at a glance</h2>
+          <div className="chart-layout">
+            {typeof data.stats.kitCompletionRate === "number" ? (
+              <ScoreRing label="Kit completion" value={data.stats.kitCompletionRate} />
+            ) : null}
+            <CountBars
+              title="Tracker at a glance"
+              rows={[
+                { label: "In tracker", value: data.stats.tracked ?? data.stats.applied },
+                { label: "Ready", value: data.stats.ready || 0 },
+                { label: "Need review", value: data.stats.reviewRequired || 0 },
+                { label: "Follow-ups due", value: data.stats.followUpsDue || 0 },
+              ]}
+            />
+          </div>
+          {typeof data.stats.kitCompletionRate === "number" ? (
+            <p className="role">{data.stats.kitCompleted || 0} of {data.stats.kitOpened || 0} kits finished.</p>
+          ) : null}
+        </section>
         {data.features.manual_apply ? (
           <FollowUpsPanel
             onDone={() => { setMessage("Follow-up updated."); void reload(); }}
