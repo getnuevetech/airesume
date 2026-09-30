@@ -1,9 +1,10 @@
 /** Resume review, upscale apply, clarification → Fact Ledger, and version activation routes. */
 
 import { db, id } from "./db.mjs";
+import { completeJson } from "./ai-run.mjs";
 import { reviewQuota } from "./quota.mjs";
 import { applyClarificationAnswer, markRecommendationAnswered } from "./upscale-clarify.mjs";
-import { claimsSupported, normalizeResumePath } from "./resume-guard.mjs";
+import { applyAcceptedRewrites, mergeUpscaleDocument } from "./resume-upscale.mjs";
 
 export function registerResume(app, ctx) {
   const {
@@ -15,7 +16,6 @@ export function registerResume(app, ctx) {
     reviewDocument,
     audit,
     parse,
-    sourceText,
     setPath,
     renderDocument,
   } = ctx;
@@ -190,21 +190,9 @@ export function registerResume(app, ctx) {
       const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
       const facts = profile ? parse(profile.facts, []) : [];
       const doc = parse(version.document, {});
-      const source = sourceText(doc);
-      const applied = [];
-      const blockedClaims = [];
-      const badPaths = [];
-      for (const item of recommendations) {
-        const path = normalizeResumePath(item.path);
-        if (!claimsSupported(item.proposed, source, facts)) {
-          blockedClaims.push(String(item.id));
-          continue;
-        }
-        if (setPath(doc, path, item.proposed)) applied.push(String(item.id));
-        else badPaths.push(String(item.id));
-      }
-      if (!applied.length) {
-        if (badPaths.length && !blockedClaims.length) {
+      const deterministic = applyAcceptedRewrites(doc, recommendations, facts);
+      if (!deterministic.applied.length) {
+        if (deterministic.skippedPaths.length && !deterministic.skippedClaims.length) {
           res.status(400).json({
             error: "Those recommendations point at resume lines that are no longer on this version. Run Analyze again, then retry Upscale.",
           });
@@ -216,21 +204,37 @@ export function registerResume(app, ctx) {
         });
         return;
       }
-      const count = db.prepare("SELECT COUNT(*) AS count FROM resume_versions WHERE user_id = ? AND kind = 'upscale'").get(user.id).count + 1;
+      const ai = await completeJson(
+        "resume_upscale",
+        "Rewrite the accepted recommendations into an updated resume JSON. Return strict JSON {document} with the same employers, titles, dates, and bullet counts. Never invent employers, tools, dates, metrics, or contact details.",
+        JSON.stringify({ document: doc, accepted: recommendations }).slice(0, 12000),
+      );
+      const merged = mergeUpscaleDocument(doc, deterministic.document, ai.json?.document, facts);
+      const label = `Upscale ${db.prepare("SELECT COUNT(*) AS count FROM resume_versions WHERE user_id = ? AND kind = 'upscale'").get(user.id).count + 1}`;
       const versionId = id("ver");
+      const rendered = renderDocument(merged.document);
       db.prepare(
         `INSERT INTO resume_versions (id, user_id, label, kind, document, rendered, parent_id, active, created_at)
          VALUES (?, ?, ?, 'upscale', ?, ?, ?, 0, ?)`,
-      ).run(versionId, user.id, `Upscale ${count}`, JSON.stringify(doc), renderDocument(doc), version.id, Date.now());
+      ).run(versionId, user.id, label, JSON.stringify(merged.document), rendered, version.id, Date.now());
       audit({
         userId: user.id,
         functionName: "resume_upscale",
-        provider: review.provider || "Built-in rules",
-        model: review.model || "rules-v1",
+        provider: ai.provider || "Built-in rules",
+        model: ai.model || "rules-v1",
         status: "version",
         detail: versionId,
+        costMicros: ai.costMicros || 0,
       });
-      res.json({ versionId, applied, skippedClaims: blockedClaims, skippedPaths: badPaths });
+      res.json({
+        versionId,
+        label,
+        rendered,
+        applied: deterministic.applied,
+        changes: merged.changes,
+        skippedClaims: deterministic.skippedClaims,
+        skippedPaths: deterministic.skippedPaths,
+      });
     } catch (err) {
       res.status(500).json({
         error: err instanceof Error ? err.message : "Could not create the Upscale version.",

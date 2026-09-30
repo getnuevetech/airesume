@@ -848,6 +848,7 @@ export function ProfilePage() {
         email={user?.email || ""}
         phone={user?.phone || ""}
         profile={data.profile}
+        versions={data.versions}
         canEnhance={Boolean(data.features.image_enhance)}
         editing={editing}
         setEditing={setEditing}
@@ -864,12 +865,13 @@ export function ProfilePage() {
 }
 
 function ProfileView({
-  userName, email, phone, profile, canEnhance, editing, setEditing, onSaved, onError,
+  userName, email, phone, profile, versions, canEnhance, editing, setEditing, onSaved, onError,
 }: {
   userName: string;
   email: string;
   phone: string;
   profile: NonNullable<AccountData["profile"]>;
+  versions: AccountData["versions"];
   canEnhance: boolean;
   editing: boolean;
   setEditing: (value: boolean) => void;
@@ -892,6 +894,7 @@ function ProfileView({
   const [employment, setEmployment] = useState(profile.employment);
   const [photo, setPhoto] = useState(profile.photoUrl);
   const [error, setLocalError] = useState("");
+  const [openResume, setOpenResume] = useState("");
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -931,10 +934,32 @@ function ProfileView({
               )}
             </p>
           ) : null}
+          {versions.length ? <p className="role">{versions.length} resume{versions.length === 1 ? "" : "s"} on this profile. Open one below.</p> : null}
         </div>
         <button className="btn btn-ghost" type="button" onClick={() => setEditing(!editing)}>{editing ? "Close editor" : "Edit profile"}</button>
       </header>
       {error ? <p className="form-error">{error}</p> : null}
+      {versions.length ? (
+        <section className="account-card">
+          <h2>Resumes</h2>
+          <p className="role">Each upscale is a separate resume. The public one is what employers see until you choose another.</p>
+          {versions.map((version) => (
+            <article key={version.id}>
+              <div className="quiet-row">
+                <div>
+                  <strong>{version.label}</strong>
+                  <span>{version.active ? "Public resume" : version.kind}</span>
+                </div>
+                <button className="text-btn" type="button" onClick={() => setOpenResume((current) => current === version.id ? "" : version.id)}>
+                  {openResume === version.id ? "Hide resume" : "View resume"}
+                </button>
+              </div>
+              {openResume === version.id ? <pre className="version-resume">{version.rendered || "This version has no text yet."}</pre> : null}
+            </article>
+          ))}
+          <Link className="text-btn" to="/account/resume">Review and upscale</Link>
+        </section>
+      ) : null}
       <section className="account-card identity-card">
         {photo ? <img src={photo} alt="" /> : <span className="resume-fallback">{name.slice(0, 1)}</span>}
         <div>
@@ -1082,10 +1107,15 @@ export function ResumePage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [clarifyAnswers, setClarifyAnswers] = useState<Record<string, string>>({});
   const [clarifyBusy, setClarifyBusy] = useState("");
+  const [openVersion, setOpenVersion] = useState("");
+  const [upscaleResult, setUpscaleResult] = useState<{ label: string; rendered: string; changes: { before: string; after: string }[] } | null>(null);
   const reviewId = data?.review?.id || "";
 
   useEffect(() => {
-    setSelected([]);
+    const ids = (data?.review?.recommendations || [])
+      .filter((item) => item.kind === "rewrite" && item.proposed)
+      .map((item) => item.id);
+    setSelected(ids);
     setClarifyAnswers({});
   }, [reviewId]);
 
@@ -1107,6 +1137,18 @@ export function ResumePage() {
           </div>
           <button className="btn btn-primary" type="button" onClick={() => void api("/api/resume/review", { method: "POST" }).then(reload).catch((err: Error) => setError(err.message))}>Analyze resume</button>
         </header>
+        {upscaleResult ? (
+          <section className="account-card">
+            <h2>{upscaleResult.label} is saved</h2>
+            <p className="lede">This is a separate resume. Your public resume is unchanged until you choose this version.</p>
+            {upscaleResult.changes.map((change) => (
+              <p className="role" key={`${change.before}-${change.after}`}>
+                {change.before} → {change.after}
+              </p>
+            ))}
+            <pre className="version-resume">{upscaleResult.rendered}</pre>
+          </section>
+        ) : null}
         <div className="account-split">
           <section className="account-card">
             <h2>{data.review ? `Rating ${data.review.rating}` : "No review yet"}</h2>
@@ -1164,43 +1206,53 @@ export function ResumePage() {
                     );
                   }
                   return (
-                    <label className="check-row" key={item.id}>
-                      <input
-                        type="checkbox"
-                        disabled={item.kind !== "rewrite"}
-                        checked={selected.includes(item.id)}
-                        onChange={(event) =>
-                          setSelected((current) =>
-                            event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id),
-                          )
-                        }
-                      />
-                      <span>
-                        <strong>{item.title}</strong>
-                        <br />
-                        {item.detail}
-                      </span>
-                    </label>
+                    <article className="clarify-card" key={item.id}>
+                      <label className="check-row">
+                        <input
+                          type="checkbox"
+                          disabled={item.kind !== "rewrite"}
+                          checked={selected.includes(item.id)}
+                          onChange={(event) =>
+                            setSelected((current) =>
+                              event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id),
+                            )
+                          }
+                        />
+                        <span>
+                          <strong>{item.title}</strong>
+                          <br />
+                          {item.detail}
+                        </span>
+                      </label>
+                      {item.before ? <p className="role">Now: {item.before}</p> : null}
+                      {item.proposed ? <p className="role">Proposed: {item.proposed}</p> : null}
+                    </article>
                   );
                 })}
+                <p className="lede">Apply the checked changes to a new resume?</p>
                 <button
                   className="btn btn-primary btn-sm"
                   type="button"
                   disabled={!data.features.resume_upscale || !selected.length}
                   onClick={() =>
-                    void api("/api/resume/apply", {
+                    void api<{ label: string; rendered: string; changes?: { before: string; after: string }[] }>("/api/resume/apply", {
                       method: "POST",
                       body: JSON.stringify({ reviewId: data.review?.id, recommendationIds: selected }),
                     })
-                      .then(() => {
-                        setSelected([]);
-                        setMessage("New version saved.");
+                      .then((result) => {
+                        setUpscaleResult({
+                          label: result.label,
+                          rendered: result.rendered,
+                          changes: result.changes || [],
+                        });
+                        setOpenVersion("");
+                        setMessage(`${result.label} is ready to view.`);
                         return reload();
                       })
                       .catch((err: Error) => setError(err.message))
                   }
                 >
-                  {data.features.resume_upscale ? "Create version from selected" : "Upscale is not on this plan"}
+                  {data.features.resume_upscale ? "Apply selected changes" : "Upscale is not on this plan"}
                 </button>
               </>
             ) : (
@@ -1218,20 +1270,26 @@ export function ResumePage() {
               <article key={version.id} className="version-mini">
                 <strong>{version.label}</strong>
                 <p className="role">{version.active ? "Public resume" : version.kind}</p>
-                {!version.active ? (
-                  <button
-                    className="text-btn"
-                    type="button"
-                    onClick={() =>
-                      void api(`/api/resume/versions/${version.id}/activate`, { method: "POST" }).then(() => {
-                        setMessage("Public resume updated.");
-                        return reload();
-                      })
-                    }
-                  >
-                    Use this version
+                <div className="version-actions">
+                  <button className="text-btn" type="button" onClick={() => setOpenVersion((current) => current === version.id ? "" : version.id)}>
+                    {openVersion === version.id ? "Hide resume" : "View resume"}
                   </button>
-                ) : null}
+                  {!version.active ? (
+                    <button
+                      className="text-btn"
+                      type="button"
+                      onClick={() =>
+                        void api(`/api/resume/versions/${version.id}/activate`, { method: "POST" }).then(() => {
+                          setMessage("Public resume updated.");
+                          return reload();
+                        })
+                      }
+                    >
+                      Use this version
+                    </button>
+                  ) : null}
+                </div>
+                {openVersion === version.id ? <pre className="version-resume">{version.rendered || "This version has no text yet."}</pre> : null}
               </article>
             ))
             ) : (

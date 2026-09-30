@@ -5,6 +5,7 @@ export type Recommendation = {
   detail: string;
   kind: string;
   proposed?: string;
+  before?: string;
   path?: string;
   clarifyType?: string;
   answered?: boolean;
