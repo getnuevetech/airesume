@@ -2,6 +2,7 @@ import { db, id } from "./db.mjs";
 import { completeJson } from "./ai-run.mjs";
 import { migrate, publicPlan } from "./schema.mjs";
 import { deliverMail } from "./mail.mjs";
+import { fetchFeedListings, localPrimary, normalizeFeedUrl, publicFeedConfig, resolvePrimary } from "./feeds.mjs";
 import { holdJobDraft, reviewJobIntake } from "./job-intake.mjs";
 import { extractRequirements, matchJob } from "./match.mjs";
 import { authenticitySignals, normalizeJobListing } from "./job-schema.mjs";
