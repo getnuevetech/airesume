@@ -7,7 +7,7 @@ import { seedPromptRegistry } from "./prompt-registry.mjs";
 import { disableAllMfaPolicy, seedMfaPolicy } from "./mfa-policy.mjs";
 import { seedAdminAccessLevels } from "./admin-access.mjs";
 
-export const SCHEMA_VERSION = 29;
+export const SCHEMA_VERSION = 30;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -18,6 +18,7 @@ export const AI_FUNCTIONS = [
   { key: "job_categorize", label: "Job categorization", detail: "Assigns a category and role to each job." },
   { key: "job_requirements", label: "Job requirements", detail: "Extracts mandatory and preferred requirements before matching." },
   { key: "job_verify", label: "Job verification", detail: "Checks whether a listing looks active, duplicate, or unclear." },
+  { key: "job_intake", label: "Job intake review", detail: "Decides whether a feed row or pasted page is a real job before it is stored." },
   { key: "job_primary", label: "Primary recruiter", detail: "Finds the hiring company in a feed listing when the poster is an aggregator." },
   { key: "job_match", label: "Job match", detail: "Explains how a job fits the career profile." },
   { key: "image_enhance", label: "Photo enhancement", detail: "Chooses safe contrast, color, and sharpness for a headshot." },
@@ -460,6 +461,11 @@ export function migrate() {
     const assign = db.prepare("INSERT INTO ai_assignments (function_key, provider_id, enabled) VALUES (?, ?, 1)");
     for (const item of AI_FUNCTIONS) assign.run(item.key, providerId);
   }
+  const intakeProvider = db.prepare("SELECT id FROM ai_providers WHERE kind = 'deterministic' AND enabled = 1 LIMIT 1").get()
+    || db.prepare("SELECT id FROM ai_providers WHERE enabled = 1 LIMIT 1").get();
+  if (intakeProvider && !db.prepare("SELECT function_key FROM ai_assignments WHERE function_key = 'job_intake'").get()) {
+    db.prepare("INSERT INTO ai_assignments (function_key, provider_id, enabled) VALUES ('job_intake', ?, 1)").run(intakeProvider.id);
+  }
 
   if (!db.prepare("SELECT id FROM plans LIMIT 1").get()) {
     const insert = db.prepare(
@@ -583,6 +589,27 @@ export function migrate() {
     }
     if (dirty) db.prepare("UPDATE plans SET features = ? WHERE id = ?").run(JSON.stringify(features), plan.id);
   }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS job_intake_holds (
+      id TEXT PRIMARY KEY,
+      source_id TEXT DEFAULT '',
+      user_id TEXT DEFAULT '',
+      origin TEXT NOT NULL,
+      title TEXT DEFAULT '',
+      company TEXT DEFAULT '',
+      location TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      source_url TEXT DEFAULT '',
+      payload TEXT DEFAULT '{}',
+      reason TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending',
+      provider TEXT DEFAULT '',
+      model TEXT DEFAULT '',
+      created_at INTEGER NOT NULL,
+      decided_at INTEGER
+    );
+  `);
 
   const versionRow = db.prepare("SELECT version FROM schema_version LIMIT 1").get();
   const previous = versionRow?.version ?? 0;

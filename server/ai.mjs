@@ -48,6 +48,11 @@ Rules:
 
 const JOB_VERIFY_V1 = `Return JSON {"verification","note"}. verification must be one of: Active, Possible duplicate, Needs review, Third-party recruiter, Listing may be expired, Review recommended.`;
 
+const JOB_INTAKE_V1 = `You review a listing before it is stored for applicants. Return strict JSON {"useful":true|false,"reason":""}.
+Set useful to false when the text is a login wall, cookie banner, language picker, homepage, search results page, or any page that is not one specific open role.
+Set useful to true only when a candidate could prepare an application from this text.
+Do not invent a role, employer, or requirement that is not in the text.`;
+
 const JOB_PRIMARY_V1 = `Return JSON {"primaryCompany","primaryUrl","primaryEmail"}. Copy each value from the listing. If the listed company is the employer, primaryCompany is that company. Never invent a company, URL, or email.`;
 
 const JOB_MATCH_V1 = `Explain how this job fits the career profile.
@@ -86,6 +91,7 @@ export const DEFAULT_PROMPTS = {
   job_categorize: JOB_CATEGORIZE_V1,
   job_requirements: JOB_REQUIREMENTS_V1,
   job_verify: JOB_VERIFY_V1,
+  job_intake: JOB_INTAKE_V1,
   job_primary: JOB_PRIMARY_V1,
   job_match: JOB_MATCH_V1,
   image_enhance: IMAGE_ENHANCE_V1,

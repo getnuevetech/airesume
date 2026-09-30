@@ -15,6 +15,7 @@ const FUNCTION_META = [
   { key: "job_categorize", label: "Job categorization", detail: "Assigns a category and role to each job." },
   { key: "job_requirements", label: "Job requirements", detail: "Extracts mandatory and preferred requirements before matching." },
   { key: "job_verify", label: "Job verification", detail: "Checks whether a listing looks active, duplicate, or unclear." },
+  { key: "job_intake", label: "Job intake review", detail: "Decides whether a feed row or pasted page is a real job before it is stored." },
   { key: "job_primary", label: "Primary recruiter", detail: "Finds the hiring company in a feed listing when the poster is an aggregator." },
   { key: "job_match", label: "Job match", detail: "Explains how a job fits the career profile." },
   { key: "image_enhance", label: "Photo enhancement", detail: "Chooses safe contrast, color, and sharpness for a headshot." },
