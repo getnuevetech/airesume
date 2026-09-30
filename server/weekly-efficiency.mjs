@@ -5,6 +5,8 @@ import { startOfUtcWeek } from "./quota.mjs";
 
 const PREPARED = new Set(["Ready", "Review required"]);
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const ITEM_LIMIT = 5;
+const KIND_LABEL = { submitted: "Submitted", prepared: "Prepared", tracked: "Tracked" };
 
 function finiteStamp(value) {
   const stamp = Number(value);
@@ -24,11 +26,20 @@ function quotaLine(label, quota) {
   return `${label}: ${left} of ${limit} left.`;
 }
 
-function nextAction({ followUpsDue, ready, recommended }) {
+function activityKind(row, weekStart) {
+  const created = finiteStamp(row?.created_at);
+  const active = activityStamp(row);
+  if (active >= weekStart && isSubmittedStatus(row?.status)) return "submitted";
+  if (active >= weekStart && PREPARED.has(String(row?.status || ""))) return "prepared";
+  if (created >= weekStart) return "tracked";
+  return "";
+}
+
+function nextAction({ followUpsDue, ready, recommended, preparedHref }) {
   if (followUpsDue > 0) {
     const noun = followUpsDue === 1 ? "follow-up is" : "follow-ups are";
     return {
-      href: "/account/applications",
+      href: "/account/applications#follow-ups",
       title: "Send follow-ups",
       detail: `${followUpsDue} ${noun} due.`,
     };
@@ -36,7 +47,7 @@ function nextAction({ followUpsDue, ready, recommended }) {
   if (ready > 0) {
     const noun = ready === 1 ? "application is" : "applications are";
     return {
-      href: "/account/applications",
+      href: preparedHref || "/account/applications",
       title: "Finish Assisted Apply",
       detail: `${ready} ${noun} ready to submit.`,
     };
@@ -69,14 +80,30 @@ export function weeklyEfficiency({
   let submittedThisWeek = 0;
   let preparedThisWeek = 0;
   let trackedThisWeek = 0;
+  const ranked = [];
   for (const row of applications) {
     const created = finiteStamp(row?.created_at);
     const active = activityStamp(row);
     if (created >= weekStart) trackedThisWeek += 1;
-    if (active < weekStart) continue;
-    if (isSubmittedStatus(row?.status)) submittedThisWeek += 1;
-    else if (PREPARED.has(String(row?.status || ""))) preparedThisWeek += 1;
+    if (active >= weekStart && isSubmittedStatus(row?.status)) submittedThisWeek += 1;
+    else if (active >= weekStart && PREPARED.has(String(row?.status || ""))) preparedThisWeek += 1;
+    const kind = activityKind(row, weekStart);
+    const id = String(row?.id || "");
+    if (!kind || !id) continue;
+    ranked.push({
+      id,
+      title: String(row?.title || "Role"),
+      company: String(row?.company || ""),
+      status: String(row?.status || ""),
+      kind,
+      label: KIND_LABEL[kind],
+      href: `/account/applications#application-${id}`,
+      stamp: kind === "tracked" ? created : active,
+    });
   }
+  ranked.sort((a, b) => b.stamp - a.stamp || a.title.localeCompare(b.title));
+  const items = ranked.slice(0, ITEM_LIMIT).map(({ stamp: _stamp, ...item }) => item);
+  const preparedHref = ranked.find((item) => item.kind === "prepared")?.href || "";
   const quotas = [
     quotaLine("Match explanations", matchQuota),
     quotaLine("Resume reviews", reviewQuota),
@@ -88,10 +115,13 @@ export function weeklyEfficiency({
     preparedThisWeek,
     trackedThisWeek,
     followUpsDue: Number(followUpsDue) || 0,
+    items,
+    more: Math.max(0, ranked.length - items.length),
     next: nextAction({
       followUpsDue: Number(followUpsDue) || 0,
       ready: Number(ready) || 0,
       recommended: Number(recommended) || 0,
+      preparedHref,
     }),
     quotas,
   };

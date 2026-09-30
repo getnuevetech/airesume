@@ -43,7 +43,7 @@ test("follow-ups outrank ready applications", () => {
     ready: 3,
     recommended: 2,
   });
-  assert.equal(week.next.href, "/account/applications");
+  assert.equal(week.next.href, "/account/applications#follow-ups");
   assert.equal(week.next.title, "Send follow-ups");
   assert.match(week.next.detail, /1 follow-up is due/);
 });
@@ -59,6 +59,45 @@ test("recommended jobs outrank an empty tracker", () => {
   const week = weeklyEfficiency({ now: NOW, recommended: 1 });
   assert.equal(week.next.href, "/account/jobs");
   assert.equal(week.next.title, "Review recommended jobs");
+});
+
+test("this week names roles and opens the newest prepared application", () => {
+  const week = weeklyEfficiency({
+    now: NOW,
+    ready: 2,
+    applications: [
+      { id: "old", title: "Old role", company: "North", status: "Applied", created_at: BEFORE, updated_at: BEFORE },
+      { id: "sub", title: "Analyst", company: "North", status: "Applied", created_at: WEEK_START, updated_at: NOW },
+      { id: "prep-early", title: "Writer", company: "East", status: "Ready", created_at: WEEK_START, updated_at: WEEK_START + 10 },
+      { id: "prep-late", title: "Editor", company: "West", status: "Review required", created_at: WEEK_START, updated_at: NOW - 1 },
+      { id: "track", title: "Scout", company: "South", status: "Found", created_at: WEEK_START + 50, updated_at: WEEK_START + 50 },
+    ],
+  });
+  assert.deepEqual(week.items.map((item) => [item.id, item.kind, item.label]), [
+    ["sub", "submitted", "Submitted"],
+    ["prep-late", "prepared", "Prepared"],
+    ["track", "tracked", "Tracked"],
+    ["prep-early", "prepared", "Prepared"],
+  ]);
+  assert.equal(week.items[0].href, "/account/applications#application-sub");
+  assert.equal(week.more, 0);
+  assert.equal(week.next.href, "/account/applications#application-prep-late");
+});
+
+test("the week list keeps five roles and counts the rest", () => {
+  const applications = Array.from({ length: 6 }, (_, index) => ({
+    id: `app-${index}`,
+    title: `Role ${index}`,
+    company: "North",
+    status: "Found",
+    created_at: WEEK_START + index,
+    updated_at: WEEK_START + index,
+  }));
+  const week = weeklyEfficiency({ now: NOW, applications });
+  assert.equal(week.trackedThisWeek, 6);
+  assert.equal(week.items.length, 5);
+  assert.equal(week.items[0].id, "app-5");
+  assert.equal(week.more, 1);
 });
 
 test("an empty week points at the resume", () => {
