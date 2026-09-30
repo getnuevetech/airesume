@@ -68,6 +68,7 @@ export type AccountData = {
       verified_by_user?: boolean;
       source_fact_ids?: string[];
     }[];
+    skillFacts?: { name: string; verified: boolean; confidence: number | null }[];
     preferences: {
       salary?: string;
       workArrangement?: string;

@@ -1041,20 +1041,17 @@ function ProfileView({
             <h2>Skills</h2>
             <div className="chips">{profile.skills.map((skill) => <span className="chip" key={skill}>{skill}</span>)}</div>
           </section>
-          {(profile.facts || []).filter((fact) => fact.category === "skill" || /^SKILL-/i.test(fact.fact_id)).length ? (
+          {(profile.skillFacts || []).length ? (
             <section className="account-card">
               <h2>Facts that affect matching</h2>
               <p className="role">Edit skills above to correct these. Low-confidence unverified skills are ignored in match scores.</p>
               <ul className="fact-list">
-                {(profile.facts || [])
-                  .filter((fact) => fact.category === "skill" || /^SKILL-/i.test(fact.fact_id))
-                  .map((fact) => (
-                    <li key={fact.fact_id}>
-                      <strong>{fact.fact_id}</strong> · {fact.statement}
-                      {typeof fact.confidence === "number" ? ` · confidence ${Math.round(fact.confidence * 100)}%` : ""}
-                      {fact.verified_by_user ? " · verified" : ""}
-                    </li>
-                  ))}
+                {(profile.skillFacts || []).map((fact) => (
+                  <li key={fact.name}>
+                    <strong>{fact.name}</strong>
+                    {fact.verified ? " · Verified" : fact.confidence != null ? ` · ${Math.round(fact.confidence * 100)}% confidence` : ""}
+                  </li>
+                ))}
               </ul>
             </section>
           ) : null}

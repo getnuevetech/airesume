@@ -35,6 +35,28 @@ function list(items, limit) {
   return `${shown.slice(0, -1).join(", ")}, and ${shown[shown.length - 1]}`;
 }
 
+/** Skill facts for the profile. Ledger ids stay on the stored fact, not in this view. */
+export function presentSkillFacts(facts = []) {
+  const seen = new Set();
+  const out = [];
+  for (const fact of facts || []) {
+    const isSkill = fact?.category === "skill" || /^SKILL-/i.test(String(fact?.fact_id || ""));
+    if (!isSkill) continue;
+    const name = cleanName(fact?.statement);
+    if (!name || /^(SKILL|ACH|EXP|ID)-\d+$/i.test(name)) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const confidence = Number(fact?.confidence);
+    out.push({
+      name,
+      verified: Boolean(fact?.verified_by_user),
+      confidence: Number.isFinite(confidence) ? confidence : null,
+    });
+  }
+  return out;
+}
+
 export function presentMatch(match = {}) {
   const fromFacts = Array.isArray(match.matchedFacts) ? match.matchedFacts.map((item) => item?.skill) : [];
   const fits = names(fromFacts.length ? fromFacts : match.matched).slice(0, 6);
