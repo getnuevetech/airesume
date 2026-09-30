@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–Z are implemented (V is schema 29). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AC lets a candidate confirm one of those missing skills into the Fact Ledger. Slice AD writes that skill into the resume already prepared for the same job. Slice AE writes it into every resume already prepared for that candidate. Slice AF lists those skills on the profile without Fact Ledger ids. Slice AG lets a candidate confirm a high-demand insight gap into that same ledger. Admin MFA stays disabled for now and is not a beta blocker.
+Status: slices Q–Z are implemented (V is schema 29). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AC lets a candidate confirm one of those missing skills into the Fact Ledger. Slice AD writes that skill into the resume already prepared for the same job. Slice AE writes it into every resume already prepared for that candidate. Slice AF lists those skills on the profile without Fact Ledger ids. Slice AG lets a candidate confirm a high-demand insight gap into that same ledger. Slice AH draws account stats as charts and colors category scores so the account is easier to scan. Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
@@ -47,9 +47,10 @@ Q  CI on every pull request
                         → AE  Put that skill on every prepared resume
                           → AF  Show confirmed skills without ledger ids
                             → AG  Confirm a high-demand insight gap
+                              → AH  Chart the account stats and color the scores
 ```
 
-Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing. AC saves a confirmed gap onto the Fact Ledger and the active resume. AD updates the resume already prepared for that job so the confirmed skill is on it. AE updates every prepared resume for that candidate. AF shows those skills on the profile by name. AG confirms one insight gap into the Fact Ledger.
+Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing. AC saves a confirmed gap onto the Fact Ledger and the active resume. AD updates the resume already prepared for that job so the confirmed skill is on it. AE updates every prepared resume for that candidate. AF shows those skills on the profile by name. AG confirms one insight gap into the Fact Ledger. AH replaces plain stat numbers with rings and bars, and shows category scores in color.
 
 ---
 
@@ -340,6 +341,24 @@ Bootstrap and the README tell operators to open `http://<ip>/` and “use http, 
 
 ---
 
+### Slice AH — Chart the account and color the scores
+
+**Goal:** Account stats were numbers in boxes, and category outlook scores sat in black pills that were hard to read. The account pages looked flat.
+
+**Change**
+
+- Overview, this week, insights, jobs, and the tracker draw counts as bars and rates as rings. The number stays next to each mark.
+- Category outlook is a colored bar plus a tinted score. Green, teal, amber, orange, and rose follow the same bands as match labels.
+- Job scores in the account use that same tint. The account background, page header, and active nav item pick up the green and teal already used on the marketing site.
+
+**Acceptance**
+
+- Insights category percentages are colored text on a light tint, with a bar in the same color.
+- Overview and insights show a ring or a bar for each stat, with the number still visible.
+- The account header and active section are visibly colored.
+
+---
+
 ## Ops the repo cannot finish
 
 These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them executable.
@@ -357,4 +376,4 @@ These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them
 
 ## Done when
 
-Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, Z, AA, AC, AD, AE, AF, and AG are in the product and are not launch gates.
+Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, Z, AA, AC, AD, AE, AF, AG, and AH are in the product and are not launch gates.
