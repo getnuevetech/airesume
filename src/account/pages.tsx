@@ -1270,24 +1270,26 @@ export function ResumePage() {
               <article key={version.id} className="version-mini">
                 <strong>{version.label}</strong>
                 <p className="role">{version.active ? "Public resume" : version.kind}</p>
-                <button className="text-btn" type="button" onClick={() => setOpenVersion((current) => current === version.id ? "" : version.id)}>
-                  {openVersion === version.id ? "Hide resume" : "View resume"}
-                </button>
-                {openVersion === version.id ? <pre className="version-resume">{version.rendered || "This version has no text yet."}</pre> : null}
-                {!version.active ? (
-                  <button
-                    className="text-btn"
-                    type="button"
-                    onClick={() =>
-                      void api(`/api/resume/versions/${version.id}/activate`, { method: "POST" }).then(() => {
-                        setMessage("Public resume updated.");
-                        return reload();
-                      })
-                    }
-                  >
-                    Use this version
+                <div className="version-actions">
+                  <button className="text-btn" type="button" onClick={() => setOpenVersion((current) => current === version.id ? "" : version.id)}>
+                    {openVersion === version.id ? "Hide resume" : "View resume"}
                   </button>
-                ) : null}
+                  {!version.active ? (
+                    <button
+                      className="text-btn"
+                      type="button"
+                      onClick={() =>
+                        void api(`/api/resume/versions/${version.id}/activate`, { method: "POST" }).then(() => {
+                          setMessage("Public resume updated.");
+                          return reload();
+                        })
+                      }
+                    >
+                      Use this version
+                    </button>
+                  ) : null}
+                </div>
+                {openVersion === version.id ? <pre className="version-resume">{version.rendered || "This version has no text yet."}</pre> : null}
               </article>
             ))
             ) : (
