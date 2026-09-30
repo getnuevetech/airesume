@@ -24,8 +24,26 @@ export function assertPublicHttpUrl(value) {
   return parsed.toString();
 }
 
+function decodeHtml(value) {
+  let current = String(value || "");
+  for (let pass = 0; pass < 2; pass += 1) {
+    const next = current
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+    if (next === current) break;
+    current = next;
+  }
+  return current;
+}
+
 export function htmlToText(html) {
-  return String(html || "")
+  const decoded = decodeHtml(html);
+  return decoded
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<br\s*\/?>/gi, "\n")
@@ -33,12 +51,8 @@ export function htmlToText(html) {
     .replace(/<h[1-6][^>]*>/gi, "\n")
     .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
@@ -91,7 +105,11 @@ export function parseJobPaste(input = {}) {
   if (!company) company = "Unknown company";
   if (!title) title = "Untitled role";
   const location = String(input.location || field(text, ["location", "based in", "office"]) || "").trim();
-  const description = text || `${title}\n${company}`;
+  const description = text
+    .split(/\n/)
+    .filter((line) => !/^\s*(title|role|position|job title|company|employer|organization|org|location|based in|office)\s*[:\-]\s+/i.test(line))
+    .join("\n")
+    .trim() || `${title}\n${company}`;
   const pay = salaryRange(description);
   const skillsFromText = extractSkillsFromDescription(description);
   const skills = Array.isArray(input.skills) && input.skills.length ? input.skills.map(String) : skillsFromText;

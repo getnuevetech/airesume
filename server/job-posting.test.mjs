@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { compareJobRank, presentJobPosting } from "./job-posting.mjs";
-import { extractListingFromHtml, listingApiUrl, listingFromJson } from "./job-import.mjs";
+import { extractListingFromHtml, listingApiUrl, listingFromJson, parseJobPaste } from "./job-import.mjs";
 
 const wall = "Die steigenden Energiekosten treffen jeden Haushalt. Wir senken, was gerade am meisten wehtut. Die Fakten. Start: 15.10. Gehalt: €40.000–50.000 brutto pro Jahr Arbeitszeit: Vollzeit (40h/w) und flexible Arbeitszeiten Standort: Büro an der Spree, Berlin Benefits: Learning-Budget; Jobticket; Kita-Zuschuss Du gestaltest mit unserem People Lead das Wachstum unseres Sales Teams. End-to-End Recruiting mit Fokus auf Sales-Positionen. Was Du mitbringen solltest: Mind. 1 Jahr Erfahrung im Recruiting und Praxis im Active Sourcing.";
 
@@ -17,6 +17,15 @@ test("a one-line posting splits into a summary, facts, and sections", () => {
   const rendered = [posting.summary, ...posting.sections.flatMap((section) => [...section.paragraphs, ...section.items])].join(" ");
   assert.equal(rendered.includes(wall), false);
   assert.ok(posting.sections.every((section) => section.paragraphs.every((paragraph) => paragraph.length < 500)));
+});
+
+test("section headings and bullets stay separate", () => {
+  const posting = presentJobPosting(`GitLab builds software. Teams ship faster.\n\nWhat you'll do\n- Diagnose the real problem before writing code.\n- Ship a working prototype in days.\n\nWhat you'll bring\n- Python and REST APIs.`);
+  const role = posting.sections.find((section) => section.heading === "The role");
+  const bring = posting.sections.find((section) => section.heading === "What you bring");
+  assert.ok(role?.items.some((item) => /Diagnose/.test(item)));
+  assert.ok(bring?.items.some((item) => /Python/.test(item)));
+  assert.match(posting.summary, /GitLab builds/);
 });
 
 test("imported jobs sort ahead of a stronger catalog match", () => {
@@ -55,6 +64,29 @@ test("an ordinary careers page still yields a title and the article text", () =>
   assert.equal(listing.title, "Account Executive");
   assert.match(listing.text, /weekly forecast/);
   assert.equal(/Menu Pricing Login/.test(listing.text), false);
+});
+
+test("escaped job HTML becomes readable text and field labels stay out of the description", () => {
+  const listing = listingFromJson(
+    {
+      title: "AI Engineer",
+      company_name: "GitLab",
+      location: { name: "Remote" },
+      content: "&lt;div class=&quot;content-intro&quot;&gt;&lt;p&gt;GitLab enables organizations to increase developer productivity.&lt;/p&gt;&lt;h2&gt;Requirements&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;Python&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;",
+    },
+    "https://job-boards.greenhouse.io/gitlab/jobs/1",
+  );
+  assert.equal(listing.text.includes("<div"), false);
+  assert.equal(listing.text.includes("&lt;"), false);
+  assert.match(listing.text, /developer productivity/);
+  assert.match(listing.text, /Python/);
+  const draft = parseJobPaste({
+    text: `Title: AI Engineer\nCompany: GitLab\n${listing.text}`,
+    title: "AI Engineer",
+    company: "GitLab",
+  });
+  assert.equal(draft.description.includes("Title:"), false);
+  assert.equal(draft.skills.includes("Title: AI Engineer"), false);
 });
 
 test("employer board links map to the public job document", () => {

@@ -12,6 +12,34 @@ const INLINE_LABELS = [
 
 const FACT_HEADINGS = new Set(["Pay", "Schedule", "Location", "Start"]);
 
+const BARE_HEADINGS = [
+  [/^(an overview of this role|responsibilities|what you.?ll do|the role|aufgaben|deine aufgaben)$/i, "The role"],
+  [/^(requirements|qualifications|preferred requirements|what you.?ll bring|what you bring|anforderungen)$/i, "What you bring"],
+  [/^(benefits|what we offer|wir bieten)$/i, "Benefits"],
+  [/^(about the team|about the company|about us|über uns)$/i, "About"],
+];
+
+function bareHeading(block) {
+  const line = String(block || "").replace(/\s+/g, " ").trim();
+  if (!line || line.length > 60 || /[.!?]/.test(line)) return "";
+  for (const [pattern, heading] of BARE_HEADINGS) {
+    if (pattern.test(line)) return heading;
+  }
+  return "";
+}
+
+function splitBullets(text) {
+  const items = [];
+  const prose = [];
+  for (const line of String(text || "").split(/\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (/^[-•]\s+/.test(trimmed)) items.push(trimmed.replace(/^[-•]\s+/, "").trim());
+    else prose.push(trimmed);
+  }
+  return { items, prose: prose.join(" ") };
+}
+
 function markInlineLabels(text) {
   let next = String(text || "");
   for (const [pattern, replacement] of INLINE_LABELS) {
@@ -154,23 +182,46 @@ export function presentJobPosting(description, extras = {}) {
   const intro = [];
   const facts = [];
   const sections = [];
+  let pending = "";
+  function pushSection(heading, body) {
+    const bullets = splitBullets(body);
+    const listed = listItems(bullets.prose);
+    const prose = listed.items.length ? listed.rest : bullets.prose;
+    sections.push({
+      heading,
+      paragraphs: paragraphsFromSentences(readablePieces(prose)),
+      items: [...bullets.items, ...listed.items],
+    });
+  }
   for (const block of blocks) {
-    const labeled = headingOf(block.replace(/\s+/g, " ").trim());
-    if (!labeled) {
-      intro.push(block);
+    const lines = block.split(/\n/);
+    const leading = bareHeading(lines[0]);
+    if (leading && lines.length > 1) {
+      pushSection(leading, lines.slice(1).join("\n"));
+      pending = "";
       continue;
     }
+    const bare = leading;
+    if (bare) {
+      pending = bare;
+      continue;
+    }
+    const labeled = headingOf(block.replace(/\s+/g, " ").trim());
+    if (!labeled) {
+      if (pending) {
+        pushSection(pending, block);
+        pending = "";
+      } else {
+        intro.push(block);
+      }
+      continue;
+    }
+    pending = "";
     if (FACT_HEADINGS.has(labeled.heading) && labeled.body.length <= 160) {
       facts.push({ label: labeled.heading, value: labeled.body });
       continue;
     }
-    const listed = listItems(labeled.body);
-    const prose = listed.items.length ? listed.rest : labeled.body;
-    sections.push({
-      heading: labeled.heading,
-      paragraphs: paragraphsFromSentences(readablePieces(prose)),
-      items: listed.items,
-    });
+    pushSection(labeled.heading, labeled.body);
   }
   const introSentences = readablePieces(intro.join(" "));
   const summarySentences = introSentences.slice(0, 2);
