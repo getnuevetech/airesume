@@ -29,6 +29,8 @@ export function htmlToText(html) {
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "\n- ")
+    .replace(/<h[1-6][^>]*>/gi, "\n")
     .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
@@ -158,29 +160,205 @@ export function extractSkillsFromDescription(description) {
   }).slice(0, 16);
 }
 
-export async function fetchJobUrl(url) {
-  const safe = assertPublicHttpUrl(url);
+const BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+
+function metaContent(html, key) {
+  const source = String(html || "");
+  const patterns = [
+    new RegExp(`<meta[^>]+(?:property|name)=["']${key}["'][^>]+content=["']([^"']+)["']`, "i"),
+    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${key}["']`, "i"),
+  ];
+  for (const pattern of patterns) {
+    const match = source.match(pattern);
+    if (match) return match[1].trim();
+  }
+  return "";
+}
+
+function tagText(html, tag) {
+  const match = String(html || "").match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i"));
+  return match ? htmlToText(match[1]) : "";
+}
+
+function cleanTitle(value) {
+  return String(value || "")
+    .replace(/\s+[|–—-]\s+.*$/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+}
+
+function organizationName(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return String(value.name || "");
+}
+
+function locationName(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  const address = value.address;
+  const source = address && typeof address === "object" ? address : value;
+  if (typeof source === "string") return source;
+  const parts = [source.addressLocality, source.addressRegion, source.addressCountry]
+    .map((part) => (typeof part === "string" ? part : part?.name || ""))
+    .filter(Boolean);
+  if (parts.length) return parts.join(", ");
+  return String(value.name || source.name || "");
+}
+
+function collectJobPostings(node, found) {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    node.forEach((item) => collectJobPostings(item, found));
+    return;
+  }
+  const type = node["@type"];
+  const types = Array.isArray(type) ? type : [type];
+  if (types.some((item) => String(item || "").toLowerCase() === "jobposting")) found.push(node);
+  if (node["@graph"]) collectJobPostings(node["@graph"], found);
+}
+
+function listingFromFields({ title, company, location, description, url }) {
+  const cleanDescription = htmlToText(description || "").slice(0, 20000);
+  return {
+    url: String(url || ""),
+    title: cleanTitle(title),
+    company: String(company || "").slice(0, 120),
+    location: String(location || "").slice(0, 120),
+    text: cleanDescription,
+  };
+}
+
+export function listingApiUrl(value) {
+  let parsed;
+  try {
+    parsed = new URL(String(value || "").trim());
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+  const parts = parsed.pathname.split("/").filter(Boolean);
+  if ((host === "boards.greenhouse.io" || host === "job-boards.greenhouse.io") && parts[1] === "jobs" && parts[0] && parts[2]) {
+    return `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(parts[0])}/jobs/${encodeURIComponent(parts[2])}`;
+  }
+  if (host === "jobs.lever.co" && parts[0] && parts[1]) {
+    return `https://api.lever.co/v0/postings/${encodeURIComponent(parts[0])}/${encodeURIComponent(parts[1])}`;
+  }
+  return null;
+}
+
+export function listingFromJson(body, pageUrl = "") {
+  let data;
+  try {
+    data = typeof body === "string" ? JSON.parse(body) : body;
+  } catch {
+    return null;
+  }
+  const job = data?.title ? data : data?.job || data?.posting || null;
+  if (!job?.title) return null;
+  return listingFromFields({
+    title: job.title,
+    company: organizationName(job.company) || job.company_name || "",
+    location: locationName(job.location) || job.categories?.location || "",
+    description: job.content || job.descriptionPlain || job.description || "",
+    url: job.absolute_url || job.hostedUrl || job.applyUrl || pageUrl,
+  });
+}
+
+export function extractListingFromHtml(html, pageUrl = "") {
+  const source = String(html || "");
+  const postings = [];
+  for (const match of source.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      collectJobPostings(JSON.parse(match[1]), postings);
+    } catch {
+      // Ignore broken structured data and keep reading the page.
+    }
+  }
+  const schema = postings[0];
+  const schemaListing = schema?.title
+    ? listingFromFields({
+        title: schema.title,
+        company: organizationName(schema.hiringOrganization),
+        location: locationName(schema.jobLocation),
+        description: schema.description,
+        url: schema.url || pageUrl,
+      })
+    : null;
+  if (schemaListing && schemaListing.text.length >= 40) return schemaListing;
+  const title = schemaListing?.title || cleanTitle(metaContent(source, "og:title") || tagText(source, "title"));
+  const description = metaContent(source, "og:description") || metaContent(source, "description");
+  const main = source.match(/<(article|main)[^>]*>([\s\S]*?)<\/\1>/i);
+  const pageText = htmlToText(main ? main[2] : source);
+  const text = pageText.length >= 40 ? pageText : [description, pageText].filter(Boolean).join("\n\n");
+  if (!title && text.length < 40) return null;
+  return listingFromFields({
+    title,
+    company: schemaListing?.company || "",
+    location: schemaListing?.location || "",
+    description: text,
+    url: schemaListing?.url || pageUrl,
+  });
+}
+
+async function readResponse(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
-    const response = await fetch(safe, {
+    const response = await fetch(url, {
       signal: controller.signal,
       redirect: "follow",
       headers: {
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "User-Agent": "JobPilot/1.0 (+paste-import)",
+        Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+        "User-Agent": BROWSER_UA,
       },
     });
     if (!response.ok) throw new Error(`Could not fetch that listing (${response.status}).`);
     const contentType = String(response.headers.get("content-type") || "");
     const body = await response.text();
-    const text = /html/i.test(contentType) || /<html/i.test(body) ? htmlToText(body) : body;
-    if (!text || text.length < 40) throw new Error("That page did not include enough job text to import.");
-    return { url: safe, text: text.slice(0, 20000) };
+    return { contentType, body, url: response.url || url };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function listingFromBody(body, contentType, pageUrl) {
+  const jsonLike = /json/i.test(contentType) || /^\s*[{[]/.test(body);
+  if (jsonLike) {
+    const listing = listingFromJson(body, pageUrl);
+    if (listing?.title && listing.text.length >= 40) return listing;
+  }
+  if (/html/i.test(contentType) || /<html/i.test(body) || /<script/i.test(body)) {
+    return extractListingFromHtml(body, pageUrl);
+  }
+  const text = String(body || "").trim();
+  if (text.length < 40) return null;
+  return listingFromFields({ title: "", company: "", location: "", description: text, url: pageUrl });
+}
+
+export async function fetchJobUrl(url) {
+  const safe = assertPublicHttpUrl(url);
+  try {
+    const api = listingApiUrl(safe);
+    if (api) {
+      try {
+        const apiResponse = await readResponse(api);
+        const fromApi = listingFromBody(apiResponse.body, apiResponse.contentType, safe);
+        if (fromApi?.text && fromApi.text.length >= 40) return fromApi;
+      } catch {
+        // The public board was unreachable. Read the page the user pasted.
+      }
+    }
+    const response = await readResponse(safe);
+    const listing = listingFromBody(response.body, response.contentType, response.url || safe);
+    if (!listing?.text || listing.text.length < 40) {
+      throw new Error("We couldn't read a job posting on that page. Paste the description in the box below and import again.");
+    }
+    return listing;
   } catch (error) {
     if (error?.name === "AbortError") throw new Error("Timed out fetching that listing.");
     throw error instanceof Error ? error : new Error("Could not fetch that listing.");
-  } finally {
-    clearTimeout(timer);
   }
 }

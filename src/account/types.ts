@@ -35,6 +35,12 @@ export type AccountJob = {
   category: string;
   verification: string;
   description: string;
+  posting?: {
+    summary: string;
+    facts: { label: string; value: string }[];
+    sections: { heading: string; paragraphs: string[]; items: string[] }[];
+  };
+  imported?: boolean;
   score: number;
   label: string;
   explanation: string;

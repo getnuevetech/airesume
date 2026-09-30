@@ -76,17 +76,23 @@ export function registerApplications(app, ctx) {
     try {
       let text = String(req.body.text || "");
       let sourceUrl = String(req.body.url || "").trim();
+      let fetchedTitle = "";
+      let fetchedCompany = "";
+      let fetchedLocation = "";
       if (sourceUrl) {
         const fetched = await fetchJobUrl(sourceUrl);
-        sourceUrl = fetched.url;
+        sourceUrl = fetched.url || sourceUrl;
+        fetchedTitle = fetched.title || "";
+        fetchedCompany = fetched.company || "";
+        fetchedLocation = fetched.location || "";
         text = text ? `${text}\n\n${fetched.text}` : fetched.text;
       }
       const draft = parseJobPaste({
         text,
         url: sourceUrl,
-        title: req.body.title,
-        company: req.body.company,
-        location: req.body.location,
+        title: req.body.title || fetchedTitle,
+        company: req.body.company || fetchedCompany,
+        location: req.body.location || fetchedLocation,
       });
       let source = db.prepare("SELECT * FROM job_sources WHERE kind = 'paste' LIMIT 1").get();
       if (!source) {

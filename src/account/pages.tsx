@@ -1500,23 +1500,54 @@ export function InvitesPage() {
   );
 }
 
+function JobPosting({ job }: { job: AccountData["jobs"][number] }) {
+  const posting = job.posting;
+  if (!posting) return <p className="job-summary">{job.description}</p>;
+  return (
+    <div className="job-posting">
+      {posting.facts.length ? (
+        <div className="job-facts">
+          {posting.facts.map((fact) => (
+            <span className="job-fact" key={`${fact.label}-${fact.value}`}>{fact.label}: {fact.value}</span>
+          ))}
+        </div>
+      ) : null}
+      {posting.summary ? <p className="job-summary">{posting.summary}</p> : null}
+      {posting.sections.map((section) => (
+        <section className="job-section" key={section.heading}>
+          <h3>{section.heading}</h3>
+          {section.items?.length ? (
+            <ul>{section.items.map((item) => <li key={item}>{item}</li>)}</ul>
+          ) : section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export function JobsPage() {
   const { data, reload, setError, setMessage } = useAccount();
   const [pasteText, setPasteText] = useState("");
   const [pasteUrl, setPasteUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [importedId, setImportedId] = useState("");
+  useEffect(() => {
+    if (!importedId || !data) return;
+    document.getElementById(`job-${importedId}`)?.scrollIntoView({ block: "start" });
+  }, [importedId, data]);
   if (!data) return null;
 
   async function importJob(action: "" | "prepare" | "track") {
     setBusy(true);
     try {
-      await api("/api/jobs/paste", {
+      const result = await api<{ job: { id: string; title: string } }>("/api/jobs/paste", {
         method: "POST",
         body: JSON.stringify({ text: pasteText, url: pasteUrl, action }),
       });
       setPasteText("");
       setPasteUrl("");
-      setMessage(action === "prepare" ? "Job imported and prepared." : action === "track" ? "Job imported and tracked." : "Job imported.");
+      setImportedId(result.job.id);
+      setMessage(action === "prepare" ? `${result.job.title} is at the top of your list and prepared.` : action === "track" ? `${result.job.title} is at the top of your list.` : `${result.job.title} is at the top of your list.`);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not import that job.");
@@ -1539,9 +1570,9 @@ export function JobsPage() {
           </div>
         </header>
         <section className="account-card">
-          <h2>Paste a job</h2>
-          <p className="lede">Drop in a listing URL or the full description. We extract requirements and score it against your resume.</p>
-          <label className="field"><span>Listing URL</span><input value={pasteUrl} onChange={(event) => setPasteUrl(event.target.value)} placeholder="https://..." /></label>
+          <h2>Add a job</h2>
+          <p className="lede">Paste any job link. If the page is private, paste the description instead. The role you add stays at the top of this list.</p>
+          <label className="field"><span>Job link</span><input value={pasteUrl} onChange={(event) => setPasteUrl(event.target.value)} placeholder="https://company.com/jobs/..." /></label>
           <label className="field"><span>Or paste description</span><textarea rows={5} value={pasteText} onChange={(event) => setPasteText(event.target.value)} placeholder={"Title\nCompany\nRequirements..."} /></label>
           <div className="job-actions">
             <button className="btn btn-primary btn-sm" type="button" disabled={busy || (!pasteText.trim() && !pasteUrl.trim())} onClick={() => void importJob("")}>Import</button>
@@ -1556,14 +1587,15 @@ export function JobsPage() {
         {data.jobs.map((job) => {
           const application = data.applications.find((item) => item.jobId === job.id);
           return (
-          <article className="account-card" key={job.id}>
+          <article className="account-card job-listing" id={`job-${job.id}`} key={job.id}>
             <div className="job-card" style={{ padding: 0, boxShadow: "none", background: "transparent" }}>
             <div>
-              <p className="role">{job.category} · {job.verification}</p>
+              <p className="role">{[job.imported ? "Added by you" : "", job.category, job.verification].filter(Boolean).join(" · ")}</p>
               <h2>{job.title}</h2>
-              <p>{job.applyCompany || job.company} · {job.location || job.remoteType}</p>
+              <p>{job.applyCompany || job.company}{job.location || job.remoteType ? ` · ${job.location || job.remoteType}` : ""}</p>
               {job.viaCompany ? <p className="role">Listed by {job.viaCompany}{job.sourceName ? ` on ${job.sourceName}` : ""}. This application goes to {job.applyCompany}.</p> : null}
-              <p className="lede">{job.description}</p>
+              {job.primaryUrl ? <p><a href={job.primaryUrl} target="_blank" rel="noreferrer">Open original listing</a></p> : null}
+              <JobPosting job={job} />
               {job.explanation ? <p className="role">{job.label ? `${job.label}: ` : ""}{job.explanation}</p> : null}
               {job.explanationLocked ? <p className="role">Explanation locked — weekly Free/Starter quota reached. Upgrade for more.</p> : null}
               <p className="role">
