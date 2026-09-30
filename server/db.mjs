@@ -14,8 +14,8 @@ export const uploadsDir = join(root, "uploads");
 mkdirSync(uploadsDir, { recursive: true });
 
 export const db = new DatabaseSync(join(root, "jobpilot.sqlite"));
-db.exec("PRAGMA journal_mode = WAL");
 db.exec("PRAGMA busy_timeout = 5000");
+db.exec("PRAGMA journal_mode = WAL");
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
