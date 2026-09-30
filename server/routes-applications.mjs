@@ -11,6 +11,7 @@ import { computeApplicationReadiness } from "./readiness.mjs";
 import { ensureFollowUpReminder } from "./follow-ups.mjs";
 import { AUTO_APPLY_AUTH_VERSION, autoApplyAuthorizationPayload, validateAutoApplyEnable } from "./auto-apply-auth.mjs";
 import { isSilentAutoApplyEnabled } from "./prompt-registry.mjs";
+import { confirmListedSkill } from "./confirm-skill.mjs";
 
 export function registerApplications(app, ctx) {
   const {
@@ -25,6 +26,8 @@ export function registerApplications(app, ctx) {
     employerDelivery,
     autoCapUsed,
     canAutoApply,
+    renderDocument,
+    audit,
   } = ctx;
 
   app.post("/api/applications", async (req, res) => {
@@ -533,6 +536,73 @@ export function registerApplications(app, ctx) {
       title: job?.title || "",
     });
     res.json({ ok: true });
+  });
+
+  app.post("/api/jobs/:id/confirm-skill", (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    if (!requireFeature(user, "profile_edit", res)) return;
+    const job = db.prepare("SELECT * FROM jobs WHERE id = ? AND active = 1").get(String(req.params.id || ""));
+    const profile = db.prepare("SELECT * FROM profiles WHERE user_id = ?").get(user.id);
+    const version = activeVersion(user.id);
+    if (!job || !profile || !version) {
+      res.status(400).json({ error: "That job is not available." });
+      return;
+    }
+    const document = parse(version.document, {});
+    const facts = parse(profile.facts, []);
+    const match = matchJob(document, parse(profile.preferences, {}), job, { facts });
+    let result;
+    try {
+      result = confirmListedSkill({
+        profile: {
+          summary: profile.summary || "",
+          skills: parse(profile.skills, []),
+          employment: parse(profile.employment, []),
+          education: parse(profile.education, []),
+        },
+        facts,
+        document,
+        missing: match.missing,
+        skill: req.body?.skill,
+      });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Could not confirm that skill." });
+      return;
+    }
+    if (!result.already) {
+      db.prepare(
+        "UPDATE profiles SET summary = ?, skills = ?, employment = ?, facts = ?, updated_at = ? WHERE user_id = ?",
+      ).run(
+        result.profile.summary || "",
+        JSON.stringify(result.profile.skills || []),
+        JSON.stringify(result.profile.employment || []),
+        JSON.stringify(result.facts || []),
+        Date.now(),
+        user.id,
+      );
+      db.prepare("UPDATE resume_versions SET document = ?, rendered = ? WHERE id = ?").run(
+        JSON.stringify(result.document),
+        renderDocument(result.document),
+        version.id,
+      );
+      audit?.({
+        userId: user.id,
+        functionName: "confirm_skill",
+        provider: "rules",
+        model: "fact-ledger",
+        status: "stored",
+        detail: result.fact?.fact_id || result.skill,
+      });
+    }
+    res.json({
+      ok: true,
+      already: Boolean(result.already),
+      skill: result.skill,
+      message: result.already
+        ? `${result.skill} is already on your resume.`
+        : `${result.skill} is saved to your Fact Ledger and resume.`,
+    });
   });
 
   app.put("/api/account/auto-apply", (req, res) => {

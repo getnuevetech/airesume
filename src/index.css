@@ -1395,6 +1395,8 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
 .match-fit { margin-top: 12px; }
 .match-line { margin: 0 0 6px; font-size: 14px; line-height: 1.45; color: #24344a; }
 .match-line span { font-weight: 700; color: #16324f; margin-right: 8px; }
+.skill-confirm { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; justify-content: flex-start; }
+.skill-confirm .btn { height: 34px; }
 .identity-card { display: flex; gap: 16px; align-items: center; }
 .identity-card img { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; }
 .experience-block { padding: 8px 0 12px; border-top: 1px solid #f0f3f6; }

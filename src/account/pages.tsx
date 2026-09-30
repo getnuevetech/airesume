@@ -1526,16 +1526,45 @@ function JobPosting({ job }: { job: AccountData["jobs"][number] }) {
   );
 }
 
-function MatchFit({ job }: { job: AccountData["jobs"][number] }) {
+function MatchFit({
+  job,
+  canConfirm,
+  onConfirm,
+}: {
+  job: AccountData["jobs"][number];
+  canConfirm: boolean;
+  onConfirm: (skill: string) => Promise<void>;
+}) {
+  const [pending, setPending] = useState("");
   if (job.explanationLocked) {
     return <p className="role">Explanation locked — weekly Free/Starter quota reached. Upgrade for more.</p>;
   }
   const fit = job.fit;
   if (!fit) return null;
+  async function confirm(skill: string) {
+    setPending(skill);
+    try {
+      await onConfirm(skill);
+    } finally {
+      setPending("");
+    }
+  }
   return (
     <div className="match-fit">
       {fit.fits.length ? <p className="match-line"><span>Fits your resume</span>{fit.fits.join(" · ")}</p> : null}
       {fit.gaps.length ? <p className="match-line"><span>Missing</span>{fit.gaps.join(" · ")}</p> : null}
+      {canConfirm && fit.gaps.length ? (
+        <>
+          <p className="role">Only confirm a skill from real experience. It is saved to the Fact Ledger.</p>
+          <div className="skill-confirm">
+            {fit.gaps.map((skill) => (
+              <button className="btn btn-ghost btn-sm" type="button" key={skill} disabled={Boolean(pending)} onClick={() => void confirm(skill)}>
+                {pending === skill ? "Saving…" : `I have ${skill}`}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
       {fit.notes.map((note) => <p className="role" key={note}>{note}</p>)}
       {!fit.fits.length && !fit.gaps.length ? <p className="role">{fit.summary}</p> : null}
     </div>
@@ -1553,6 +1582,19 @@ export function JobsPage() {
     document.getElementById(`job-${importedId}`)?.scrollIntoView({ block: "start" });
   }, [importedId, data]);
   if (!data) return null;
+
+  async function confirmSkill(jobId: string, skill: string) {
+    try {
+      const result = await api<{ message?: string }>(`/api/jobs/${jobId}/confirm-skill`, {
+        method: "POST",
+        body: JSON.stringify({ skill }),
+      });
+      setMessage(result.message || `${skill} is saved to your Fact Ledger.`);
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not confirm that skill.");
+    }
+  }
 
   async function importJob(action: "" | "prepare" | "track") {
     setBusy(true);
@@ -1617,7 +1659,7 @@ export function JobsPage() {
               {job.viaCompany ? <p className="role">Listed by {job.viaCompany}{job.sourceName ? ` on ${job.sourceName}` : ""}. This application goes to {job.applyCompany}.</p> : null}
               {job.primaryUrl ? <p><a href={job.primaryUrl} target="_blank" rel="noreferrer">Open original listing</a></p> : null}
               <JobPosting job={job} />
-              <MatchFit job={job} />
+              <MatchFit job={job} canConfirm={Boolean(data.features.profile_edit)} onConfirm={(skill) => confirmSkill(job.id, skill)} />
             </div>
             <div className="job-side">
               <span className="match-badge">{job.score}%</span>

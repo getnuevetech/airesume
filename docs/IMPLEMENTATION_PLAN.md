@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–Z are implemented (V is schema 29). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Admin MFA stays disabled for now and is not a beta blocker.
+Status: slices Q–Z are implemented (V is schema 29). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AC lets a candidate confirm one of those missing skills into the Fact Ledger. Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
@@ -42,9 +42,10 @@ Q  CI on every pull request
               → X  Name the roles behind this week's counts
                 → Z  Show the tailored resume after Assisted Apply
                   → AA  Show a readable match on the job
+                    → AC  Confirm a missing skill
 ```
 
-Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing.
+Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing. AC saves a confirmed gap onto the Fact Ledger and the active resume.
 
 ---
 
@@ -245,6 +246,24 @@ Bootstrap and the README tell operators to open `http://<ip>/` and “use http, 
 
 ---
 
+### Slice AC — Confirm a missing skill
+
+**Goal:** A missing skill on a job card is only useful if the candidate can confirm it from real experience. That exact skill is saved to the Fact Ledger and the active resume, and the next match counts it.
+
+**Change**
+
+- `confirmListedSkill` accepts a skill only when it is one of this listing’s gaps. The stored spelling is the listing’s spelling.
+- `POST /api/jobs/:id/confirm-skill` recomputes the match for the signed-in user and writes the profile, the verified skill fact, and the active resume. Confirming a skill is profile editing, so it stays on every plan.
+- The job card shows “I have {skill}” under each shown gap. A locked explanation does not show those buttons.
+
+**Acceptance**
+
+- A skill that is not a gap on that listing is rejected.
+- Confirming Roadmapping adds a verified skill fact and the resume skill.
+- Confirming the same skill again does not add a second fact.
+
+---
+
 ## Ops the repo cannot finish
 
 These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them executable.
@@ -262,4 +281,4 @@ These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them
 
 ## Done when
 
-Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, and Z are in the product and are not launch gates.
+Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, Z, AA, and AC are in the product and are not launch gates.
