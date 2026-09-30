@@ -21,6 +21,7 @@ import { deliverMail, publicMailSettings, saveMailSettings } from "./mail.mjs";
 import { auditCostSummary, moneyFromMicros } from "./ai-cost.mjs";
 import {
   activateFromRow,
+  applyDraftToUser,
   createEmailActivation,
   deleteAccountData,
   exportAccountBundle,
@@ -542,7 +543,14 @@ app.post("/api/onboarding/extract", upload.single("resume"), async (req, res) =>
   purgeExpiredDrafts();
   const extracted = await extractCareerProfile(text);
   const draftId = id("draft");
-  const payload = { ...extracted, resumeName: filename, rawText: text };
+  const storedName = `${id("rs")}${extname(filename).toLowerCase() || ".bin"}`;
+  writeFileSync(join(uploadsDir, storedName), req.file.buffer);
+  const payload = {
+    ...extracted,
+    resumeName: filename,
+    resumeFileUrl: `/uploads/${storedName}`,
+    rawText: text,
+  };
   db.prepare("INSERT INTO drafts (id, payload, created_at) VALUES (?, ?, ?)").run(
     draftId,
     JSON.stringify(payload),
@@ -654,6 +662,7 @@ app.post("/api/onboarding/activate", async (req, res) => {
     preferences,
     rawText: payload.rawText || "",
     resumeName: payload.resumeName || "",
+    resumeFileUrl: payload.resumeFileUrl || "",
     consentAt: Date.now(),
     password: mode === "password" ? password : "",
   };
@@ -720,6 +729,60 @@ app.post("/api/onboarding/verify", (req, res) => {
   }
 });
 
+/** Save an uploaded onboarding draft onto the signed-in account (Google / email signup without resume). */
+app.post("/api/onboarding/claim", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user) return;
+  if (!req.body.consent) {
+    res.status(400).json({ error: "Agree to the terms to save this resume to your account." });
+    return;
+  }
+  const draft = db.prepare("SELECT * FROM drafts WHERE id = ?").get(String(req.body.draftId || ""));
+  if (!draft) {
+    res.status(400).json({ error: "That resume draft expired. Upload the file again." });
+    return;
+  }
+  if (existsProfile(user.id)) {
+    res.status(409).json({ error: "This account already has a saved resume. Open Profile or Resume to use it." });
+    return;
+  }
+  try {
+    const payload = JSON.parse(draft.payload || "{}");
+    const preferences = {
+      salary: String(req.body.salary || ""),
+      workArrangement: String(req.body.workArrangement || ""),
+      locations: String(req.body.locations || ""),
+      workAuthorization: String(req.body.workAuthorization || ""),
+    };
+    applyDraftToUser(user.id, {
+      draftId: draft.id,
+      name: String(req.body.name || payload.name || user.name || "").trim(),
+      email: user.email,
+      phone: String(req.body.phone || payload.phone || "").trim(),
+      address: String(req.body.address || payload.address || "").trim(),
+      city: String(req.body.city || payload.city || "").trim(),
+      summary: String(req.body.summary || payload.summary || ""),
+      skills: payload.skills || [],
+      employment: payload.employment || [],
+      education: payload.education || [],
+      facts: payload.facts || [],
+      preferences,
+      rawText: payload.rawText || "",
+      resumeName: payload.resumeName || "",
+      resumeFileUrl: payload.resumeFileUrl || "",
+    });
+    syncProfileVersion(user.id);
+    const refreshed = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id);
+    res.json({
+      ok: true,
+      user: publicUser(refreshed),
+      message: "Your uploaded resume is saved to your profile.",
+    });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Could not save the resume to this account." });
+  }
+});
+
 app.get("/api/profile", (req, res) => {
   const user = requireUser(req, res);
   if (!user) return;
@@ -737,6 +800,7 @@ app.get("/api/profile", (req, res) => {
       facts: JSON.parse(profile.facts || "[]"),
       preferences: JSON.parse(profile.preferences || "{}"),
       resumeName: profile.resume_name,
+      resumeFileUrl: profile.resume_file_url || "",
       headline: profile.headline || "",
       photoUrl: profile.photo_url || "",
       slug: profile.slug || "",

@@ -122,6 +122,88 @@ export function findActivation({ token = "", code = "", email = "" }) {
   return null;
 }
 
+/** Persist extracted resume fields onto an existing account that does not yet have a profile. */
+export function writeProfileFromPayload(userId, payload = {}) {
+  const facts = (payload.facts || []).map((fact) => ({ ...fact, verified_by_user: true }));
+  const summary = String(payload.summary || "");
+  const skills = JSON.stringify(payload.skills || []);
+  const employment = JSON.stringify(payload.employment || []);
+  const education = JSON.stringify(payload.education || []);
+  const preferences = JSON.stringify(payload.preferences || {});
+  const rawText = payload.rawText || "";
+  const resumeName = payload.resumeName || "";
+  const resumeFileUrl = payload.resumeFileUrl || "";
+  const updatedAt = Date.now();
+  const existing = db.prepare("SELECT user_id FROM profiles WHERE user_id = ?").get(userId);
+  if (existing) {
+    db.prepare(
+      `UPDATE profiles
+       SET summary = ?, skills = ?, employment = ?, education = ?, facts = ?, preferences = ?,
+           raw_text = ?, resume_name = ?, resume_file_url = CASE WHEN ? != '' THEN ? ELSE resume_file_url END, updated_at = ?
+       WHERE user_id = ?`,
+    ).run(
+      summary,
+      skills,
+      employment,
+      education,
+      JSON.stringify(facts),
+      preferences,
+      rawText,
+      resumeName,
+      resumeFileUrl,
+      resumeFileUrl,
+      updatedAt,
+      userId,
+    );
+    return;
+  }
+  db.prepare(
+    `INSERT INTO profiles (user_id, summary, skills, employment, education, facts, preferences, raw_text, resume_name, resume_file_url, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    userId,
+    summary,
+    skills,
+    employment,
+    education,
+    JSON.stringify(facts),
+    preferences,
+    rawText,
+    resumeName,
+    resumeFileUrl,
+    updatedAt,
+  );
+}
+
+/**
+ * Attach an onboarding draft to a signed-in user who registered without a resume
+ * (Google, direct email signup, etc.). Creates the profile the account Gate expects.
+ */
+export function applyDraftToUser(userId, payload = {}) {
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  if (!user) throw new Error("Account not found.");
+  if (db.prepare("SELECT user_id FROM profiles WHERE user_id = ?").get(userId)) {
+    throw new Error("This account already has a saved resume. Open Profile or Resume to use it.");
+  }
+  const name = String(payload.name || "").trim();
+  const phone = String(payload.phone || "").trim();
+  const address = String(payload.address || "").trim();
+  const city = String(payload.city || "").trim();
+  if (name.length >= 2 || phone || address || city) {
+    db.prepare(
+      `UPDATE users
+       SET name = CASE WHEN ? != '' THEN ? ELSE name END,
+           phone = CASE WHEN phone = '' OR phone IS NULL THEN ? ELSE phone END,
+           address = CASE WHEN address = '' OR address IS NULL THEN ? ELSE address END,
+           city = CASE WHEN city = '' OR city IS NULL THEN ? ELSE city END
+       WHERE id = ?`,
+    ).run(name, name || user.name, phone, address, city, userId);
+  }
+  writeProfileFromPayload(userId, payload);
+  if (payload.draftId) db.prepare("DELETE FROM drafts WHERE id = ?").run(payload.draftId);
+  return userId;
+}
+
 export function activateFromRow(row, { setPassword = "" } = {}) {
   if (!row) throw new Error("This activation link or code is invalid or expired.");
   const payload = JSON.parse(row.payload || "{}");
@@ -149,22 +231,7 @@ export function activateFromRow(row, { setPassword = "" } = {}) {
     payload.consentAt || Date.now(),
     Date.now(),
   );
-  const facts = (payload.facts || []).map((fact) => ({ ...fact, verified_by_user: true }));
-  db.prepare(
-    `INSERT INTO profiles (user_id, summary, skills, employment, education, facts, preferences, raw_text, resume_name, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    userId,
-    String(payload.summary || ""),
-    JSON.stringify(payload.skills || []),
-    JSON.stringify(payload.employment || []),
-    JSON.stringify(payload.education || []),
-    JSON.stringify(facts),
-    JSON.stringify(payload.preferences || {}),
-    payload.rawText || "",
-    payload.resumeName || "",
-    Date.now(),
-  );
+  writeProfileFromPayload(userId, payload);
   db.prepare("UPDATE email_activations SET used_at = ? WHERE id = ?").run(Date.now(), row.id);
   if (payload.draftId) db.prepare("DELETE FROM drafts WHERE id = ?").run(payload.draftId);
   return userId;
@@ -205,6 +272,7 @@ export function exportAccountBundle(userId) {
           facts: JSON.parse(profile.facts || "[]"),
           preferences: JSON.parse(profile.preferences || "{}"),
           resumeName: profile.resume_name,
+          resumeFileUrl: profile.resume_file_url || "",
           slug: profile.slug || "",
         }
       : null,
@@ -228,10 +296,11 @@ export function exportAccountBundle(userId) {
 
 export function deleteAccountData(userId) {
   try {
-    const profile = db.prepare("SELECT photo_url FROM profiles WHERE user_id = ?").get(userId);
-    const photo = String(profile?.photo_url || "");
-    if (photo.startsWith("/uploads/")) {
-      const file = join(uploadsDir, basename(photo));
+    const profile = db.prepare("SELECT photo_url, resume_file_url FROM profiles WHERE user_id = ?").get(userId);
+    for (const path of [profile?.photo_url, profile?.resume_file_url]) {
+      const value = String(path || "");
+      if (!value.startsWith("/uploads/")) continue;
+      const file = join(uploadsDir, basename(value));
       if (existsSync(file)) unlinkSync(file);
     }
   } catch {

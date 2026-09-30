@@ -6,7 +6,7 @@ import { extractRequirements } from "./match.mjs";
 import { seedPromptRegistry } from "./prompt-registry.mjs";
 import { disableAllMfaPolicy, seedMfaPolicy } from "./mfa-policy.mjs";
 
-export const SCHEMA_VERSION = 27;
+export const SCHEMA_VERSION = 28;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -94,6 +94,7 @@ export function migrate() {
   addColumn("profiles", "photo_url", "TEXT DEFAULT ''");
   addColumn("profiles", "slug", "TEXT DEFAULT ''");
   addColumn("profiles", "template", "TEXT DEFAULT 'classic'");
+  addColumn("profiles", "resume_file_url", "TEXT DEFAULT ''");
   addColumn("mail_outbox", "status", "TEXT DEFAULT 'stored'");
   addColumn("mail_outbox", "error", "TEXT DEFAULT ''");
   addColumn("ai_audit", "cost_micros", "INTEGER DEFAULT 0");
