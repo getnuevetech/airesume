@@ -36,7 +36,7 @@ export function registerAdminPlans(app, ctx) {
   const { requireAdmin, parse, policy } = ctx;
 
   app.get("/api/admin/plans", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.plans.read")) return;
     res.json({
       features: FEATURES,
       plans: db.prepare("SELECT * FROM plans ORDER BY sort_order").all().map(publicPlan),
@@ -46,7 +46,7 @@ export function registerAdminPlans(app, ctx) {
   });
 
   app.put("/api/admin/plans/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.plans.write")) return;
     const plan = db.prepare("SELECT * FROM plans WHERE id = ?").get(req.params.id);
     if (!plan) {
       res.status(404).json({ error: "Plan not found." });
@@ -67,7 +67,7 @@ export function registerAdminPlans(app, ctx) {
   });
 
   app.post("/api/admin/plans", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.plans.create")) return;
     const name = String(req.body.name || "").trim();
     if (name.length < 2) {
       res.status(400).json({ error: "Name the plan." });
@@ -93,7 +93,7 @@ export function registerAdminPlans(app, ctx) {
   });
 
   app.delete("/api/admin/plans/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.plans.delete")) return;
     const plan = db.prepare("SELECT * FROM plans WHERE id = ?").get(req.params.id);
     if (!plan) {
       res.status(404).json({ error: "Plan not found." });

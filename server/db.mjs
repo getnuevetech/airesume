@@ -15,6 +15,7 @@ mkdirSync(uploadsDir, { recursive: true });
 
 export const db = new DatabaseSync(join(root, "jobpilot.sqlite"));
 db.exec("PRAGMA journal_mode = WAL");
+db.exec("PRAGMA busy_timeout = 5000");
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -122,5 +123,6 @@ export function publicUser(row) {
     hasPassword: Boolean(row.password_hash),
     mfaEnrolled: Boolean(row.totp_secret && row.totp_enabled_at),
     mfaVerified: Boolean(row.__session?.mfa_at),
+    accessLevelId: row.admin_access_level_id || null,
   };
 }

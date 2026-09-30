@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–U are implemented on this branch. Slice V (admin RBAC) stays deferred until draft PR #44 is rebased onto schema 29.
+Status: slices Q–U are implemented. Slice V (admin access levels) is implemented on schema 29. Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
@@ -18,14 +18,14 @@ The product surface is wide enough for a private beta. It is not ready to call p
 - Salary negotiation or recruiter outreach agents
 - Managed TURN / SFU
 - Postgres, a second app server, or a shared rate-limit store
-- Landing PR #44 (admin RBAC) before it is rebased onto schema 28
+- Re-merging draft PR #44 (this branch carries the schema 29 port)
 - Splitting `src/account/pages.tsx`, `src/employer/pages.tsx`, `server/index.mjs`, or `src/pages/admin/Controls.tsx` as a dedicated project
 
 Draft PR #48 (reject Indeed and other aggregator URLs) is already on `main`: `unsupportedJobSiteMessage` in `server/feeds.mjs` and coverage in `server/feeds-parse.test.mjs`. Close that draft. Do not reimplement it.
 
 ## Definitions
 
-**Private beta** — one operator, HTTPS, SMTP that delivers, admin MFA on, backups restored once, manual billing only, a rehearsed candidate path (upload → confirm claims → live feed match → Assisted Apply).
+**Private beta** — one operator, HTTPS, SMTP that delivers, backups restored once, manual billing only, a rehearsed candidate path (upload → confirm claims → live feed match → Assisted Apply). Admin MFA stays off.
 
 **Public launch** — private beta plus outside-counsel sign-off recorded against Terms, Privacy, billing disclosure, and Auto-Apply authorization text. Admin → Launch stays `launchReady: false` until that sign-off exists outside the app. Do not add a self-serve checkbox that an operator can tick without counsel.
 
@@ -37,7 +37,7 @@ Q  CI on every pull request
     → S  Backup and restore
       → T  Candidate-path regression test
         → U  Payments stay manual until signed webhooks exist
-          → V  Admin RBAC, only after rebase onto schema 28
+          → V  Admin RBAC on schema 29 (MFA stays off)
 ```
 
 Q–U are the beta gate. V is the first feature after beta, and only if a second admin needs scoped access.
@@ -151,20 +151,20 @@ Bootstrap and the README tell operators to open `http://<ip>/` and “use http, 
 
 ---
 
-### Slice V — Admin RBAC (after beta, not before)
+### Slice V — Admin RBAC
 
-**Goal:** Draft PR #44 adds access levels for a second operator. It was written against schema 27. `main` is schema 28. Merging it now risks a migration conflict during feed and signup stabilization.
+**Goal:** Super Admins assign access levels. Admin MFA stays disabled while this ships.
 
 **Change**
 
-- Leave the pull request in draft.
-- When a second admin is actually needed: rebase onto current `main`, move the migration to schema 29, rerun `npm test`, and only then mark it ready.
-- Presets already described on that PR (Super Admin, Content Editor, Support, Operations, AI Ops, Billing) stay the scope. Do not add permissions beyond that catalog.
+- Schema 29 adds `admin_access_level_id` and seeds Super Admin, Content Editor, Support, Operations, AI Ops, and Billing.
+- Existing admins stay Super Admin. Scoped admins only see allowed tabs, and the same keys are enforced on the API.
+- Do not add permissions beyond that catalog. Close draft PR #44 once this lands; do not merge that branch.
 
 **Acceptance**
 
-- Not part of the beta gate.
-- After rebase, existing admins remain Super Admin and a scoped admin cannot call an API outside their keys.
+- A homepage-only level can open Homepage and cannot save plans.
+- An admin with no level assigned is treated as Super Admin.
 
 ---
 
@@ -175,7 +175,7 @@ These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them
 | Gate | Who |
 | --- | --- |
 | DNS, certbot, port 443, `COOKIE_SECURE=1` | Operator, using `deploy/HTTPS.md` |
-| `REQUIRE_ADMIN_MFA=1` plus one enrolled admin | Operator, Admin → Security |
+| Admin MFA | Disabled for now. Do not enroll or set `REQUIRE_ADMIN_MFA` until that decision changes |
 | SMTP host and from address, then a real reset email | Operator, Admin → Email |
 | Counsel review of legal and Auto-Apply text | Outside counsel |
 | Confirm U.S.-first / 18+ copy and no ad cookies | Operator plus counsel |

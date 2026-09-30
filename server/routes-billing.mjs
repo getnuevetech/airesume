@@ -188,7 +188,7 @@ export function registerBilling(app, ctx) {
   });
 
   app.put("/api/admin/billing-policy", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.billing_policy.write")) return;
     const next = {
       allowUpgrade: Boolean(req.body.allowUpgrade),
       allowDowngrade: Boolean(req.body.allowDowngrade),
@@ -202,12 +202,12 @@ export function registerBilling(app, ctx) {
   });
 
   app.get("/api/admin/gateways", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.payments.gateways.read")) return;
     res.json({ gateways: db.prepare("SELECT * FROM payment_gateways ORDER BY created_at").all().map(publicProviderGateway) });
   });
 
   app.post("/api/admin/gateways", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.payments.gateways.create")) return;
     const kind = ["manual", "stripe", "paypal"].includes(req.body.kind) ? req.body.kind : "";
     const name = String(req.body.name || "").trim();
     if (!kind || name.length < 2) {
@@ -238,7 +238,7 @@ export function registerBilling(app, ctx) {
   });
 
   app.patch("/api/admin/gateways/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.payments.gateways.write")) return;
     const gateway = db.prepare("SELECT * FROM payment_gateways WHERE id = ?").get(req.params.id);
     if (!gateway) {
       res.status(404).json({ error: "Gateway not found." });
@@ -270,7 +270,7 @@ export function registerBilling(app, ctx) {
   });
 
   app.get("/api/admin/billing-events", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.payments.events.read")) return;
     res.json({ events: db.prepare("SELECT * FROM billing_events ORDER BY created_at DESC LIMIT 50").all() });
   });
 }

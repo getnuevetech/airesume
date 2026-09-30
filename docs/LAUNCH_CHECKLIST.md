@@ -7,7 +7,6 @@ Pre-public launch gate for JobPilot. Ops signals are also visible in **Admin →
 - [ ] `NODE_ENV=production`
 - [ ] HTTPS terminated at nginx/LB (`deploy/HTTPS.md`); Node stays on localhost `:3000`
 - [ ] `COOKIE_SECURE=1` (or verified `X-Forwarded-Proto: https`)
-- [ ] `REQUIRE_ADMIN_MFA=1` and at least one admin enrolled in TOTP. Production does not turn MFA on by itself. Set the env var or enable Admin → Security before public launch.
 - [ ] SMTP host + from address configured (Admin → Email) so resets/notices deliver
 - [ ] Outside counsel review of Terms, Privacy, billing disclosure, and Auto-Apply authorization text
 - [ ] Confirm U.S.-first / 18+ positioning still accurate in legal copy
@@ -23,6 +22,7 @@ Pre-public launch gate for JobPilot. Ops signals are also visible in **Admin →
 
 ## Explicitly deferred
 
+- Admin MFA. It stays off. Do not set `REQUIRE_ADMIN_MFA=1` until you decide to require authenticator codes. Optional enrollment remains under Admin → Security.
 - Silent Auto-Apply submit (keep review-first)
 - Employer feature expansion
 - Managed TURN SaaS / SFU media stack

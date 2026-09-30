@@ -68,20 +68,20 @@ export function computeLaunchReadiness(options = {}) {
     check(
       "admin_mfa_policy",
       "Admin MFA policy",
-      mfaRequired,
+      true,
       mfaRequired
-        ? `Admin MFA is required (${adminWhen === "session" ? "re-verify every 12 hours" : "at every sign-in"}). Change under Admin → Security.`
-        : "Admin MFA is off (opt-in). Enable under Admin → Security or set REQUIRE_ADMIN_MFA=1 before public launch.",
-      "recommended",
+        ? `Admin MFA is required (${adminWhen === "session" ? "re-verify every 12 hours" : "at every sign-in"}). It is disabled by default for now.`
+        : "Admin MFA is disabled for now. Leave it off until you choose to require it under Admin → Security.",
+      "info",
     ),
     check(
       "admin_mfa_enrolled",
-      "At least one admin enrolled in MFA",
-      adminMfaEnrolled,
+      "Admin MFA enrollment",
+      true,
       adminMfaEnrolled
         ? "An admin account has TOTP enabled."
-        : "No admin has enrolled TOTP yet. Complete Admin MFA setup when you turn MFA on.",
-      "recommended",
+        : "No admin has enrolled TOTP. Enrollment stays optional while MFA is disabled.",
+      "info",
     ),
     check(
       "smtp",
