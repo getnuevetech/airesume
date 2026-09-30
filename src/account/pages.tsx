@@ -12,6 +12,43 @@ import { useAccount } from "./AccountContext";
 import { ResumeSheet } from "./ResumeSheet";
 import type { AccountData, ResumeView } from "./types";
 
+function resumeKindLabel(version: { active: boolean; kind: string }) {
+  if (version.active) return "Public resume";
+  if (version.kind === "upscale") return "Upscale";
+  if (version.kind === "application") return "Tailored for a job";
+  if (version.kind === "upload") return "Uploaded resume";
+  return version.kind;
+}
+
+function TailoredResume({
+  tailored,
+  applicationId,
+}: {
+  tailored: NonNullable<AccountData["applications"][number]["tailored"]>;
+  applicationId?: string;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="tailored-result">
+      <h3>{tailored.label} is saved</h3>
+      <p className="lede">{tailored.summary}</p>
+      {tailored.changes.map((change) => (
+        <p className="role" key={`${change.kind}-${change.after}`}>
+          {change.before} → {change.after}
+        </p>
+      ))}
+      <div className="version-actions">
+        <button className="text-btn" type="button" onClick={() => setOpen((current) => !current)}>
+          {open ? "Hide resume" : "View resume"}
+        </button>
+        <Link className="text-btn" to="/account/profile">Open on your profile</Link>
+        {applicationId ? <Link className="text-btn" to={`/account/applications#application-${applicationId}`}>Open in the tracker</Link> : null}
+      </div>
+      {open ? <pre className="version-resume">{tailored.rendered}</pre> : null}
+    </div>
+  );
+}
+
 function WeekCard({ week }: { week: NonNullable<AccountData["week"]> }) {
   return (
     <section className="account-card">
@@ -942,13 +979,13 @@ function ProfileView({
       {versions.length ? (
         <section className="account-card">
           <h2>Resumes</h2>
-          <p className="role">Each upscale is a separate resume. The public one is what employers see until you choose another.</p>
+          <p className="role">Upscales and job-specific resumes are saved separately. The public one is what employers see until you choose another.</p>
           {versions.map((version) => (
             <article key={version.id}>
               <div className="quiet-row">
                 <div>
                   <strong>{version.label}</strong>
-                  <span>{version.active ? "Public resume" : version.kind}</span>
+                  <span>{resumeKindLabel(version)}</span>
                 </div>
                 <button className="text-btn" type="button" onClick={() => setOpenResume((current) => current === version.id ? "" : version.id)}>
                   {openResume === version.id ? "Hide resume" : "View resume"}
@@ -1269,7 +1306,7 @@ export function ResumePage() {
               data.versions.map((version) => (
               <article key={version.id} className="version-mini">
                 <strong>{version.label}</strong>
-                <p className="role">{version.active ? "Public resume" : version.kind}</p>
+                <p className="role">{resumeKindLabel(version)}</p>
                 <div className="version-actions">
                   <button className="text-btn" type="button" onClick={() => setOpenVersion((current) => current === version.id ? "" : version.id)}>
                     {openVersion === version.id ? "Hide resume" : "View resume"}
@@ -1516,8 +1553,11 @@ export function JobsPage() {
             ) : null}
           </div>
         </section>
-        {data.jobs.map((job) => (
-          <article className="account-card job-card" key={job.id}>
+        {data.jobs.map((job) => {
+          const application = data.applications.find((item) => item.jobId === job.id);
+          return (
+          <article className="account-card" key={job.id}>
+            <div className="job-card" style={{ padding: 0, boxShadow: "none", background: "transparent" }}>
             <div>
               <p className="role">{job.category} · {job.verification}</p>
               <h2>{job.title}</h2>
@@ -1551,8 +1591,11 @@ export function JobsPage() {
                 </div>
               )}
             </div>
+            </div>
+            {application?.tailored ? <TailoredResume tailored={application.tailored} applicationId={application.id} /> : null}
           </article>
-        ))}
+          );
+        })}
       </div>
     </Gate>
   );
@@ -1676,6 +1719,7 @@ export function ApplicationsPage() {
                 </select>
               </div>
             </div>
+            {item.tailored ? <TailoredResume tailored={item.tailored} /> : null}
             {["Ready", "Review required", "Resume preparing"].includes(item.status) && data.features.manual_apply ? (
               <BrowserApplyAssistant
                 applicationId={item.id}

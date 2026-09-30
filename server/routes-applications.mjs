@@ -65,6 +65,7 @@ export function registerApplications(app, ctx) {
       versionLabel: result.versionLabel,
       mode: result.mode,
       readiness: result.readiness,
+      tailored: result.tailored,
     });
   });
 

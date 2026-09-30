@@ -169,8 +169,16 @@ export type AccountData = {
     status: string;
     mode: string;
     match: number;
+    jobId?: string;
     versionId?: string;
     versionLabel?: string;
+    tailored?: {
+      versionId: string;
+      label: string;
+      rendered: string;
+      summary: string;
+      changes: { kind: string; before: string; after: string; detail: string }[];
+    } | null;
     questions?: ApplicationQuestion[];
   }[];
   review: { id: string; rating: number; feedback: string[]; recommendations: Recommendation[] } | null;

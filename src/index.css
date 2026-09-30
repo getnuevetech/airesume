@@ -1443,7 +1443,9 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
   font: inherit;
 }
 .version-mini { padding: 10px 0; border-top: 1px solid #f0f3f6; }
-.version-actions { display: flex; gap: 16px; align-items: center; }
+.version-actions { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.tailored-result { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.tailored-result h3 { margin-bottom: 8px; }
 .template-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .template-card { text-align: left; background: #fff; border: 1px solid #e6edf3; border-radius: 16px; padding: 12px; display: grid; gap: 6px; }
 .template-card.on { border-color: var(--green); box-shadow: 0 0 0 2px #c8f3e1; }

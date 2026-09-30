@@ -7,7 +7,7 @@ import { extractRequirements, matchJob } from "./match.mjs";
 import { authenticitySignals, normalizeJobListing } from "./job-schema.mjs";
 import { extractJobRequirements } from "./job-requirements.mjs";
 import { computeApplicationReadiness } from "./readiness.mjs";
-import { claimsSupported, tailoredDocument, normalizeResumePath } from "./resume-guard.mjs";
+import { claimsSupported, tailoredDocument, normalizeResumePath, tailoringPreview } from "./resume-guard.mjs";
 import { buildClarificationRecommendations } from "./upscale-clarify.mjs";
 import { buildResumeInsights } from "./resume-upscale.mjs";
 import { TRACKER_STATUSES, startOfUtcDay } from "./apply-rules.mjs";
@@ -673,8 +673,11 @@ async function createApplication(user, job, mode, doc, preferences, facts = [], 
   );
   const row = db.prepare("SELECT * FROM applications WHERE user_id = ? AND job_id = ?").get(user.id, job.id);
   const version = row?.version_id
-    ? db.prepare("SELECT id, label FROM resume_versions WHERE id = ?").get(row.version_id)
+    ? db.prepare("SELECT * FROM resume_versions WHERE id = ? AND user_id = ?").get(row.version_id, user.id)
     : null;
+  const siblings = version
+    ? db.prepare("SELECT * FROM resume_versions WHERE user_id = ?").all(user.id)
+    : [];
   return {
     id: row?.id,
     score: match.score,
@@ -685,6 +688,7 @@ async function createApplication(user, job, mode, doc, preferences, facts = [], 
     versionId: row?.version_id || versionId,
     versionLabel: version?.label || "",
     mode: row?.mode || applyMode,
+    tailored: tailoringPreview(version, siblings),
   };
 }
 

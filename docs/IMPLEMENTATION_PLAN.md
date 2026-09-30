@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–W are implemented (V is schema 29). Slice X names the roles behind this week's counts and opens them in the tracker. Admin MFA stays disabled for now and is not a beta blocker.
+Status: slices Q–X are implemented (V is schema 29). Resume review quotes weak lines, asks before applying them, and saves the upscale as a separate resume. Slice Z shows the tailored resume after Assisted Apply. Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
@@ -40,9 +40,10 @@ Q  CI on every pull request
           → V  Admin RBAC on schema 29 (MFA stays off)
             → W  Weekly efficiency on the account overview
               → X  Name the roles behind this week's counts
+                → Z  Show the tailored resume after Assisted Apply
 ```
 
-Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card.
+Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job.
 
 ---
 
@@ -207,6 +208,24 @@ Bootstrap and the README tell operators to open `http://<ip>/` and “use http, 
 
 ---
 
+### Slice Z — Show the tailored resume
+
+**Goal:** Assisted Apply already builds a job-specific resume by reordering skills, roles, and bullets that are already on the resume. The candidate could not see that resume, what moved, or that it was saved separately.
+
+**Change**
+
+- `describeTailoring` explains only reorders of existing skills, roles, and bullets. A new skill or employer is not described as a change.
+- Preparing an application stores that resume as its own version and returns the rendered text plus the reorder notes.
+- The job card and the tracker show the saved resume. Profile and Resume label it “Tailored for a job” and keep the public resume unchanged.
+
+**Acceptance**
+
+- A match that moves SQL or the matching role to the front says so, and the full resume is visible.
+- A proposed skill that was not on the source resume is not listed as a change.
+- The public resume stays the previous version.
+
+---
+
 ## Ops the repo cannot finish
 
 These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them executable.
@@ -224,4 +243,4 @@ These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them
 
 ## Done when
 
-Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, and X are in the product and are not launch gates.
+Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, and Z are in the product and are not launch gates.
