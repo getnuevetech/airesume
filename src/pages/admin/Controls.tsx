@@ -596,7 +596,7 @@ export function PaymentsAdmin() {
   return (
     <div>
       <h1>Payment gateways</h1>
-      <p className="lede">Stripe and PayPal charge when their keys are present. Manual ledger activates the plan and records proration or refunds for you to pay out.</p>
+      <p className="lede">Stripe and PayPal charge when their keys are present. Manual ledger activates the plan and records proration or refunds for you to pay out. Live card gateways stay off until signed webhooks exist.</p>
       {error ? <p className="form-error">{error}</p> : null}
       <form className="admin-card admin-grid" onSubmit={add}>
         <label className="field"><span>Name</span><input value={name} onChange={(event) => setName(event.target.value)} required /></label>

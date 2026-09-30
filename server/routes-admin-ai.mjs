@@ -21,7 +21,7 @@ export function registerAdminAi(app, ctx) {
   const { requireAdmin, maskSecret } = ctx;
 
   app.get("/api/admin/ai", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.ai.read")) return;
     const registry = listPromptRegistry();
     res.json({
       functions: AI_FUNCTIONS,
@@ -34,7 +34,7 @@ export function registerAdminAi(app, ctx) {
   });
 
   app.put("/api/admin/ai/switches", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.ai.switches.write")) return;
     if (req.body.promptRegistryEnabled !== undefined) {
       setPromptRegistryEnabled(Boolean(req.body.promptRegistryEnabled));
     }
@@ -49,7 +49,7 @@ export function registerAdminAi(app, ctx) {
   });
 
   app.put("/api/admin/ai/prompts/:functionKey", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.ai.prompts.draft")) return;
     const result = savePromptDraft(req.params.functionKey, req.body.body, req.body.note, "admin");
     if (!result.ok) {
       res.status(400).json({ error: result.error });
@@ -59,7 +59,7 @@ export function registerAdminAi(app, ctx) {
   });
 
   app.post("/api/admin/ai/prompts/:functionKey/publish", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.ai.prompts.publish")) return;
     const result = publishPrompt(req.params.functionKey, "admin");
     if (!result.ok) {
       res.status(400).json({ error: result.error });
@@ -69,7 +69,7 @@ export function registerAdminAi(app, ctx) {
   });
 
   app.post("/api/admin/ai/prompts/:functionKey/rollback", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.ai.prompts.rollback")) return;
     const result = rollbackPrompt(req.params.functionKey, String(req.body.versionId || ""), "admin");
     if (!result.ok) {
       res.status(400).json({ error: result.error });
@@ -79,7 +79,7 @@ export function registerAdminAi(app, ctx) {
   });
 
   app.post("/api/admin/ai/providers", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.ai.providers.create")) return;
     const kind = ["openai", "anthropic", "google", "deterministic"].includes(req.body.kind) ? req.body.kind : "";
     const name = String(req.body.name || "").trim();
     const model = String(req.body.model || "").trim();
@@ -101,7 +101,7 @@ export function registerAdminAi(app, ctx) {
   });
 
   app.patch("/api/admin/ai/providers/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.ai.providers.write")) return;
     const provider = db.prepare("SELECT * FROM ai_providers WHERE id = ?").get(req.params.id);
     if (!provider) {
       res.status(404).json({ error: "Provider not found." });
@@ -138,7 +138,7 @@ export function registerAdminAi(app, ctx) {
   });
 
   app.delete("/api/admin/ai/providers/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.ai.providers.delete")) return;
     const provider = db.prepare("SELECT * FROM ai_providers WHERE id = ?").get(req.params.id);
     if (!provider) {
       res.status(404).json({ error: "Provider not found." });
@@ -156,7 +156,7 @@ export function registerAdminAi(app, ctx) {
   });
 
   app.put("/api/admin/ai/assignments", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.ai.assignments.write")) return;
     const functionKey = AI_FUNCTIONS.some((item) => item.key === req.body.functionKey) ? req.body.functionKey : "";
     const provider = db.prepare("SELECT id FROM ai_providers WHERE id = ? AND enabled = 1").get(String(req.body.providerId || ""));
     if (!functionKey || !provider) {

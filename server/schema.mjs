@@ -5,8 +5,9 @@ import { db, id } from "./db.mjs";
 import { extractRequirements } from "./match.mjs";
 import { seedPromptRegistry } from "./prompt-registry.mjs";
 import { disableAllMfaPolicy, seedMfaPolicy } from "./mfa-policy.mjs";
+import { seedAdminAccessLevels } from "./admin-access.mjs";
 
-export const SCHEMA_VERSION = 28;
+export const SCHEMA_VERSION = 29;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -72,8 +73,11 @@ const CATALOG = [
 
 function addColumn(table, name, definition) {
   const columns = db.prepare(`PRAGMA table_info(${table})`).all();
-  if (!columns.some((column) => column.name === name)) {
+  if (columns.some((column) => column.name === name)) return;
+  try {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+  } catch (error) {
+    if (!/duplicate column name/i.test(String(error?.message || error))) throw error;
   }
 }
 
@@ -89,6 +93,7 @@ export function migrate() {
   addColumn("users", "password_must_change", "INTEGER DEFAULT 0");
   addColumn("users", "totp_secret", "TEXT DEFAULT ''");
   addColumn("users", "totp_enabled_at", "INTEGER");
+  addColumn("users", "admin_access_level_id", "TEXT");
   addColumn("sessions", "mfa_at", "INTEGER");
   addColumn("profiles", "headline", "TEXT DEFAULT ''");
   addColumn("profiles", "photo_url", "TEXT DEFAULT ''");
@@ -647,6 +652,7 @@ export function migrate() {
 
   seedPromptRegistry();
   seedMfaPolicy();
+  seedAdminAccessLevels();
 }
 
 export function featureLabels(features) {

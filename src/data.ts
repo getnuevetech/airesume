@@ -11,6 +11,10 @@ export type User = {
   hasPassword?: boolean;
   mfaEnrolled?: boolean;
   mfaVerified?: boolean;
+  accessLevelId?: string | null;
+  accessLevelName?: string | null;
+  isSuperAdmin?: boolean;
+  permissions?: string[];
 };
 
 export type ResumeFile = {

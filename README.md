@@ -17,7 +17,7 @@ npm run build
 npm start
 ```
 
-The first admin account is created on the first API boot. Defaults are `admin@jobpilot.app` / `JobPilot-Admin-2026` unless `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set first. When the default password is used, the admin must change it on first sign-in before opening `/admin`. The bootstrap values are written to `server/data/admin-bootstrap.txt`.
+The first admin account is created on the first API boot. Local development uses `admin@jobpilot.app` / `JobPilot-Admin-2026` when `ADMIN_EMAIL` and `ADMIN_PASSWORD` are unset. A production host must set both variables before the database is created. When the built-in default password is used, the admin must change it on first sign-in before opening `/admin`. The bootstrap note is written to `server/data/admin-bootstrap.txt` as owner-read/write only. If a host already booted with the published default, change that password before the host is reachable and remove the bootstrap file from any shared disk.
 
 After sign-in, the dashboard shows resume rating, tailored jobs, applications, and plan controls. Admins assign each AI function to a provider, edit the plan matrix, add Stripe, PayPal, or a manual ledger, and pull jobs from configured sources. A public resume is served at `/resume/<slug>`. The product plan is in `docs/EXECUTION_PLAN.md`.
 
@@ -52,8 +52,8 @@ cd airesume
 bash deploy/bootstrap.sh
 ```
 
-4. Open `http://<public-ip>/` in a browser. Use `http`, not `https`.
-5. Sign in at `http://<public-ip>/signin` with the admin email and password printed at the end of bootstrap, also stored in `server/data/admin-bootstrap.txt`. Homepage, users, admins, and password reset links are under `/admin`. After sign-in, the account side menu is at `/account`.
+4. First boot is HTTP: open `http://<public-ip>/` after TCP port 80 is allowed. Public launch is HTTPS. Follow `deploy/HTTPS.md` and set `COOKIE_SECURE=1` before sending real users to the host.
+5. Sign in at `http://<public-ip>/signin` with the admin email and password printed at the end of bootstrap, also stored in `server/data/admin-bootstrap.txt` (owner-read/write only). Homepage, users, admins, and password reset links are under `/admin`. After sign-in, the account side menu is at `/account`. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` before the first boot on a production host.
 
 If the checkout is already on the server, update it and rebuild:
 

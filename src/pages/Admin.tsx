@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
@@ -9,6 +9,7 @@ import { AiAdmin, JobsAdmin, PaymentsAdmin, PlansAdmin } from "./admin/Controls"
 import { HomepageEditor } from "./admin/HomepageEditor";
 import { LaunchReadinessAdmin } from "./admin/LaunchReadinessAdmin";
 import { MfaPolicyAdmin } from "./admin/MfaPolicyAdmin";
+import { AccessLevelsAdmin } from "./admin/AccessLevelsAdmin";
 
 type Mail = { id: string; to_email: string; subject: string; body: string };
 type Audit = {
@@ -31,24 +32,77 @@ type CostBucket = {
   byProvider: { provider: string; model: string; calls: number; costMicros: number; costLabel: string }[];
 };
 type AuditSummary = { last24Hours: CostBucket; last7Days: CostBucket; last30Days: CostBucket };
+type AccessLevelOption = { id: string; name: string; isSuper?: boolean };
+type AdminTab =
+  | "home"
+  | "launch"
+  | "security"
+  | "access"
+  | "users"
+  | "admins"
+  | "employers"
+  | "mail"
+  | "ai"
+  | "plans"
+  | "payments"
+  | "jobs";
+
+function can(user: User | null | undefined, permission: string) {
+  if (!user || user.role !== "admin") return false;
+  if (user.isSuperAdmin) return true;
+  return Array.isArray(user.permissions) && user.permissions.includes(permission);
+}
 
 export function AdminPage() {
   const { user, ready, refresh, notify } = useApp();
   const { content } = useSiteContent();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<
-    "home" | "launch" | "security" | "users" | "admins" | "employers" | "mail" | "ai" | "plans" | "payments" | "jobs"
-  >("home");
+  const [tab, setTab] = useState<AdminTab>("home");
   const { needsGate: needsMfaGate, checked: mfaChecked } = useMfaGate();
   const [currentPassword, setCurrentPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
 
+  const visibleTabs = useMemo(() => {
+    const all: { id: AdminTab; label: string; allowed: boolean }[] = [
+      { id: "home", label: "Homepage", allowed: can(user, "admin.homepage.read") },
+      { id: "launch", label: "Launch", allowed: can(user, "admin.launch.read") },
+      { id: "security", label: "Security", allowed: can(user, "admin.security.mfa_policy.read") },
+      { id: "access", label: "Access levels", allowed: can(user, "admin.access_levels.read") },
+      { id: "users", label: "Users", allowed: can(user, "admin.users.read") },
+      { id: "admins", label: "Admins", allowed: can(user, "admin.admins.read") },
+      { id: "employers", label: "Employers", allowed: can(user, "admin.employers.read") },
+      {
+        id: "mail",
+        label: "Email",
+        allowed:
+          can(user, "admin.email.read") ||
+          can(user, "admin.email.outbox.read") ||
+          can(user, "admin.audit.read") ||
+          can(user, "admin.audit.costs.read"),
+      },
+      { id: "ai", label: "AI pipelines", allowed: can(user, "admin.ai.read") },
+      { id: "plans", label: "Plans", allowed: can(user, "admin.plans.read") },
+      {
+        id: "payments",
+        label: "Payments",
+        allowed: can(user, "admin.payments.gateways.read") || can(user, "admin.payments.events.read"),
+      },
+      { id: "jobs", label: "Jobs", allowed: can(user, "admin.jobs.read") },
+    ];
+    return all.filter((item) => item.allowed).map(({ id, label }) => ({ id, label }));
+  }, [user]);
+
   useEffect(() => {
     if (ready && !user) navigate("/signin", { replace: true });
     else if (ready && user && user.role !== "admin") navigate("/signin", { replace: true });
   }, [ready, user, navigate]);
+
+  useEffect(() => {
+    if (!visibleTabs.length) return;
+    if (!visibleTabs.some((item) => item.id === tab)) setTab(visibleTabs[0].id);
+  }, [visibleTabs, tab]);
 
   if (!ready) return null;
   if (!user || user.role !== "admin") return null;
@@ -128,50 +182,42 @@ export function AdminPage() {
     );
   }
 
+  if (!can(user, "admin.portal.access") || !visibleTabs.length) {
+    return (
+      <div className="admin-gate">
+        <section className="admin-card">
+          <h1>No Admin portal access</h1>
+          <p className="lede">
+            Your account is an admin, but your access level does not include any Admin portal features. Ask a Super Admin to assign a level.
+          </p>
+          <p className="role">
+            Level: {user.accessLevelName || "Unassigned"} · <Link to="/">Back to site</Link>
+          </p>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="admin-shell">
       <aside className="admin-nav">
         <Link to="/" className="brand">
           {content.brand}
         </Link>
-        <button type="button" className={tab === "home" ? "on" : ""} onClick={() => setTab("home")}>
-          Homepage
-        </button>
-        <button type="button" className={tab === "launch" ? "on" : ""} onClick={() => setTab("launch")}>
-          Launch
-        </button>
-        <button type="button" className={tab === "security" ? "on" : ""} onClick={() => setTab("security")}>
-          Security
-        </button>
-        <button type="button" className={tab === "users" ? "on" : ""} onClick={() => setTab("users")}>
-          Users
-        </button>
-        <button type="button" className={tab === "admins" ? "on" : ""} onClick={() => setTab("admins")}>
-          Admins
-        </button>
-        <button type="button" className={tab === "employers" ? "on" : ""} onClick={() => setTab("employers")}>
-          Employers
-        </button>
-        <button type="button" className={tab === "mail" ? "on" : ""} onClick={() => setTab("mail")}>
-          Email
-        </button>
-        <button type="button" className={tab === "ai" ? "on" : ""} onClick={() => setTab("ai")}>
-          AI pipelines
-        </button>
-        <button type="button" className={tab === "plans" ? "on" : ""} onClick={() => setTab("plans")}>
-          Plans
-        </button>
-        <button type="button" className={tab === "payments" ? "on" : ""} onClick={() => setTab("payments")}>
-          Payments
-        </button>
-        <button type="button" className={tab === "jobs" ? "on" : ""} onClick={() => setTab("jobs")}>
-          Jobs
-        </button>
+        <p className="role" style={{ color: "#9fb0c5", margin: "0 0 10px", fontSize: 12 }}>
+          {user.accessLevelName || "Admin"}
+        </p>
+        {visibleTabs.map((item) => (
+          <button key={item.id} type="button" className={tab === item.id ? "on" : ""} onClick={() => setTab(item.id)}>
+            {item.label}
+          </button>
+        ))}
       </aside>
       <main className="admin-main">
         {tab === "home" ? <HomepageEditor /> : null}
         {tab === "launch" ? <LaunchReadinessAdmin /> : null}
         {tab === "security" ? <MfaPolicyAdmin /> : null}
+        {tab === "access" ? <AccessLevelsAdmin /> : null}
         {tab === "users" ? <PeopleEditor roleFilter="user" /> : null}
         {tab === "admins" ? <PeopleEditor roleFilter="admin" /> : null}
         {tab === "employers" ? <PeopleEditor roleFilter="employer" /> : null}
@@ -186,18 +232,25 @@ export function AdminPage() {
 }
 
 function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" | "employer" }) {
+  const { user: me } = useApp();
   const [users, setUsers] = useState<User[]>([]);
+  const [levels, setLevels] = useState<AccessLevelOption[]>([]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [accessLevelId, setAccessLevelId] = useState("aal_super");
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState("");
   const [link, setLink] = useState("");
   const [plans, setPlans] = useState<{ id: string; name: string }[]>([]);
 
   async function load() {
-    const data = await api<{ users: User[] }>("/api/admin/users");
+    const data = await api<{ users: User[]; levels?: AccessLevelOption[] }>("/api/admin/users");
     setUsers(data.users.filter((person) => person.role === roleFilter));
+    if (data.levels?.length) {
+      setLevels(data.levels);
+      setAccessLevelId((current) => (data.levels?.some((level) => level.id === current) ? current : data.levels?.[0]?.id || current));
+    }
   }
 
   useEffect(() => {
@@ -211,7 +264,14 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" | "employer
     try {
       await api("/api/admin/users", {
         method: "POST",
-        body: JSON.stringify({ name, email, password, role: roleFilter, consent }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          role: roleFilter,
+          consent,
+          accessLevelId: roleFilter === "admin" ? accessLevelId : undefined,
+        }),
       });
       setName("");
       setEmail("");
@@ -244,6 +304,18 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" | "employer
             <span>Password</span>
             <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required />
           </label>
+          {roleFilter === "admin" && levels.length ? (
+            <label className="field">
+              <span>Access level</span>
+              <select value={accessLevelId} onChange={(event) => setAccessLevelId(event.target.value)}>
+                {levels.map((level) => (
+                  <option key={level.id} value={level.id}>
+                    {level.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="check-row terms">
             <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required />
             <span>This person has agreed to the terms.</span>
@@ -260,6 +332,7 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" | "employer
               <strong>{person.name}</strong>
               <p className="role">
                 {person.email} · {person.role} · {person.status} · {person.provider}
+                {person.role === "admin" && person.accessLevelName ? ` · ${person.accessLevelName}` : ""}
               </p>
             </div>
             <div className="admin-actions">
@@ -278,6 +351,23 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" | "employer
                   </option>
                 ))}
               </select>
+              {roleFilter === "admin" && levels.length && can(me, "admin.admins.level.write") ? (
+                <select
+                  value={person.accessLevelId || "aal_super"}
+                  onChange={(event) =>
+                    void api(`/api/admin/users/${person.id}`, {
+                      method: "PATCH",
+                      body: JSON.stringify({ accessLevelId: event.target.value }),
+                    }).then(load)
+                  }
+                >
+                  {levels.map((level) => (
+                    <option key={level.id} value={level.id}>
+                      {level.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <button
                 type="button"
                 className="text-btn"
@@ -303,18 +393,32 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" | "employer
                   Reset link
                 </button>
               ) : null}
-              {roleFilter === "user" ? (
+              {roleFilter === "user" && can(me, "admin.users.promote_admin") ? (
                 <button
                   type="button"
                   className="text-btn"
                   onClick={() =>
                     void api(`/api/admin/users/${person.id}`, {
                       method: "PATCH",
-                      body: JSON.stringify({ role: person.role === "admin" ? "user" : "admin" }),
+                      body: JSON.stringify({ role: "admin", accessLevelId: levels[0]?.id || "aal_super" }),
                     }).then(load)
                   }
                 >
-                  {person.role === "admin" ? "Make user" : "Make admin"}
+                  Make admin
+                </button>
+              ) : null}
+              {roleFilter === "admin" && can(me, "admin.admins.demote") ? (
+                <button
+                  type="button"
+                  className="text-btn"
+                  onClick={() =>
+                    void api(`/api/admin/users/${person.id}`, {
+                      method: "PATCH",
+                      body: JSON.stringify({ role: "user" }),
+                    }).then(load)
+                  }
+                >
+                  Make user
                 </button>
               ) : null}
             </div>

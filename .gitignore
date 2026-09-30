@@ -4,3 +4,4 @@ dist
 *.local
 
 server/data
+server/*.tmp.mjs

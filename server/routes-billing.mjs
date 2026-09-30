@@ -7,6 +7,7 @@ import {
   recordBillingDisclosure,
   validateBillingDisclosure,
 } from "./billing-disclosure.mjs";
+import { liveGatewayWriteError, normalizeGatewayMode } from "./billing-live.mjs";
 
 export function registerBilling(app, ctx) {
   const {
@@ -187,7 +188,7 @@ export function registerBilling(app, ctx) {
   });
 
   app.put("/api/admin/billing-policy", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.billing_policy.write")) return;
     const next = {
       allowUpgrade: Boolean(req.body.allowUpgrade),
       allowDowngrade: Boolean(req.body.allowDowngrade),
@@ -201,16 +202,23 @@ export function registerBilling(app, ctx) {
   });
 
   app.get("/api/admin/gateways", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.payments.gateways.read")) return;
     res.json({ gateways: db.prepare("SELECT * FROM payment_gateways ORDER BY created_at").all().map(publicProviderGateway) });
   });
 
   app.post("/api/admin/gateways", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.payments.gateways.create")) return;
     const kind = ["manual", "stripe", "paypal"].includes(req.body.kind) ? req.body.kind : "";
     const name = String(req.body.name || "").trim();
     if (!kind || name.length < 2) {
       res.status(400).json({ error: "Name and kind are required." });
+      return;
+    }
+    const mode = normalizeGatewayMode(req.body.mode, "test");
+    const enabled = Boolean(req.body.enabled);
+    const liveError = liveGatewayWriteError({ nextMode: mode, prevMode: "test", nextEnabled: enabled });
+    if (liveError) {
+      res.status(400).json({ error: liveError });
       return;
     }
     const gatewayId = id("gw");
@@ -220,38 +228,49 @@ export function registerBilling(app, ctx) {
       gatewayId,
       name,
       kind,
-      req.body.enabled ? 1 : 0,
+      enabled ? 1 : 0,
       String(req.body.publicKey || ""),
       String(req.body.secretKey || ""),
-      req.body.mode === "live" ? "live" : "test",
+      mode,
       Date.now(),
     );
     res.json({ gateway: publicProviderGateway(db.prepare("SELECT * FROM payment_gateways WHERE id = ?").get(gatewayId)) });
   });
 
   app.patch("/api/admin/gateways/:id", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.payments.gateways.write")) return;
     const gateway = db.prepare("SELECT * FROM payment_gateways WHERE id = ?").get(req.params.id);
     if (!gateway) {
       res.status(404).json({ error: "Gateway not found." });
       return;
     }
     const secret = String(req.body.secretKey || "");
+    const mode = normalizeGatewayMode(req.body.mode, gateway.mode);
+    const enabled = req.body.enabled == null ? Boolean(gateway.enabled) : Boolean(req.body.enabled);
+    const liveError = liveGatewayWriteError({
+      nextMode: mode,
+      prevMode: gateway.mode,
+      nextEnabled: enabled,
+    });
+    if (liveError) {
+      res.status(400).json({ error: liveError });
+      return;
+    }
     db.prepare(
       "UPDATE payment_gateways SET name = ?, enabled = ?, public_key = ?, secret_key = ?, mode = ? WHERE id = ?",
     ).run(
       String(req.body.name || gateway.name).trim() || gateway.name,
-      req.body.enabled == null ? gateway.enabled : req.body.enabled ? 1 : 0,
+      enabled ? 1 : 0,
       req.body.publicKey == null ? gateway.public_key : String(req.body.publicKey),
       secret && !secret.startsWith("••••") ? secret : gateway.secret_key,
-      req.body.mode === "live" ? "live" : req.body.mode === "test" ? "test" : gateway.mode,
+      mode,
       gateway.id,
     );
     res.json({ gateway: publicProviderGateway(db.prepare("SELECT * FROM payment_gateways WHERE id = ?").get(gateway.id)) });
   });
 
   app.get("/api/admin/billing-events", (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireAdmin(req, res, "admin.payments.events.read")) return;
     res.json({ events: db.prepare("SELECT * FROM billing_events ORDER BY created_at DESC LIMIT 50").all() });
   });
 }

@@ -2,7 +2,9 @@
 
 JobPilot is an AI job application manager. Quality of applications comes before volume. The fact ledger is the source of truth: AI may rewrite wording, never invent employers, dates, credentials, skills, or numbers.
 
-Spec source of truth for recommendations: `docs/SPEC_REVIEW_AND_PLAN.md` (v1.2 gap review).
+Next build: `docs/IMPLEMENTATION_PLAN.md` (CI, launch-doc truth, backups, candidate-path regression, manual-only live billing).
+
+`docs/SPEC_REVIEW_AND_PLAN.md` is the v1.2 gap review through PR #32. Slices G–P in that review are shipped; do not treat it as the queue.
 
 ## As-built (this repository)
 

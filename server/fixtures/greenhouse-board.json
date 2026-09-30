@@ -1,0 +1,11 @@
+{
+  "jobs": [
+    {
+      "id": 401,
+      "title": "Product Manager",
+      "absolute_url": "https://boards.greenhouse.io/acme/jobs/401",
+      "location": { "name": "Remote" },
+      "content": "Need SQL and product management. Are you authorized to work in the US? Do you require visa sponsorship? What is your salary expectation?"
+    }
+  ]
+}

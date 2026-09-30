@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { computeLaunchReadiness } from "./launch-readiness.mjs";
 
-test("launch readiness fails closed without SMTP and production env; MFA is recommended", () => {
+test("launch readiness fails closed without SMTP and production env; MFA stays informational", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "development", COOKIE_SECURE: "0", REQUIRE_ADMIN_MFA: "0" },
     mail: { configured: false, host: "", fromEmail: "" },
@@ -12,7 +12,7 @@ test("launch readiness fails closed without SMTP and production env; MFA is reco
   assert.equal(report.opsReady, false);
   assert.equal(report.launchReady, false);
   assert.ok(report.checks.some((item) => item.id === "smtp" && !item.ok));
-  assert.ok(report.checks.some((item) => item.id === "admin_mfa_policy" && !item.ok && item.severity === "recommended"));
+  assert.ok(report.checks.some((item) => item.id === "admin_mfa_policy" && item.ok && item.severity === "info"));
   assert.ok(report.checks.some((item) => item.id === "counsel" && !item.ok));
 });
 
