@@ -128,6 +128,7 @@ export function OverviewPage() {
               <div>
                 <strong>{job.title}</strong>
                 <p>{job.applyCompany || job.company} · {job.location || job.remoteType}</p>
+                {job.fit?.summary ? <p className="role">{job.fit.summary}</p> : null}
                 {job.viaCompany ? <p className="role">Listed by {job.viaCompany}{job.sourceName ? ` on ${job.sourceName}` : ""}</p> : null}
               </div>
               <span className="match-badge">{job.score}%</span>
@@ -1525,6 +1526,22 @@ function JobPosting({ job }: { job: AccountData["jobs"][number] }) {
   );
 }
 
+function MatchFit({ job }: { job: AccountData["jobs"][number] }) {
+  if (job.explanationLocked) {
+    return <p className="role">Explanation locked — weekly Free/Starter quota reached. Upgrade for more.</p>;
+  }
+  const fit = job.fit;
+  if (!fit) return null;
+  return (
+    <div className="match-fit">
+      {fit.fits.length ? <p className="match-line"><span>Fits your resume</span>{fit.fits.join(" · ")}</p> : null}
+      {fit.gaps.length ? <p className="match-line"><span>Missing</span>{fit.gaps.join(" · ")}</p> : null}
+      {fit.notes.map((note) => <p className="role" key={note}>{note}</p>)}
+      {!fit.fits.length && !fit.gaps.length ? <p className="role">{fit.summary}</p> : null}
+    </div>
+  );
+}
+
 export function JobsPage() {
   const { data, reload, setError, setMessage } = useAccount();
   const [pasteText, setPasteText] = useState("");
@@ -1600,16 +1617,7 @@ export function JobsPage() {
               {job.viaCompany ? <p className="role">Listed by {job.viaCompany}{job.sourceName ? ` on ${job.sourceName}` : ""}. This application goes to {job.applyCompany}.</p> : null}
               {job.primaryUrl ? <p><a href={job.primaryUrl} target="_blank" rel="noreferrer">Open original listing</a></p> : null}
               <JobPosting job={job} />
-              {job.explanation ? <p className="role">{job.label ? `${job.label}: ` : ""}{job.explanation}</p> : null}
-              {job.explanationLocked ? <p className="role">Explanation locked — weekly Free/Starter quota reached. Upgrade for more.</p> : null}
-              <p className="role">
-                {job.explanationLocked
-                  ? "Details hidden until an explanation slot is available"
-                  : (job.matchedFacts?.length
-                      ? job.matchedFacts.map((item) => `${item.skill}${item.fact_ids?.length ? ` (${item.fact_ids.join(", ")})` : ""}`).join(", ")
-                      : job.matched.join(", ")) || "Limited skill overlap"}
-                {!job.explanationLocked && job.missing.length ? ` · Gap: ${job.missing.join(", ")}` : ""}
-              </p>
+              <MatchFit job={job} />
             </div>
             <div className="job-side">
               <span className="match-badge">{job.score}%</span>

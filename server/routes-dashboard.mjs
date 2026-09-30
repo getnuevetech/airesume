@@ -13,6 +13,7 @@ import { iceConfigSummary, resolveIceServers } from "./webrtc-signaling.mjs";
 import { weeklyEfficiency } from "./weekly-efficiency.mjs";
 import { tailoringPreview } from "./resume-guard.mjs";
 import { compareJobRank, importedAt, presentJobPosting } from "./job-posting.mjs";
+import { presentMatch } from "./match-present.mjs";
 
 function publicVersion(row) {
   return { id: row.id, label: row.label, kind: row.kind, active: Boolean(row.active), rendered: row.rendered, createdAt: row.created_at };
@@ -68,6 +69,7 @@ function jobCard(job, match, sourceNames, applied, userId) {
     imported: importedAt(job.external_key, userId) > 0,
     score: match.score,
     label: locked ? "" : match.label || "",
+    fit: locked ? null : presentMatch(match),
     explanation: locked ? "" : match.explanation || "",
     matched: locked ? [] : match.matched,
     missing: locked ? [] : match.missing,

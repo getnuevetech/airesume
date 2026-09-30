@@ -43,6 +43,7 @@ export type AccountJob = {
   imported?: boolean;
   score: number;
   label: string;
+  fit?: { summary: string; fits: string[]; gaps: string[]; notes: string[] } | null;
   explanation: string;
   matched: string[];
   missing: string[];
