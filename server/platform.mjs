@@ -765,6 +765,8 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     employerDelivery,
     autoCapUsed,
     canAutoApply,
+    renderDocument,
+    audit,
   });
   registerJobsAdmin(app, {
     requireAdmin,
