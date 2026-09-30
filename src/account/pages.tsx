@@ -187,8 +187,9 @@ type CareerInsights = {
 };
 
 export function InsightsPage() {
-  const { setError } = useAccount();
+  const { setError, setMessage } = useAccount();
   const [insights, setInsights] = useState<CareerInsights | null>(null);
+  const [pendingGap, setPendingGap] = useState("");
   const [limited, setLimited] = useState(false);
   const [planName, setPlanName] = useState("");
   const [question, setQuestion] = useState("Why am I not getting interviews?");
@@ -207,6 +208,23 @@ export function InsightsPage() {
       })
       .catch((err: Error) => setError(err.message));
   }, [setError]);
+
+  async function confirmGap(skill: string) {
+    setPendingGap(skill);
+    try {
+      const result = await api<{ message?: string; insights?: CareerInsights }>("/api/career/confirm-skill", {
+        method: "POST",
+        body: JSON.stringify({ skill }),
+      });
+      setMessage(result.message || `${skill} is saved to your Fact Ledger.`);
+      const data = await api<{ insights: CareerInsights; limited: boolean; plan: { name: string } }>("/api/career/insights");
+      setInsights(data.insights);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not confirm that skill.");
+    } finally {
+      setPendingGap("");
+    }
+  }
 
   async function askCoach(event?: FormEvent) {
     event?.preventDefault();
@@ -329,12 +347,15 @@ export function InsightsPage() {
               </section>
               <section className="account-card">
                 <h2>High-demand gaps</h2>
-                <p className="role">Only add these if they are true for you.</p>
-                <div className="chips">
-                  {insights.gaps.length ? insights.gaps.map((item) => (
-                    <span className="chip chip-gap" key={item.skill}>{item.skill} · {item.demand}</span>
-                  )) : <p className="role">No clear gaps against current listings.</p>}
-                </div>
+                <p className="role">Only confirm a skill from real experience. It is saved to the Fact Ledger.</p>
+                {insights.gaps.length ? insights.gaps.map((item) => (
+                  <div className="gap-row" key={item.skill}>
+                    <span className="chip chip-gap">{item.skill} · {item.demand}</span>
+                    <button className="btn btn-ghost btn-sm" type="button" disabled={Boolean(pendingGap)} onClick={() => void confirmGap(item.skill)}>
+                      {pendingGap === item.skill ? "Saving…" : `I have ${item.skill}`}
+                    </button>
+                  </div>
+                )) : <p className="role">No clear gaps against current listings.</p>}
                 {insights.risingPreferred.length ? (
                   <>
                     <h3>Also preferred</h3>

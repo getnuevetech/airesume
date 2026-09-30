@@ -302,7 +302,7 @@ test("buildCareerInsights ranks demand gaps without inventing skills", () => {
         category: "Data",
         role: "Data Analyst",
         skills: ["SQL", "Python"],
-        requirements: { mandatory: ["SQL", "Python"], preferred: [] },
+        requirements: { mandatory: ["SQL", "Python", "Title: Recruiter"], preferred: [] },
         description: "Analyst",
       },
     ],
@@ -315,6 +315,7 @@ test("buildCareerInsights ranks demand gaps without inventing skills", () => {
   assert.equal(insights.summary.responses, 1);
   assert.ok(insights.focus.length >= 1);
   assert.ok(!insights.gaps.some((item) => /invented/i.test(item.skill)));
+  assert.ok(!insights.gaps.some((item) => /^title:/i.test(item.skill)));
 });
 
 test("buildInterviewPrep uses resume bullets and does not invent metrics", () => {

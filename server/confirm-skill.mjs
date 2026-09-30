@@ -63,6 +63,30 @@ export function preparedResumeAfterConfirm({ document = {}, job = {}, facts = []
  * Rebuild every resume already prepared for this candidate.
  * Each copy is ordered for its own job and only uses skills already on the updated resume.
  */
+/**
+ * Accept a skill only when career insights already lists it as a gap.
+ * Listing labels such as "Title:" are not gaps the candidate can confirm.
+ */
+export function confirmInsightGap({ gaps = [], skill = "" } = {}) {
+  const requested = String(skill || "").replace(/\s+/g, " ").trim();
+  if (!requested) throw new Error("Choose a skill from your insights.");
+  const names = (Array.isArray(gaps) ? gaps : [])
+    .map((item) => String(item?.skill || item || "").replace(/\s+/g, " ").trim())
+    .filter((name) => name && !/^(title|role|position|job title|company|employer|organization|org|location|based in|office)\s*:/i.test(name));
+  const canonical = names.find((name) => name.toLowerCase() === requested.toLowerCase());
+  if (!canonical) throw new Error("That skill is not a gap in your insights.");
+  return canonical;
+}
+
+export function confirmedSkillMessage({ already = false, skill = "", prepared = 0, preparedThisJob = false } = {}) {
+  if (already) return `${skill} is already on your resume.`;
+  if (prepared > 1 || (prepared === 1 && !preparedThisJob)) {
+    return `${skill} is saved to your Fact Ledger and the resumes prepared for your jobs.`;
+  }
+  if (prepared === 1) return `${skill} is saved to your Fact Ledger and the resume prepared for this job.`;
+  return `${skill} is saved to your Fact Ledger and resume.`;
+}
+
 export function preparedResumesAfterConfirm({ document = {}, jobs = [], facts = [], preferences = {} } = {}) {
   return (Array.isArray(jobs) ? jobs : []).filter(Boolean).map((job) => ({
     jobId: String(job.id || ""),

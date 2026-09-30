@@ -11,7 +11,8 @@ import { computeApplicationReadiness } from "./readiness.mjs";
 import { ensureFollowUpReminder } from "./follow-ups.mjs";
 import { AUTO_APPLY_AUTH_VERSION, autoApplyAuthorizationPayload, validateAutoApplyEnable } from "./auto-apply-auth.mjs";
 import { isSilentAutoApplyEnabled } from "./prompt-registry.mjs";
-import { confirmListedSkill, preparedResumesAfterConfirm } from "./confirm-skill.mjs";
+import { confirmListedSkill, confirmedSkillMessage } from "./confirm-skill.mjs";
+import { storeConfirmedSkill } from "./confirm-skill-store.mjs";
 
 export function registerApplications(app, ctx) {
   const {
@@ -571,51 +572,16 @@ export function registerApplications(app, ctx) {
       res.status(400).json({ error: err instanceof Error ? err.message : "Could not confirm that skill." });
       return;
     }
-    let prepared = 0;
-    let preparedThisJob = false;
+    const stored = result.already
+      ? { prepared: 0, jobIds: [] }
+      : storeConfirmedSkill({
+          userId: user.id,
+          result,
+          preferences,
+          versionId: version.id,
+          renderDocument,
+        });
     if (!result.already) {
-      db.prepare(
-        "UPDATE profiles SET summary = ?, skills = ?, employment = ?, facts = ?, updated_at = ? WHERE user_id = ?",
-      ).run(
-        result.profile.summary || "",
-        JSON.stringify(result.profile.skills || []),
-        JSON.stringify(result.profile.employment || []),
-        JSON.stringify(result.facts || []),
-        Date.now(),
-        user.id,
-      );
-      db.prepare("UPDATE resume_versions SET document = ?, rendered = ? WHERE id = ?").run(
-        JSON.stringify(result.document),
-        renderDocument(result.document),
-        version.id,
-      );
-      const rows = db.prepare(
-        `SELECT a.job_id AS jobId, a.version_id AS versionId
-         FROM applications a
-         JOIN resume_versions v ON v.id = a.version_id AND v.user_id = a.user_id
-         WHERE a.user_id = ? AND v.kind = 'application' AND a.version_id != ?`,
-      ).all(user.id, version.id);
-      const targets = [];
-      for (const row of rows) {
-        const target = row.jobId === job.id ? job : db.prepare("SELECT * FROM jobs WHERE id = ?").get(row.jobId);
-        if (target) targets.push({ versionId: row.versionId, job: target });
-      }
-      const preparedDocs = preparedResumesAfterConfirm({
-        document: result.document,
-        jobs: targets.map((item) => item.job),
-        facts: result.facts,
-        preferences,
-      });
-      preparedDocs.forEach((item, index) => {
-        db.prepare("UPDATE resume_versions SET document = ?, rendered = ?, parent_id = ? WHERE id = ?").run(
-          JSON.stringify(item.document),
-          renderDocument(item.document),
-          version.id,
-          targets[index].versionId,
-        );
-      });
-      prepared = preparedDocs.length;
-      preparedThisJob = preparedDocs.some((item) => item.jobId === job.id);
       audit?.({
         userId: user.id,
         functionName: "confirm_skill",
@@ -625,18 +591,18 @@ export function registerApplications(app, ctx) {
         detail: result.fact?.fact_id || result.skill,
       });
     }
+    const preparedThisJob = stored.jobIds.includes(job.id);
     res.json({
       ok: true,
       already: Boolean(result.already),
-      prepared,
+      prepared: stored.prepared,
       skill: result.skill,
-      message: result.already
-        ? `${result.skill} is already on your resume.`
-        : prepared > 1 || (prepared === 1 && !preparedThisJob)
-          ? `${result.skill} is saved to your Fact Ledger and the resumes prepared for your jobs.`
-          : prepared === 1
-            ? `${result.skill} is saved to your Fact Ledger and the resume prepared for this job.`
-            : `${result.skill} is saved to your Fact Ledger and resume.`,
+      message: confirmedSkillMessage({
+        already: result.already,
+        skill: result.skill,
+        prepared: stored.prepared,
+        preparedThisJob,
+      }),
     });
   });
 
