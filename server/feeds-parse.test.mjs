@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { listingsFromJson, parseFeedDocument } from "./feeds.mjs";
+import { feedFetchPlan, listingsFromJson, parseFeedDocument, publicBoardApiUrl } from "./feeds.mjs";
 
 test("listingsFromJson accepts Greenhouse-style jobs without company when fallback is set", () => {
   const rows = listingsFromJson(
@@ -32,4 +32,32 @@ test("parseFeedDocument html format surfaces a clear empty error", () => {
     () => parseFeedDocument("<html><body><p>No openings</p></body></html>", "text/html", "Acme", "html", "https://example.com"),
     /No public job listings/,
   );
+});
+
+test("publicBoardApiUrl maps Greenhouse, Lever, and Ashby careers pages", () => {
+  assert.equal(
+    publicBoardApiUrl("https://boards.greenhouse.io/stripe"),
+    "https://boards-api.greenhouse.io/v1/boards/stripe/jobs?content=true",
+  );
+  assert.equal(
+    publicBoardApiUrl("https://boards.greenhouse.io/embed/job_board?for=acme"),
+    "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true",
+  );
+  assert.equal(
+    publicBoardApiUrl("https://jobs.lever.co/netflix"),
+    "https://api.lever.co/v0/postings/netflix?mode=json",
+  );
+  assert.equal(
+    publicBoardApiUrl("https://jobs.ashbyhq.com/openai"),
+    "https://api.ashbyhq.com/posting-api/job-board/openai",
+  );
+  assert.equal(publicBoardApiUrl("https://boards-api.greenhouse.io/v1/boards/stripe/jobs"), null);
+  assert.equal(publicBoardApiUrl("https://example.com/careers"), null);
+});
+
+test("feedFetchPlan prefers public board API before the HTML careers URL", () => {
+  const plan = feedFetchPlan("https://boards.greenhouse.io/acme/");
+  assert.equal(plan[0].url, "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true");
+  assert.equal(plan[0].formatHint, "json");
+  assert.ok(plan.some((item) => item.url.includes("boards.greenhouse.io/acme")));
 });

@@ -3,6 +3,10 @@ import { completeJson } from "./ai-run.mjs";
 const AUTH_TYPES = ["none", "bearer", "basic", "header"];
 const FORMATS = ["auto", "json", "rss", "html"];
 
+/** Browser-like UA so public careers CDNs do not auto-block JobPilot/1.0. */
+const BROWSER_UA =
+  "Mozilla/5.0 (compatible; JobPilotBot/1.0; +https://jobpilot.app) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+
 export function normalizeFeedUrl(value) {
   let parsed;
   try {
@@ -17,6 +21,75 @@ export function normalizeFeedUrl(value) {
   parsed.hostname = parsed.hostname.toLowerCase();
   if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\/+$/, "");
   return parsed.toString();
+}
+
+/**
+ * Map common careers HTML URLs to the publisher's documented public JSON board API.
+ * Returns null when the URL is already an API endpoint or is unknown.
+ */
+export function publicBoardApiUrl(value) {
+  let parsed;
+  try {
+    parsed = new URL(String(value || "").trim());
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.toLowerCase();
+  const path = parsed.pathname.replace(/\/+$/, "");
+  const parts = path.split("/").filter(Boolean);
+
+  if (host === "boards-api.greenhouse.io" || host === "api.lever.co" || host === "api.ashbyhq.com") {
+    return null;
+  }
+
+  // Greenhouse board page or embed → public board API
+  if (host === "boards.greenhouse.io" || host === "job-boards.greenhouse.io") {
+    let slug = parts[0] || "";
+    if (parts[0] === "embed" && parsed.searchParams.get("for")) {
+      slug = String(parsed.searchParams.get("for") || "").trim();
+    }
+    if (slug && slug !== "embed" && slug !== "jobs") {
+      return `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(slug)}/jobs?content=true`;
+    }
+  }
+
+  // Lever careers page → public postings API
+  if (host === "jobs.lever.co" && parts[0]) {
+    return `https://api.lever.co/v0/postings/${encodeURIComponent(parts[0])}?mode=json`;
+  }
+
+  // Ashby careers page → public job board API
+  if (host === "jobs.ashbyhq.com" && parts[0]) {
+    return `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(parts[0])}`;
+  }
+
+  // Workable widget / apply page
+  if ((host === "apply.workable.com" || host.endsWith(".workable.com")) && parts[0] && parts[0] !== "api") {
+    const slug = parts[0] === "widget" ? parts[1] : parts[0];
+    if (slug) return `https://apply.workable.com/api/v1/widget/accounts/${encodeURIComponent(slug)}`;
+  }
+
+  // SmartRecruiters company board
+  if (host === "jobs.smartrecruiters.com" && parts[0]) {
+    return `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(parts[0])}/postings`;
+  }
+
+  return null;
+}
+
+export function feedFetchPlan(url) {
+  const normalized = normalizeFeedUrl(url);
+  const api = publicBoardApiUrl(normalized);
+  const urls = [];
+  if (api) urls.push({ url: api, formatHint: "json", label: "public board API" });
+  if (!api || api !== normalized) urls.push({ url: normalized, formatHint: "", label: "source URL" });
+  // Prefer API first when available; otherwise just the source URL.
+  const seen = new Set();
+  return urls.filter((item) => {
+    if (seen.has(item.url)) return false;
+    seen.add(item.url);
+    return true;
+  });
 }
 
 export function feedConfig(input, current = {}) {
@@ -46,10 +119,13 @@ export function publicFeedConfig(config) {
   };
 }
 
-function feedHeaders(config) {
+function feedHeaders(config, { preferJson = false } = {}) {
   const headers = {
-    Accept: "application/json, application/rss+xml, application/atom+xml, text/xml, */*",
-    "User-Agent": "JobPilot/1.0",
+    Accept: preferJson
+      ? "application/json, text/plain, */*"
+      : "text/html,application/xhtml+xml,application/json,application/rss+xml,application/atom+xml,text/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "User-Agent": BROWSER_UA,
   };
   if (config.authType === "bearer" && config.secret) headers.Authorization = `Bearer ${config.secret}`;
   if (config.authType === "basic" && (config.username || config.secret)) {
@@ -99,25 +175,36 @@ function textOf(value) {
 export function listingsFromJson(body, fallbackCompany) {
   const list = Array.isArray(body)
     ? body
-    : body?.jobs || body?.data || body?.results || body?.postings || body?.job_postings || body?.items || [];
+    : body?.jobs ||
+      body?.data ||
+      body?.results ||
+      body?.postings ||
+      body?.job_postings ||
+      body?.items ||
+      body?.content ||
+      [];
   if (!Array.isArray(list)) return [];
   const rows = [];
   for (const item of list) {
     if (!item || typeof item === "string") continue;
     if (typeof item !== "object") continue;
-    const title = String(item.title || item.text || item.name || item.position || item.job_title || "").trim();
+    const title = String(item.title || item.text || item.name || item.position || item.job_title || item.jobTitle || "").trim();
     const named = String(item.company || item.company_name || item.organization || item.companyName || "").trim();
     const employer = String(item.hiring_company || item.hiringCompany || item.client || item.primary_company || item.primaryCompany || "").trim();
     const company = named || employer || String(item.employer || fallbackCompany || "").trim();
     if (!title || !company) continue;
-    const applyUrl = String(item.apply_url || item.applyUrl || item.application_url || item.applicationUrl || "").trim();
-    const sourceUrl = String(item.url || item.absolute_url || item.hostedUrl || item.link || applyUrl || "").trim();
+    const applyUrl = String(
+      item.apply_url || item.applyUrl || item.application_url || item.applicationUrl || item.jobUrl || item.job_url || "",
+    ).trim();
+    const sourceUrl = String(
+      item.url || item.absolute_url || item.hostedUrl || item.link || item.jobUrl || item.job_url || applyUrl || "",
+    ).trim();
     const location =
       textOf(item.location) ||
       textOf(item.categories?.location) ||
-      String(item.location_name || item.locationName || "");
+      String(item.location_name || item.locationName || item.locationSummary || item.city || "");
     rows.push({
-      externalKey: String(item.id || item.internal_job_id || item.gh_jid || `${company}-${title}`).slice(0, 180),
+      externalKey: String(item.id || item.internal_job_id || item.gh_jid || item.uuid || `${company}-${title}`).slice(0, 180),
       title,
       company,
       employer: employer && employer !== company ? employer : "",
@@ -125,9 +212,17 @@ export function listingsFromJson(body, fallbackCompany) {
       remoteType: String(item.remote_type || item.remoteType || item.workplaceType || ""),
       salaryMin: Number(item.salary_min || item.salaryMin) || null,
       salaryMax: Number(item.salary_max || item.salaryMax) || null,
-      description: stripHtml(item.description || item.descriptionPlain || item.content || item.job_description || item.summary || ""),
+      description: stripHtml(
+        item.description ||
+          item.descriptionPlain ||
+          item.content ||
+          item.job_description ||
+          item.summary ||
+          item.descriptionHtml ||
+          "",
+      ),
       skills: Array.isArray(item.skills) ? item.skills.map(String) : [],
-      category: String(item.category || ""),
+      category: String(item.category || item.department || ""),
       role: String(item.role || ""),
       sourceUrl,
       applyUrl,
@@ -358,11 +453,36 @@ export async function resolvePrimary(listing) {
   };
 }
 
-export async function fetchFeedListings(source, config) {
-  if (!config.url) throw new Error("Add a feed URL before pulling.");
+function blockedAccessMessage(status, url, triedApi = "") {
+  const api = triedApi || publicBoardApiUrl(url);
+  let tip = "";
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host.includes("greenhouse")) {
+      tip = " For Greenhouse, use the board slug URL (we auto-call boards-api.greenhouse.io) or paste https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true.";
+    } else if (host.includes("lever")) {
+      tip = " For Lever, use https://jobs.lever.co/{company} or https://api.lever.co/v0/postings/{company}?mode=json.";
+    } else if (host.includes("ashby")) {
+      tip = " For Ashby, use https://jobs.ashbyhq.com/{company} or the Ashby posting-api job-board URL.";
+    } else if (api) {
+      tip = ` Try the public JSON board instead: ${api}`;
+    } else {
+      tip = " Prefer a public JSON/RSS feed or careers page that does not require login.";
+    }
+  } catch {
+    tip = " Prefer a public JSON/RSS feed or careers page that does not require login.";
+  }
+  return `This source blocked anonymous access (HTTP ${status}).${tip} Only add a token if the publisher documents a public API key.`;
+}
+
+async function requestFeed(url, config, { preferJson = false } = {}) {
   let response;
   try {
-    response = await fetch(config.url, { headers: feedHeaders(config), redirect: "follow", signal: AbortSignal.timeout(20000) });
+    response = await fetch(url, {
+      headers: feedHeaders(config, { preferJson }),
+      redirect: "follow",
+      signal: AbortSignal.timeout(20000),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Feed request failed.";
     if (/abort|timeout/i.test(message)) {
@@ -370,27 +490,53 @@ export async function fetchFeedListings(source, config) {
     }
     throw new Error(`Could not reach the feed. ${message}`);
   }
-  if (response.status === 401 || response.status === 403) {
-    throw new Error(
-      "This source blocked anonymous access (HTTP " +
-        response.status +
-        "). Prefer a public careers page or public JSON/RSS feed. Only add a token if the publisher documents a public API key.",
-    );
+  return response;
+}
+
+export async function fetchFeedListings(source, config) {
+  if (!config.url) throw new Error("Add a feed URL before pulling.");
+  const plan = feedFetchPlan(config.url);
+  let lastBlocked = null;
+  let lastHttpError = null;
+  let lastParseError = null;
+
+  for (const step of plan) {
+    const preferJson = step.formatHint === "json" || config.format === "json";
+    const response = await requestFeed(step.url, config, { preferJson });
+    if (response.status === 401 || response.status === 403) {
+      lastBlocked = { status: response.status, url: step.url };
+      continue;
+    }
+    if (!response.ok) {
+      lastHttpError = `Feed returned HTTP ${response.status} for ${step.label}.`;
+      continue;
+    }
+    const bodyText = await response.text();
+    const format = step.formatHint === "json" ? "json" : config.format || "auto";
+    try {
+      const listings = parseFeedDocument(
+        bodyText,
+        response.headers.get("content-type") || "",
+        config.employer || source.name,
+        format,
+        step.url,
+      );
+      if (!listings.length) {
+        lastParseError = !config.employer
+          ? "The source responded, but no jobs were found. If listings omit a company name, set “Default employer” on this feed."
+          : "The source responded, but no jobs were found.";
+        continue;
+      }
+      return listings.map((listing) => ({ ...listing, sourceUrl: listing.sourceUrl || config.url }));
+    } catch (error) {
+      lastParseError = error instanceof Error ? error.message : "Could not read jobs from that URL.";
+    }
   }
-  if (!response.ok) throw new Error(`Feed returned HTTP ${response.status}. Check the URL and access settings.`);
-  const bodyText = await response.text();
-  const listings = parseFeedDocument(
-    bodyText,
-    response.headers.get("content-type") || "",
-    config.employer || source.name,
-    config.format || "auto",
-    config.url,
-  );
-  if (!listings.length) {
-    const hint = !config.employer
-      ? " If listings omit a company name, set “Default employer” on this feed."
-      : "";
-    throw new Error(`The source responded, but no jobs were found.${hint}`);
+
+  if (lastBlocked) {
+    throw new Error(blockedAccessMessage(lastBlocked.status, config.url, publicBoardApiUrl(config.url) || ""));
   }
-  return listings.map((listing) => ({ ...listing, sourceUrl: listing.sourceUrl || config.url }));
+  if (lastHttpError) throw new Error(lastHttpError);
+  if (lastParseError) throw new Error(lastParseError);
+  throw new Error("Could not read jobs from that URL. Check the feed URL and format.");
 }
