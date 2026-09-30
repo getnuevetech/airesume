@@ -9,7 +9,7 @@ import {
   WORK_AUTHORIZATION_OPTIONS,
 } from "../preferenceOptions";
 import { useAccount } from "./AccountContext";
-import { CategoryBars, CountBars, ScorePill, ScoreRing } from "./charts";
+import { CategoryBars, CountBars, ScorePill, ScoreRing, StageRail, pipelineRows } from "./charts";
 import { ResumeSheet } from "./ResumeSheet";
 import type { AccountData, ResumeView } from "./types";
 
@@ -1789,6 +1789,10 @@ export function ApplicationsPage() {
             <p className="role">{data.stats.kitCompleted || 0} of {data.stats.kitOpened || 0} kits finished.</p>
           ) : null}
         </section>
+        <section className="account-card chart-card">
+          <h2>Where your roles are</h2>
+          <CountBars title="Application stages" rows={pipelineRows(data.applications.map((item) => item.status))} />
+        </section>
         {data.features.manual_apply ? (
           <FollowUpsPanel
             onDone={() => { setMessage("Follow-up updated."); void reload(); }}
@@ -1822,13 +1826,15 @@ export function ApplicationsPage() {
             <div className="job-card" style={{ padding: 0, boxShadow: "none", background: "transparent" }}>
               <div>
                 <h2>{item.title}</h2>
-                <p className="role">{item.company} · {item.mode} · {item.match}% match · {item.status}</p>
+                <p className="role">{[item.company, item.mode].filter(Boolean).join(" · ")}</p>
+                <StageRail status={item.status} />
                 {item.versionLabel ? <p className="role">Pinned resume: {item.versionLabel}</p> : null}
                 {item.viaCompany ? <p className="role">Found through {item.viaCompany}{item.sourceName ? ` on ${item.sourceName}` : ""}</p> : null}
                 {item.delivery ? <p className="role">{item.delivery}</p> : null}
                 {item.targetUrl ? <a href={item.targetUrl} target="_blank" rel="noreferrer">Open employer listing</a> : null}
               </div>
               <div className="job-side">
+                <ScorePill score={item.match} />
                 {["Ready", "Review required", "Resume preparing", "Found"].includes(item.status) && data.features.manual_apply && data.versions.length ? (
                   <select
                     aria-label="Pinned resume version"
