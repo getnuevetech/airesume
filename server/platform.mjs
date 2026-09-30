@@ -9,6 +9,7 @@ import { extractJobRequirements } from "./job-requirements.mjs";
 import { computeApplicationReadiness } from "./readiness.mjs";
 import { claimsSupported, tailoredDocument, normalizeResumePath } from "./resume-guard.mjs";
 import { buildClarificationRecommendations } from "./upscale-clarify.mjs";
+import { buildResumeInsights } from "./resume-upscale.mjs";
 import { TRACKER_STATUSES, startOfUtcDay } from "./apply-rules.mjs";
 import { draftQuestions } from "./questions.mjs";
 import { registerBilling } from "./routes-billing.mjs";
@@ -29,14 +30,6 @@ import { autoApplyAuthorizationPayload } from "./auto-apply-auth.mjs";
 migrate();
 
 const CATEGORIES = ["Product", "Engineering", "Design", "Data", "Marketing", "Operations", "Sales"];
-const WEAK = [
-  [/^\s*responsible for\s+/i, "Owned "],
-  [/^\s*duties included\s+/i, "Delivered "],
-  [/^\s*helped with\s+/i, "Supported "],
-  [/^\s*helped\s+/i, "Supported "],
-  [/^\s*assisted with\s+/i, "Supported "],
-  [/^\s*worked on\s+/i, "Delivered "],
-];
 
 function parse(value, fallback) {
   try {
@@ -139,57 +132,13 @@ function sourceText(doc) {
 }
 
 function diagnose(doc) {
-  const feedback = [];
-  const recommendations = [];
-  let rating = 78;
-  const summary = String(doc.summary || "").trim();
-  if (summary.length < 40) {
-    rating -= 12;
-    feedback.push("The summary is too short to show the shape of your work.");
-    recommendations.push({
-      id: "summary-length",
-      title: "Lengthen the summary with facts you already have",
-      detail: "Add a sentence from your existing roles. The review will not invent one.",
-      kind: "note",
-    });
-  } else {
-    feedback.push("The summary is long enough to use as the opening.");
-  }
-  let weakCount = 0;
-  (doc.employment || []).forEach((job, jobIndex) => {
-    (job.bullets || []).forEach((bullet, bulletIndex) => {
-      const rule = WEAK.find(([pattern]) => pattern.test(bullet));
-      if (!rule) return;
-      weakCount += 1;
-      const proposed = bullet.replace(rule[0], rule[1]);
-      if (proposed === bullet || !claimsSupported(proposed, bullet)) return;
-      recommendations.push({
-        id: `bullet-${jobIndex}-${bulletIndex}`,
-        title: `Strengthen “${bullet.slice(0, 48)}”`,
-        detail: "This keeps the same duty and replaces a weak opening verb.",
-        kind: "rewrite",
-        path: `employment.${jobIndex}.bullets.${bulletIndex}`,
-        proposed,
-      });
-    });
-  });
-  if (weakCount) {
-    rating -= Math.min(18, weakCount * 6);
-    feedback.push(`${weakCount} bullet${weakCount === 1 ? "" : "s"} open with a weak verb.`);
-  } else {
-    feedback.push("Experience lines already use direct verbs.");
-  }
-  const blob = renderDocument(doc);
-  if (!/\d/.test(blob)) {
-    rating -= 8;
-    feedback.push("No measurable figure is on the resume. Add only numbers you can confirm via clarification — Upscale will not invent them.");
-  }
+  const insight = buildResumeInsights(doc);
+  const recommendations = [...insight.recommendations];
   const clarifications = buildClarificationRecommendations(doc);
   for (const item of clarifications.recommendations) {
     if (!recommendations.some((existing) => existing.id === item.id)) recommendations.push(item);
   }
-  rating = Math.max(35, Math.min(96, rating));
-  return { rating, feedback, recommendations };
+  return { rating: insight.rating, feedback: insight.feedback, recommendations };
 }
 
 async function reviewDocument(user, version) {
