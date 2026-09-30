@@ -20,7 +20,66 @@ export function normalizeFeedUrl(value) {
   parsed.hash = "";
   parsed.hostname = parsed.hostname.toLowerCase();
   if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\/+$/, "");
-  return parsed.toString();
+  const normalized = parsed.toString();
+  assertSupportedFeedUrl(normalized);
+  return normalized;
+}
+
+/**
+ * Job aggregators / search engines do not expose a public pullable board API for this product.
+ * Reject them early with a clear message instead of a generic HTTP 403.
+ */
+export function unsupportedJobSiteMessage(value) {
+  let host = "";
+  try {
+    host = new URL(String(value || "").trim()).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+  const aggregators = [
+    {
+      match: /(^|\.)indeed\./,
+      name: "Indeed",
+      detail:
+        "Indeed search or job pages are not a public feed. Use Remotive, Arbeitnow, RemoteOK, Jobicy, or an employer board (Greenhouse / Lever / Ashby) instead.",
+    },
+    {
+      match: /(^|\.)linkedin\./,
+      name: "LinkedIn",
+      detail: "LinkedIn job search pages are not a public feed. Use an employer’s public careers board URL instead.",
+    },
+    {
+      match: /(^|\.)ziprecruiter\./,
+      name: "ZipRecruiter",
+      detail: "ZipRecruiter listings are not a public feed. Use an employer’s public careers board URL instead.",
+    },
+    {
+      match: /(^|\.)glassdoor\./,
+      name: "Glassdoor",
+      detail: "Glassdoor job pages are not a public feed. Use an employer’s public careers board URL instead.",
+    },
+    {
+      match: /(^|\.)simplyhired\./,
+      name: "SimplyHired",
+      detail: "SimplyHired search pages are not a public feed. Use an employer’s public careers board URL instead.",
+    },
+    {
+      match: /(^|\.)monster\./,
+      name: "Monster",
+      detail: "Monster job search pages are not a public feed. Use an employer’s public careers board URL instead.",
+    },
+  ];
+  for (const site of aggregators) {
+    if (site.match.test(host)) {
+      return `${site.name} URLs cannot be pulled as JobPilot feeds. ${site.detail}`;
+    }
+  }
+  return "";
+}
+
+export function assertSupportedFeedUrl(value) {
+  const message = unsupportedJobSiteMessage(value);
+  if (message) throw new Error(message);
 }
 
 /**
@@ -202,14 +261,26 @@ export function listingsFromJson(body, fallbackCompany) {
     const location =
       textOf(item.location) ||
       textOf(item.categories?.location) ||
-      String(item.location_name || item.locationName || item.locationSummary || item.city || "");
+      String(
+        item.location_name ||
+          item.locationName ||
+          item.locationSummary ||
+          item.candidate_required_location ||
+          item.jobGeo ||
+          item.city ||
+          "",
+      );
+    const remoteFlag =
+      item.remote === true ||
+      item.remote === 1 ||
+      /remote/i.test(String(item.remote_type || item.remoteType || item.workplaceType || location));
     rows.push({
-      externalKey: String(item.id || item.internal_job_id || item.gh_jid || item.uuid || `${company}-${title}`).slice(0, 180),
+      externalKey: String(item.id || item.slug || item.internal_job_id || item.gh_jid || item.uuid || `${company}-${title}`).slice(0, 180),
       title,
       company,
       employer: employer && employer !== company ? employer : "",
       location,
-      remoteType: String(item.remote_type || item.remoteType || item.workplaceType || ""),
+      remoteType: String(item.remote_type || item.remoteType || item.workplaceType || (remoteFlag ? "remote" : "")),
       salaryMin: Number(item.salary_min || item.salaryMin) || null,
       salaryMax: Number(item.salary_max || item.salaryMax) || null,
       description: stripHtml(
@@ -217,15 +288,21 @@ export function listingsFromJson(body, fallbackCompany) {
           item.descriptionPlain ||
           item.content ||
           item.job_description ||
+          item.jobDescription ||
           item.summary ||
           item.descriptionHtml ||
+          item.jobExcerpt ||
           "",
-      ),
-      skills: Array.isArray(item.skills) ? item.skills.map(String) : [],
-      category: String(item.category || item.department || ""),
+      ).slice(0, 8000),
+      skills: Array.isArray(item.skills)
+        ? item.skills.map(String)
+        : Array.isArray(item.tags)
+          ? item.tags.map(String)
+          : [],
+      category: String(item.category || item.department || item.departmentName || item.jobIndustry || ""),
       role: String(item.role || ""),
       sourceUrl,
-      applyUrl,
+      applyUrl: applyUrl || sourceUrl,
     });
   }
   return rows;
@@ -454,6 +531,8 @@ export async function resolvePrimary(listing) {
 }
 
 function blockedAccessMessage(status, url, triedApi = "") {
+  const unsupported = unsupportedJobSiteMessage(url);
+  if (unsupported) return unsupported;
   const api = triedApi || publicBoardApiUrl(url);
   let tip = "";
   try {
@@ -467,10 +546,11 @@ function blockedAccessMessage(status, url, triedApi = "") {
     } else if (api) {
       tip = ` Try the public JSON board instead: ${api}`;
     } else {
-      tip = " Prefer a public JSON/RSS feed or careers page that does not require login.";
+      tip =
+        " Prefer a verified public feed (Remotive, Arbeitnow, RemoteOK, Jobicy) or an employer Greenhouse/Lever/Ashby board.";
     }
   } catch {
-    tip = " Prefer a public JSON/RSS feed or careers page that does not require login.";
+    tip = " Prefer a verified public feed or employer careers board.";
   }
   return `This source blocked anonymous access (HTTP ${status}).${tip} Only add a token if the publisher documents a public API key.`;
 }
@@ -495,6 +575,7 @@ async function requestFeed(url, config, { preferJson = false } = {}) {
 
 export async function fetchFeedListings(source, config) {
   if (!config.url) throw new Error("Add a feed URL before pulling.");
+  assertSupportedFeedUrl(config.url);
   const plan = feedFetchPlan(config.url);
   let lastBlocked = null;
   let lastHttpError = null;

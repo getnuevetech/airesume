@@ -638,6 +638,8 @@ const blankFeed = { name: "", url: "", format: "auto", authType: "none", usernam
 export function JobsAdmin() {
   const [sources, setSources] = useState<Source[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [hints, setHints] = useState<string[]>([]);
+  const [exampleFeeds, setExampleFeeds] = useState<{ name: string; url: string; detail?: string }[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [feed, setFeed] = useState(blankFeed);
@@ -647,11 +649,19 @@ export function JobsAdmin() {
   const [description, setDescription] = useState("");
   const [pullingId, setPullingId] = useState<string | "all" | "">("");
   const [pullResults, setPullResults] = useState<Record<string, { status: string; message: string }>>({});
+  const [examplesBusy, setExamplesBusy] = useState(false);
 
   async function load() {
-    const data = await api<{ sources: Source[]; jobs: Job[] }>("/api/admin/jobs");
+    const data = await api<{
+      sources: Source[];
+      jobs: Job[];
+      hints?: string[];
+      exampleFeeds?: { name: string; url: string; detail?: string }[];
+    }>("/api/admin/jobs");
     setSources(data.sources);
     setJobs(data.jobs);
+    setHints(data.hints || []);
+    setExampleFeeds(data.exampleFeeds || []);
     setPullResults((current) => {
       const next = { ...current };
       for (const source of data.sources) {
@@ -732,15 +742,56 @@ export function JobsAdmin() {
     <div>
       <h1>Job feeds</h1>
       <p className="lede">
-        Add public job sources that do not require a candidate login: Greenhouse / Lever / Ashby board pages (we call their public JSON APIs),
-        careers pages, JSON feeds, or RSS/Atom. Set a default employer when the page omits the company name. Optional tokens are only for
-        documented public API keys — not for scraping behind a sign-in wall.
+        Use verified public feeds (Remotive, Arbeitnow, RemoteOK, Jobicy) or employer boards (Greenhouse / Lever / Ashby). Indeed, LinkedIn,
+        and similar search pages are not supported. Set a default employer when a board omits the company name.
       </p>
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="role">{message}</p> : null}
-      <button className="btn btn-primary" type="button" disabled={Boolean(pullingId)} onClick={() => void pull()}>
-        {pullingId === "all" ? "Pulling…" : "Pull enabled feeds"}
-      </button>
+      {hints.length ? (
+        <ul className="fact-list">
+          {hints.map((hint) => (
+            <li key={hint}>{hint}</li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="admin-actions" style={{ marginBottom: 12 }}>
+        <button className="btn btn-primary" type="button" disabled={Boolean(pullingId)} onClick={() => void pull()}>
+          {pullingId === "all" ? "Pulling…" : "Pull enabled feeds"}
+        </button>
+        <button
+          className="btn btn-ghost"
+          type="button"
+          disabled={examplesBusy}
+          onClick={() => {
+            setError("");
+            setExamplesBusy(true);
+            void api<{ message?: string; sources: Source[] }>("/api/admin/job-sources/examples", { method: "POST" })
+              .then(async (data) => {
+                setMessage(data.message || "Example feeds ready.");
+                if (data.sources) setSources(data.sources);
+                else await load();
+              })
+              .catch((err: Error) => setError(err.message))
+              .finally(() => setExamplesBusy(false));
+          }}
+        >
+          {examplesBusy ? "Adding…" : "Add verified example feeds"}
+        </button>
+      </div>
+      {exampleFeeds.length ? (
+        <div className="admin-card">
+          <h2>Verified example feeds</h2>
+          <p className="role">These public APIs were checked live. Click “Add verified example feeds” then pull.</p>
+          <ul className="fact-list">
+            {exampleFeeds.map((item) => (
+              <li key={item.url}>
+                <strong>{item.name}</strong> · {item.url}
+                {item.detail ? ` — ${item.detail}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <form
         className="admin-card"
         onSubmit={(event) => {
@@ -758,7 +809,7 @@ export function JobsAdmin() {
         <h2>Add a feed</h2>
         <div className="admin-grid">
           <label className="field"><span>Name</span><input value={feed.name} onChange={(event) => setFeed({ ...feed, name: event.target.value })} required /></label>
-          <label className="field"><span>Source URL</span><input value={feed.url} onChange={(event) => setFeed({ ...feed, url: event.target.value })} placeholder="https://boards.greenhouse.io/example or jobs.json / RSS" required /></label>
+          <label className="field"><span>Source URL</span><input value={feed.url} onChange={(event) => setFeed({ ...feed, url: event.target.value })} placeholder="https://remotive.com/api/remote-jobs or boards.greenhouse.io/…" required /></label>
           <label className="field">
             <span>Format</span>
             <select value={feed.format} onChange={(event) => setFeed({ ...feed, format: event.target.value })}>
