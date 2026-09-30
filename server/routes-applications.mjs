@@ -4,6 +4,7 @@ import { db, id } from "./db.mjs";
 import { matchJob } from "./match.mjs";
 import { TRACKER_STATUSES, PRE_APPLY_STATUSES, autoDecision } from "./apply-rules.mjs";
 import { fetchJobUrl, parseJobPaste } from "./job-import.mjs";
+import { holdJobDraft, reviewJobIntake } from "./job-intake.mjs";
 import { buildApplyKit } from "./apply-kit.mjs";
 import { applyKitMetrics, recordApplyKitEvent } from "./apply-kit-metrics.mjs";
 import { computeApplicationReadiness } from "./readiness.mjs";
@@ -94,6 +95,24 @@ export function registerApplications(app, ctx) {
         company: req.body.company || fetchedCompany,
         location: req.body.location || fetchedLocation,
       });
+      const review = await reviewJobIntake(draft);
+      if (!review.useful) {
+        const reason = review.reasons[0] || "That page is not a job listing.";
+        holdJobDraft({
+          sourceId: "",
+          userId: user.id,
+          origin: "paste",
+          draft,
+          reason,
+          provider: review.provider,
+          model: review.model,
+        });
+        res.json({
+          held: true,
+          message: `${reason} It was not added to your list. An admin can discard it or add it.`,
+        });
+        return;
+      }
       let source = db.prepare("SELECT * FROM job_sources WHERE kind = 'paste' LIMIT 1").get();
       if (!source) {
         const sourceId = id("src");

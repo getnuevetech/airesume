@@ -635,9 +635,18 @@ export function PaymentsAdmin() {
 
 const blankFeed = { name: "", url: "", format: "auto", authType: "none", username: "", secret: "", headerName: "", employer: "" };
 
+function originLabel(origin: string) {
+  if (origin === "paste") return "Added by a candidate";
+  if (origin === "feed") return "Feed";
+  if (origin === "extension") return "Browser extension";
+  if (origin === "admin") return "Admin entry";
+  return origin;
+}
+
 export function JobsAdmin() {
   const [sources, setSources] = useState<Source[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [holds, setHolds] = useState<{ id: string; title: string; company: string; location: string; description: string; sourceUrl: string; origin: string; reason: string }[]>([]);
   const [hints, setHints] = useState<string[]>([]);
   const [exampleFeeds, setExampleFeeds] = useState<{ name: string; url: string; detail?: string }[]>([]);
   const [message, setMessage] = useState("");
@@ -657,9 +666,11 @@ export function JobsAdmin() {
       jobs: Job[];
       hints?: string[];
       exampleFeeds?: { name: string; url: string; detail?: string }[];
+      holds?: { id: string; title: string; company: string; location: string; description: string; sourceUrl: string; origin: string; reason: string }[];
     }>("/api/admin/jobs");
     setSources(data.sources);
     setJobs(data.jobs);
+    setHolds(data.holds || []);
     setHints(data.hints || []);
     setExampleFeeds(data.exampleFeeds || []);
     setPullResults((current) => {
@@ -747,6 +758,22 @@ export function JobsAdmin() {
       </p>
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="role">{message}</p> : null}
+      <section className="admin-card">
+        <h2>Held for review{holds.length ? ` (${holds.length})` : ""}</h2>
+        <p className="role">Feed rows and pasted pages that are not real job listings stay here. Add one to the job list, or discard it.</p>
+        {holds.length ? holds.map((hold) => (
+          <article className="hold-card" key={hold.id}>
+            <strong>{hold.title || "Untitled page"}</strong>
+            <p className="role">{[hold.company, hold.location, originLabel(hold.origin), hold.sourceUrl].filter(Boolean).join(" · ")}</p>
+            <p>{hold.reason}</p>
+            {hold.description ? <pre className="hold-preview">{hold.description.slice(0, 700)}</pre> : null}
+            <div className="job-actions">
+              <button className="btn btn-primary btn-sm" type="button" onClick={() => void api(`/api/admin/jobs/holds/${hold.id}/add`, { method: "POST" }).then(() => { setMessage("Listing added to jobs."); return load(); }).catch((err: Error) => setError(err.message))}>Add</button>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => void api(`/api/admin/jobs/holds/${hold.id}/discard`, { method: "POST" }).then(() => { setMessage("Listing discarded."); return load(); }).catch((err: Error) => setError(err.message))}>Discard</button>
+            </div>
+          </article>
+        )) : <p className="role">Nothing is waiting.</p>}
+      </section>
       {hints.length ? (
         <ul className="fact-list">
           {hints.map((hint) => (
@@ -840,12 +867,12 @@ export function JobsAdmin() {
         onSubmit={(event) => {
           event.preventDefault();
           setError("");
-          void api("/api/admin/jobs", { method: "POST", body: JSON.stringify({ title, company, description }) })
-            .then(() => {
+          void api<{ held?: boolean; message?: string }>("/api/admin/jobs", { method: "POST", body: JSON.stringify({ title, company, description }) })
+            .then((result: { held?: boolean; message?: string }) => {
               setTitle("");
               setCompany("");
               setDescription("");
-              setMessage("Job added.");
+              setMessage(result.held ? (result.message || "Held for review.") : "Job added.");
               return load();
             })
             .catch((err: Error) => setError(err.message));

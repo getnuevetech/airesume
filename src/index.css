@@ -1411,6 +1411,9 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
 .job-section p { margin: 0 0 8px; line-height: 1.6; color: #24344a; }
 .job-section ul { margin: 0; padding-left: 18px; }
 .job-section li { margin: 4px 0; line-height: 1.5; }
+.hold-card { margin-top: 16px; padding-top: 16px; border-top: 1px solid #e4ece7; }
+.hold-card .job-actions { margin-top: 10px; }
+.hold-preview { max-height: 140px; overflow: auto; white-space: pre-wrap; background: #f7faf8; border-radius: 12px; padding: 12px; font: 13px/1.5 var(--font); color: #24344a; }
 .job-side { display: grid; justify-items: end; gap: 8px; }
 .job-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .question-drafts { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f0f3f6; display: grid; gap: 10px; }

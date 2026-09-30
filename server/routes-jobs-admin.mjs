@@ -3,6 +3,7 @@
 import { db, id } from "./db.mjs";
 import { feedConfig, normalizeFeedUrl } from "./feeds.mjs";
 import { EXAMPLE_FEEDS, SUPPORTED_FEED_HINTS } from "./example-feeds.mjs";
+import { holdJobDraft, reviewJobIntake } from "./job-intake.mjs";
 
 export function registerJobsAdmin(app, ctx) {
   const {
@@ -38,6 +39,19 @@ export function registerJobsAdmin(app, ctx) {
         primaryUrl: job.primary_url || "",
         primaryEmail: job.primary_email || "",
         active: Boolean(job.active),
+      })),
+      holds: db.prepare("SELECT * FROM job_intake_holds WHERE status = 'pending' ORDER BY created_at DESC LIMIT 100").all().map((row) => ({
+        id: row.id,
+        title: row.title,
+        company: row.company,
+        location: row.location,
+        description: row.description,
+        sourceUrl: row.source_url,
+        origin: row.origin,
+        reason: row.reason,
+        provider: row.provider,
+        model: row.model,
+        createdAt: row.created_at,
       })),
     });
   });
@@ -247,7 +261,22 @@ export function registerJobsAdmin(app, ctx) {
       skills: String(req.body.skills || "").split(",").map((skill) => skill.trim()).filter(Boolean),
       category: String(req.body.category || ""),
       role: String(req.body.role || ""),
+      sourceUrl: String(req.body.sourceUrl || ""),
     };
+    const review = await reviewJobIntake(draft);
+    if (!review.useful) {
+      const reason = review.reasons[0] || "That text is not a job listing.";
+      const held = holdJobDraft({
+        sourceId: "",
+        origin: "admin",
+        draft,
+        reason,
+        provider: review.provider,
+        model: review.model,
+      });
+      res.json({ held: true, id: held.id, message: `${reason} It is in Held for review.` });
+      return;
+    }
     const checked = await categorizeAndVerify(draft, db.prepare("SELECT id, title, company, location, source_url FROM jobs").all());
     const saved = await saveJob(source.id, {
       ...draft,
@@ -261,5 +290,66 @@ export function registerJobsAdmin(app, ctx) {
       authenticity: checked.authenticity,
     });
     res.json({ id: saved.id || saved });
+  });
+
+  app.post("/api/admin/jobs/holds/:id/add", async (req, res) => {
+    if (!requireAdmin(req, res, "admin.jobs.create")) return;
+    const hold = db.prepare("SELECT * FROM job_intake_holds WHERE id = ?").get(req.params.id);
+    if (!hold || hold.status !== "pending") {
+      res.status(404).json({ error: "That listing is not waiting for review." });
+      return;
+    }
+    let payload = {};
+    try {
+      payload = JSON.parse(hold.payload || "{}");
+    } catch {
+      payload = {};
+    }
+    const draft = {
+      title: payload.title || hold.title,
+      company: payload.company || hold.company || "Unknown company",
+      location: payload.location || hold.location || "",
+      description: payload.description || hold.description || "",
+      sourceUrl: payload.sourceUrl || payload.source_url || hold.source_url || "",
+      skills: Array.isArray(payload.skills) ? payload.skills : [],
+      remoteType: payload.remoteType || "",
+      salaryMin: payload.salaryMin ?? null,
+      salaryMax: payload.salaryMax ?? null,
+      externalKey: payload.externalKey || `hold-${hold.id}`,
+    };
+    let sourceId = hold.source_id;
+    if (!sourceId || !db.prepare("SELECT id FROM job_sources WHERE id = ?").get(sourceId)) {
+      let source = db.prepare("SELECT * FROM job_sources WHERE kind = 'manual' LIMIT 1").get();
+      if (!source) {
+        sourceId = id("src");
+        db.prepare(
+          "INSERT INTO job_sources (id, name, kind, config, enabled, created_at) VALUES (?, 'Manual entries', 'manual', '{}', 1, ?)",
+        ).run(sourceId, Date.now());
+      } else {
+        sourceId = source.id;
+      }
+    }
+    const checked = await categorizeAndVerify(draft, db.prepare("SELECT id, title, company FROM jobs").all());
+    const saved = await saveJob(sourceId, {
+      ...draft,
+      ...checked,
+      note: checked.note,
+      authenticity: checked.authenticity,
+      primaryCompany: draft.company,
+      primaryUrl: draft.sourceUrl,
+    });
+    db.prepare("UPDATE job_intake_holds SET status = 'added', decided_at = ? WHERE id = ?").run(Date.now(), hold.id);
+    res.json({ ok: true, id: saved.id || saved });
+  });
+
+  app.post("/api/admin/jobs/holds/:id/discard", (req, res) => {
+    if (!requireAdmin(req, res, "admin.jobs.delete")) return;
+    const hold = db.prepare("SELECT * FROM job_intake_holds WHERE id = ?").get(req.params.id);
+    if (!hold || hold.status !== "pending") {
+      res.status(404).json({ error: "That listing is not waiting for review." });
+      return;
+    }
+    db.prepare("UPDATE job_intake_holds SET status = 'discarded', decided_at = ? WHERE id = ?").run(Date.now(), hold.id);
+    res.json({ ok: true });
   });
 }

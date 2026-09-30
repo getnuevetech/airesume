@@ -3,6 +3,7 @@ import { completeJson } from "./ai-run.mjs";
 import { migrate, publicPlan } from "./schema.mjs";
 import { deliverMail } from "./mail.mjs";
 import { fetchFeedListings, localPrimary, normalizeFeedUrl, publicFeedConfig, resolvePrimary } from "./feeds.mjs";
+import { holdJobDraft, reviewJobIntake } from "./job-intake.mjs";
 import { extractRequirements, matchJob } from "./match.mjs";
 import { authenticitySignals, normalizeJobListing } from "./job-schema.mjs";
 import { extractJobRequirements } from "./job-requirements.mjs";
@@ -426,9 +427,24 @@ async function pullSource(source) {
   const siblings = rows.map((row, index) => ({ id: String(index), title: row.title, company: row.company }));
   const seen = new Set();
   const saveErrors = [];
+  let held = 0;
   for (let index = 0; index < rows.length; index += 1) {
     const row = { ...rows[index], id: String(index) };
     try {
+      const review = await reviewJobIntake(row);
+      if (!review.useful) {
+        holdJobDraft({
+          sourceId: source.id,
+          origin: "feed",
+          draft: row,
+          reason: review.reasons[0] || "This listing is not a useful job.",
+          provider: review.provider,
+          model: review.model,
+        });
+        seen.add(jobKey(row));
+        held += 1;
+        continue;
+      }
       // Pull stays local/fast so feeds do not hang on per-job AI calls.
       const primary = localPrimary(row);
       const checked = categorizeAndVerifyLocal(row, siblings);
@@ -471,10 +487,11 @@ async function pullSource(source) {
   }
 
   const skipped = rows.length - seen.size;
+  const heldNote = held > 0 ? ` ${held} listing${held === 1 ? "" : "s"} held for admin review.` : "";
   const message =
     skipped > 0
-      ? `Pulled ${seen.size} job${seen.size === 1 ? "" : "s"} (${skipped} listing${skipped === 1 ? "" : "s"} skipped).`
-      : `Pulled ${seen.size} job${seen.size === 1 ? "" : "s"}.`;
+      ? `Pulled ${seen.size - held} job${seen.size - held === 1 ? "" : "s"} (${skipped} listing${skipped === 1 ? "" : "s"} skipped).${heldNote}`
+      : `Pulled ${seen.size - held} job${seen.size - held === 1 ? "" : "s"}.${heldNote}`;
   recordPullResult(source.id, "ok", message);
   return seen.size;
 }

@@ -1540,14 +1540,18 @@ export function JobsPage() {
   async function importJob(action: "" | "prepare" | "track") {
     setBusy(true);
     try {
-      const result = await api<{ job: { id: string; title: string } }>("/api/jobs/paste", {
+      const result = await api<{ held?: boolean; message?: string; job?: { id: string; title: string } }>("/api/jobs/paste", {
         method: "POST",
         body: JSON.stringify({ text: pasteText, url: pasteUrl, action }),
       });
       setPasteText("");
       setPasteUrl("");
-      setImportedId(result.job.id);
-      setMessage(action === "prepare" ? `${result.job.title} is at the top of your list and prepared.` : action === "track" ? `${result.job.title} is at the top of your list.` : `${result.job.title} is at the top of your list.`);
+      if (result.held) {
+        setMessage(result.message || "That page is not a job listing, so it was not added.");
+        return;
+      }
+      setImportedId(result.job?.id || "");
+      setMessage(action === "prepare" ? `${result.job?.title || "Job"} is at the top of your list and prepared.` : action === "track" ? `${result.job?.title || "Job"} is at the top of your list.` : `${result.job?.title || "Job"} is at the top of your list.`);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not import that job.");

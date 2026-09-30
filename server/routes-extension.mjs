@@ -13,6 +13,7 @@ import {
   revokeExtensionToken,
 } from "./extension-tokens.mjs";
 import { rateLimit } from "./security.mjs";
+import { holdJobDraft, reviewJobIntake } from "./job-intake.mjs";
 
 function bearerToken(req) {
   const header = String(req.headers.authorization || "");
@@ -87,6 +88,24 @@ export function registerExtension(app, ctx) {
     }
     try {
       const draft = normalizeExtensionCapture(req.body || {});
+      const review = await reviewJobIntake(draft);
+      if (!review.useful) {
+        const reason = review.reasons[0] || "That page is not a job listing.";
+        holdJobDraft({
+          sourceId: "",
+          userId: user.id,
+          origin: "extension",
+          draft,
+          reason,
+          provider: review.provider,
+          model: review.model,
+        });
+        res.json({
+          held: true,
+          message: `${reason} It was not added. An admin can discard it or add it.`,
+        });
+        return;
+      }
       let source = db.prepare("SELECT * FROM job_sources WHERE kind = 'extension' LIMIT 1").get();
       if (!source) {
         const sourceId = id("src");
