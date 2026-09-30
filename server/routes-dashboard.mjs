@@ -26,6 +26,7 @@ function profilePayload(profile, user, parse) {
     facts: parse(profile.facts, []),
     preferences: parse(profile.preferences, {}),
     resumeName: profile.resume_name || "",
+    resumeFileUrl: profile.resume_file_url || "",
     photoUrl: profile.photo_url || "",
     slug: profile.slug || "",
     city: user?.city || "",

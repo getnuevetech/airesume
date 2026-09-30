@@ -133,6 +133,29 @@ export function GetStartedPage() {
     if (!draft) return;
     setError("");
     try {
+      if (user) {
+        const result = await api<{ message?: string }>("/api/onboarding/claim", {
+          method: "POST",
+          body: JSON.stringify({
+            draftId: draft.draftId,
+            name,
+            phone,
+            address,
+            city,
+            summary,
+            salary,
+            workArrangement,
+            locations,
+            workAuthorization,
+            consent,
+          }),
+        });
+        sessionStorage.removeItem("jp-draft");
+        await refresh();
+        notify(result.message || "Resume saved to your account.");
+        navigate("/account");
+        return;
+      }
       const result = await api<{
         pending?: boolean;
         email?: string;
@@ -339,8 +362,8 @@ export function GetStartedPage() {
             ))}
         </ul>
         {user ? (
-          <p>
-            You are already signed in as {user.email}. <Link to="/account">Open your account</Link> or sign out to create another account.
+          <p className="role">
+            You are signed in as {user.email}. Confirm the details below to save this uploaded resume to your profile.
           </p>
         ) : null}
       </div>
@@ -356,7 +379,7 @@ export function GetStartedPage() {
         </label>
         <label className="field">
           <span>Email</span>
-          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={Boolean(user)} />
         </label>
         <label className="field">
           <span>Mobile</span>
@@ -402,21 +425,25 @@ export function GetStartedPage() {
             </label>
           );
         })}
-        <label className="check-row">
-          <input type="checkbox" checked={usePassword} onChange={(event) => setUsePassword(event.target.checked)} />
-          <span>Set a password now instead of email activation</span>
-        </label>
-        {usePassword ? (
-          <label className="field">
-            <span>Password</span>
-            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required />
-          </label>
-        ) : (
-          <p className="role">We will email a one-time activation link and code to confirm this address.</p>
-        )}
+        {!user ? (
+          <>
+            <label className="check-row">
+              <input type="checkbox" checked={usePassword} onChange={(event) => setUsePassword(event.target.checked)} />
+              <span>Set a password now instead of email activation</span>
+            </label>
+            {usePassword ? (
+              <label className="field">
+                <span>Password</span>
+                <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required />
+              </label>
+            ) : (
+              <p className="role">We will email a one-time activation link and code to confirm this address.</p>
+            )}
+          </>
+        ) : null}
         <TermsAgreement checked={consent} onChange={setConsent} includeResume />
-        <button className="btn btn-primary btn-block" type="submit" disabled={Boolean(user)}>
-          {usePassword ? "Create account" : "Email me an activation link"}
+        <button className="btn btn-primary btn-block" type="submit">
+          {user ? "Save resume to my account" : usePassword ? "Create account" : "Email me an activation link"}
         </button>
         <p className="fine-print">
           Already have an account? <Link to="/signin">Sign in</Link>

@@ -33,7 +33,7 @@ function isAllowedResume(file: File) {
 export function UploadPanel({ showSample = false }: UploadPanelProps) {
   const inputId = useId();
   const navigate = useNavigate();
-  const { notify } = useApp();
+  const { notify, user } = useApp();
   const { content } = useSiteContent();
   const hero = content.hero;
   const [drag, setDrag] = useState(false);
@@ -70,7 +70,11 @@ export function UploadPanel({ showSample = false }: UploadPanelProps) {
       if (!response.ok) throw new Error(data.error || "We could not read that file.");
       sessionStorage.setItem("jp-draft", JSON.stringify(data));
       window.dispatchEvent(new Event("jp-draft"));
-      notify("We read your resume. Confirm the details to finish your account.");
+      notify(
+        user
+          ? "We read your resume. Confirm the details to save it to your profile."
+          : "We read your resume. Confirm the details to finish your account.",
+      );
       navigate("/get-started");
     } catch (err) {
       setError(err instanceof Error ? err.message : "We could not read that file.");

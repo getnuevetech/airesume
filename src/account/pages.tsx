@@ -896,6 +896,15 @@ function ProfileView({
           <p className="eyebrow">Profile</p>
           <h1>{name}</h1>
           <p className="lede">{headline || "Add a headline so employers see your focus."}</p>
+          {profile.resumeName ? (
+            <p className="role">
+              Uploaded resume: {profile.resumeFileUrl ? (
+                <a href={profile.resumeFileUrl} target="_blank" rel="noreferrer">{profile.resumeName}</a>
+              ) : (
+                profile.resumeName
+              )}
+            </p>
+          ) : null}
         </div>
         <button className="btn btn-ghost" type="button" onClick={() => setEditing(!editing)}>{editing ? "Close editor" : "Edit profile"}</button>
       </header>
@@ -1169,12 +1178,17 @@ export function ResumePage() {
                 </button>
               </>
             ) : (
-              <p>Run an analysis to see what to improve.</p>
+              <p>
+                {data.versions.length
+                  ? `Your uploaded resume is saved${data.profile?.resumeName ? ` as “${data.profile.resumeName}”` : ""}. Run an analysis to see what to improve.`
+                  : "Run an analysis to see what to improve."}
+              </p>
             )}
           </section>
           <section className="account-card">
             <h2>Versions</h2>
-            {data.versions.map((version) => (
+            {data.versions.length ? (
+              data.versions.map((version) => (
               <article key={version.id} className="version-mini">
                 <strong>{version.label}</strong>
                 <p className="role">{version.active ? "Public resume" : version.kind}</p>
@@ -1193,7 +1207,13 @@ export function ResumePage() {
                   </button>
                 ) : null}
               </article>
-            ))}
+            ))
+            ) : (
+              <p className="role">
+                No resume version yet.{" "}
+                <Link className="text-btn" to="/get-started">Upload a resume</Link> to save your first version.
+              </p>
+            )}
           </section>
         </div>
       </div>

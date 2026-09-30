@@ -69,6 +69,7 @@ export type AccountData = {
       excludeKeywords?: string;
     };
     resumeName: string;
+    resumeFileUrl?: string;
     photoUrl: string;
     slug: string;
     city: string;
