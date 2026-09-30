@@ -11,7 +11,7 @@ import { computeApplicationReadiness } from "./readiness.mjs";
 import { ensureFollowUpReminder } from "./follow-ups.mjs";
 import { AUTO_APPLY_AUTH_VERSION, autoApplyAuthorizationPayload, validateAutoApplyEnable } from "./auto-apply-auth.mjs";
 import { isSilentAutoApplyEnabled } from "./prompt-registry.mjs";
-import { confirmListedSkill } from "./confirm-skill.mjs";
+import { confirmListedSkill, preparedResumeAfterConfirm } from "./confirm-skill.mjs";
 
 export function registerApplications(app, ctx) {
   const {
@@ -551,7 +551,8 @@ export function registerApplications(app, ctx) {
     }
     const document = parse(version.document, {});
     const facts = parse(profile.facts, []);
-    const match = matchJob(document, parse(profile.preferences, {}), job, { facts });
+    const preferences = parse(profile.preferences, {});
+    const match = matchJob(document, preferences, job, { facts });
     let result;
     try {
       result = confirmListedSkill({
@@ -570,6 +571,7 @@ export function registerApplications(app, ctx) {
       res.status(400).json({ error: err instanceof Error ? err.message : "Could not confirm that skill." });
       return;
     }
+    let prepared = false;
     if (!result.already) {
       db.prepare(
         "UPDATE profiles SET summary = ?, skills = ?, employment = ?, facts = ?, updated_at = ? WHERE user_id = ?",
@@ -586,6 +588,25 @@ export function registerApplications(app, ctx) {
         renderDocument(result.document),
         version.id,
       );
+      const application = db.prepare("SELECT version_id FROM applications WHERE user_id = ? AND job_id = ?").get(user.id, job.id);
+      if (application?.version_id && application.version_id !== version.id) {
+        const pinned = db.prepare("SELECT id, kind FROM resume_versions WHERE id = ? AND user_id = ?").get(application.version_id, user.id);
+        if (pinned?.kind === "application") {
+          const preparedDoc = preparedResumeAfterConfirm({
+            document: result.document,
+            job,
+            facts: result.facts,
+            preferences,
+          });
+          db.prepare("UPDATE resume_versions SET document = ?, rendered = ?, parent_id = ? WHERE id = ?").run(
+            JSON.stringify(preparedDoc),
+            renderDocument(preparedDoc),
+            version.id,
+            pinned.id,
+          );
+          prepared = true;
+        }
+      }
       audit?.({
         userId: user.id,
         functionName: "confirm_skill",
@@ -598,10 +619,13 @@ export function registerApplications(app, ctx) {
     res.json({
       ok: true,
       already: Boolean(result.already),
+      prepared,
       skill: result.skill,
       message: result.already
         ? `${result.skill} is already on your resume.`
-        : `${result.skill} is saved to your Fact Ledger and resume.`,
+        : prepared
+          ? `${result.skill} is saved to your Fact Ledger and the resume prepared for this job.`
+          : `${result.skill} is saved to your Fact Ledger and resume.`,
     });
   });
 
