@@ -58,3 +58,14 @@ export function preparedResumeAfterConfirm({ document = {}, job = {}, facts = []
   const match = matchJob(document, preferences, job, { facts });
   return tailoredDocument(document, job, match, facts);
 }
+
+/**
+ * Rebuild every resume already prepared for this candidate.
+ * Each copy is ordered for its own job and only uses skills already on the updated resume.
+ */
+export function preparedResumesAfterConfirm({ document = {}, jobs = [], facts = [], preferences = {} } = {}) {
+  return (Array.isArray(jobs) ? jobs : []).filter(Boolean).map((job) => ({
+    jobId: String(job.id || ""),
+    document: preparedResumeAfterConfirm({ document, job, facts, preferences }),
+  }));
+}
