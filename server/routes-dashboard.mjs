@@ -12,6 +12,7 @@ import { billingDisclosurePayload } from "./billing-disclosure.mjs";
 import { iceConfigSummary, resolveIceServers } from "./webrtc-signaling.mjs";
 import { weeklyEfficiency } from "./weekly-efficiency.mjs";
 import { tailoringPreview } from "./resume-guard.mjs";
+import { compareJobRank, importedAt, presentJobPosting } from "./job-posting.mjs";
 
 function publicVersion(row) {
   return { id: row.id, label: row.label, kind: row.kind, active: Boolean(row.active), rendered: row.rendered, createdAt: row.created_at };
@@ -37,7 +38,7 @@ function profilePayload(profile, user, parse) {
   };
 }
 
-function jobCard(job, match, sourceNames, applied) {
+function jobCard(job, match, sourceNames, applied, userId) {
   const applyCompany = job.primary_company || job.company;
   const via = applyCompany.toLowerCase() !== String(job.company).toLowerCase() ? job.company : "";
   const locked = Boolean(match.explanationLocked);
@@ -57,6 +58,14 @@ function jobCard(job, match, sourceNames, applied) {
     role: job.role,
     verification: job.verification,
     description: job.description,
+    posting: presentJobPosting(job.description, {
+      location: job.location,
+      remoteType: job.remote_type,
+      salaryMin: job.salary_min,
+      salaryMax: job.salary_max,
+      employmentType: job.employment_type,
+    }),
+    imported: importedAt(job.external_key, userId) > 0,
     score: match.score,
     label: locked ? "" : match.label || "",
     explanation: locked ? "" : match.explanation || "",
@@ -101,7 +110,7 @@ export function registerDashboard(app, ctx) {
     const appliedIds = new Set(applications.map((item) => item.job_id));
     let ranked = jobs
       .map((job) => ({ job, ...matchJob(doc, preferences, job, { facts }) }))
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => compareJobRank({ ...a.job, score: a.score }, { ...b.job, score: b.score }, user.id));
     if (access.features.job_limit) ranked = ranked.slice(0, access.features.job_limit);
     if (!access.features.job_browse) ranked = [];
     const quota = explanationQuota(user.id, access.features);
@@ -178,7 +187,7 @@ export function registerDashboard(app, ctx) {
         followUpsOpen: followUps.open,
       },
       week,
-      jobs: ranked.map((item) => jobCard(item.job, item, sourceNames, appliedIds.has(item.job.id))),
+      jobs: ranked.map((item) => jobCard(item.job, item, sourceNames, appliedIds.has(item.job.id), user.id)),
       applications: applications.map((item) => {
         const job = jobs.find((row) => row.id === item.job_id) || db.prepare("SELECT * FROM jobs WHERE id = ?").get(item.job_id);
         const target = item.target_company || job?.primary_company || job?.company || "";

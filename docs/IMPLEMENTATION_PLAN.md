@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–X are implemented (V is schema 29). Resume review quotes weak lines, asks before applying them, and saves the upscale as a separate resume. Slice Z shows the tailored resume after Assisted Apply. Admin MFA stays disabled for now and is not a beta blocker.
+Status: slices Q–X are implemented (V is schema 29). Resume review quotes weak lines, asks before applying them, and saves the upscale as a separate resume. Slice Z shows the tailored resume after Assisted Apply. Job listings are shown as a readable posting, and a pasted job link is imported onto the top of that candidate’s list. Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
