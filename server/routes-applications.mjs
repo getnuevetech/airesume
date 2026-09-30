@@ -11,7 +11,7 @@ import { computeApplicationReadiness } from "./readiness.mjs";
 import { ensureFollowUpReminder } from "./follow-ups.mjs";
 import { AUTO_APPLY_AUTH_VERSION, autoApplyAuthorizationPayload, validateAutoApplyEnable } from "./auto-apply-auth.mjs";
 import { isSilentAutoApplyEnabled } from "./prompt-registry.mjs";
-import { confirmListedSkill, preparedResumeAfterConfirm } from "./confirm-skill.mjs";
+import { confirmListedSkill, preparedResumesAfterConfirm } from "./confirm-skill.mjs";
 
 export function registerApplications(app, ctx) {
   const {
@@ -571,7 +571,8 @@ export function registerApplications(app, ctx) {
       res.status(400).json({ error: err instanceof Error ? err.message : "Could not confirm that skill." });
       return;
     }
-    let prepared = false;
+    let prepared = 0;
+    let preparedThisJob = false;
     if (!result.already) {
       db.prepare(
         "UPDATE profiles SET summary = ?, skills = ?, employment = ?, facts = ?, updated_at = ? WHERE user_id = ?",
@@ -588,25 +589,33 @@ export function registerApplications(app, ctx) {
         renderDocument(result.document),
         version.id,
       );
-      const application = db.prepare("SELECT version_id FROM applications WHERE user_id = ? AND job_id = ?").get(user.id, job.id);
-      if (application?.version_id && application.version_id !== version.id) {
-        const pinned = db.prepare("SELECT id, kind FROM resume_versions WHERE id = ? AND user_id = ?").get(application.version_id, user.id);
-        if (pinned?.kind === "application") {
-          const preparedDoc = preparedResumeAfterConfirm({
-            document: result.document,
-            job,
-            facts: result.facts,
-            preferences,
-          });
-          db.prepare("UPDATE resume_versions SET document = ?, rendered = ?, parent_id = ? WHERE id = ?").run(
-            JSON.stringify(preparedDoc),
-            renderDocument(preparedDoc),
-            version.id,
-            pinned.id,
-          );
-          prepared = true;
-        }
+      const rows = db.prepare(
+        `SELECT a.job_id AS jobId, a.version_id AS versionId
+         FROM applications a
+         JOIN resume_versions v ON v.id = a.version_id AND v.user_id = a.user_id
+         WHERE a.user_id = ? AND v.kind = 'application' AND a.version_id != ?`,
+      ).all(user.id, version.id);
+      const targets = [];
+      for (const row of rows) {
+        const target = row.jobId === job.id ? job : db.prepare("SELECT * FROM jobs WHERE id = ?").get(row.jobId);
+        if (target) targets.push({ versionId: row.versionId, job: target });
       }
+      const preparedDocs = preparedResumesAfterConfirm({
+        document: result.document,
+        jobs: targets.map((item) => item.job),
+        facts: result.facts,
+        preferences,
+      });
+      preparedDocs.forEach((item, index) => {
+        db.prepare("UPDATE resume_versions SET document = ?, rendered = ?, parent_id = ? WHERE id = ?").run(
+          JSON.stringify(item.document),
+          renderDocument(item.document),
+          version.id,
+          targets[index].versionId,
+        );
+      });
+      prepared = preparedDocs.length;
+      preparedThisJob = preparedDocs.some((item) => item.jobId === job.id);
       audit?.({
         userId: user.id,
         functionName: "confirm_skill",
@@ -623,9 +632,11 @@ export function registerApplications(app, ctx) {
       skill: result.skill,
       message: result.already
         ? `${result.skill} is already on your resume.`
-        : prepared
-          ? `${result.skill} is saved to your Fact Ledger and the resume prepared for this job.`
-          : `${result.skill} is saved to your Fact Ledger and resume.`,
+        : prepared > 1 || (prepared === 1 && !preparedThisJob)
+          ? `${result.skill} is saved to your Fact Ledger and the resumes prepared for your jobs.`
+          : prepared === 1
+            ? `${result.skill} is saved to your Fact Ledger and the resume prepared for this job.`
+            : `${result.skill} is saved to your Fact Ledger and resume.`,
     });
   });
 
