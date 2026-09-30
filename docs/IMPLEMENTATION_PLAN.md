@@ -1,5 +1,7 @@
 # Implementation plan (post review, 2026-09-30)
 
+Status: slices Q–U are implemented on this branch. Slice V (admin RBAC) stays deferred until draft PR #44 is rebased onto schema 29.
+
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
 `docs/SPEC_REVIEW_AND_PLAN.md` is a historical gap review through PR #32. Its “next” list (landing, legal, provenance, autofill, coach, tracker) is already shipped. Follow this document instead.

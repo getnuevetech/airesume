@@ -18,7 +18,7 @@ See `nginx.jobpilot.conf` for the HTTP proxy skeleton. After certbot, prefer a `
 ## App env
 
 - Set `COOKIE_SECURE=1` when the public site is HTTPS (or rely on `X-Forwarded-Proto: https`).
-- Set `REQUIRE_ADMIN_MFA=1` (default in `NODE_ENV=production`) so `/admin` requires TOTP.
+- Set `REQUIRE_ADMIN_MFA=1` so `/admin` requires TOTP. Production mode does not enable MFA on its own.
 - Configure TURN via `deploy/turn.env.example` before relying on interview rooms across NATs.
 - Full pre-launch gate: `docs/LAUNCH_CHECKLIST.md` and Admin → Launch.
 - Env template: `deploy/env.production.example`.

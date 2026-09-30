@@ -1,7 +1,7 @@
 import express from "express";
 import multer from "multer";
 import { randomBytes } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -51,6 +51,7 @@ import {
   saveMfaPolicy,
 } from "./mfa-policy.mjs";
 import { computeLaunchReadiness } from "./launch-readiness.mjs";
+import { writeAdminBootstrapFile } from "./bootstrap-note.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const homepageFile = join(here, "..", "shared", "homepage.json");
@@ -84,7 +85,7 @@ function seed() {
       const note = mustChange
         ? `email: ${email}\npassword: ${password}\nnote: change this password on first sign-in\n`
         : `email: ${email}\npassword: (set via ADMIN_PASSWORD)\n`;
-      writeFileSync(join(dataDir, "admin-bootstrap.txt"), note, { flag: "wx" });
+      writeAdminBootstrapFile(join(dataDir, "admin-bootstrap.txt"), note);
     } catch {
       // Credentials file already exists from an earlier boot.
     }
@@ -1140,6 +1141,7 @@ app.post("/api/account/password", (req, res) => {
     const bootstrap = join(dataDir, "admin-bootstrap.txt");
     if (existsSync(bootstrap)) {
       writeFileSync(bootstrap, `email: ${user.email}\npassword: (changed — not stored)\n`);
+      chmodSync(bootstrap, 0o600);
     }
   } catch {
     // Best-effort wipe of the bootstrap password copy.

@@ -86,6 +86,7 @@ if [[ -f "$ROOT/server/data/admin-bootstrap.txt" ]]; then
   echo "First admin login is in server/data/admin-bootstrap.txt"
 fi
 if [[ -n "$public_ip" ]]; then
-  echo "Open http://${public_ip}/"
-  echo "Use http, not https. If that page does not load, allow TCP port 80 in the Lightsail Networking firewall."
+  echo "First boot: open http://${public_ip}/"
+  echo "If that page does not load, allow TCP port 80 in the Lightsail Networking firewall."
+  echo "Public launch uses HTTPS. Follow deploy/HTTPS.md and set COOKIE_SECURE=1 before sending real users to this host."
 fi
