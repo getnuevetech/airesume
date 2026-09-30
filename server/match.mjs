@@ -67,17 +67,63 @@ function educationFromText(text) {
   return "";
 }
 
+const FIELD_LABEL = /^(title|role|position|job title|company|employer|organization|org|location|based in|office|gehalt|standort|arbeitszeit|start)\s*:/i;
+const REQUIREMENT_HEADING = /must have|required|requirements|qualifications|anforderungen|was du mitbringen solltest|was du mitbringen|qualifikation|what you bring|what you.?ll need/i;
+const PREFERRED_HEADING = /nice to have|preferred|bonus|von vorteil/i;
+const REQUIREMENT_PHRASES = [
+  "Active Sourcing",
+  "JavaScript",
+  "TypeScript",
+  "React",
+  "Node",
+  "Python",
+  "SQL",
+  "Product management",
+  "Figma",
+  "AWS",
+  "Java",
+  "Excel",
+  "A/B testing",
+  "User research",
+  "Roadmapping",
+  "Communication",
+  "Leadership",
+  "Recruiting",
+];
+
+function keepSkill(value) {
+  const name = String(value || "").replace(/\s+/g, " ").trim().replace(/\.$/, "");
+  if (!name || FIELD_LABEL.test(name)) return "";
+  if (name.length < 2 || name.length > 40) return "";
+  if (/[.!?]/.test(name)) return "";
+  if (name.split(" ").length > 3) return "";
+  if (/^(the|you|we|our|this|and|with|for|du|wir|mind)\b/i.test(name)) return "";
+  return name;
+}
+
+function phrasesIn(text) {
+  const blob = String(text || "");
+  return REQUIREMENT_PHRASES
+    .map((skill) => ({
+      skill,
+      at: blob.search(new RegExp(`\\b${skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i")),
+    }))
+    .filter((item) => item.at >= 0)
+    .sort((a, b) => a.at - b.at)
+    .map((item) => item.skill);
+}
+
 /**
  * Build a requirements object from listing fields.
  * @param {{ title?: string, description?: string, skills?: string[], role?: string, category?: string }} raw
  */
 export function extractRequirements(raw = {}) {
-  const provided = Array.isArray(raw.skills) ? raw.skills.map(String) : [];
+  const provided = unique((Array.isArray(raw.skills) ? raw.skills : []).map(keepSkill).filter(Boolean));
   const fromText = provided.length ? [] : skillsFromDescription(raw.description || "");
   const skills = unique([...provided, ...fromText]);
   const blob = `${raw.title || ""}\n${raw.description || ""}\n${raw.role || ""}`;
-  const mandatoryFromSection = sectionSkills(raw.description || "", /must have|required|requirements|qualifications/i);
-  const preferredFromSection = sectionSkills(raw.description || "", /nice to have|preferred|bonus/i);
+  const mandatoryFromSection = sectionSkills(raw.description || "", REQUIREMENT_HEADING);
+  const preferredFromSection = sectionSkills(raw.description || "", PREFERRED_HEADING);
   const mandatory = unique(mandatoryFromSection.length ? mandatoryFromSection : skills.slice(0, 8));
   const preferred = unique(
     preferredFromSection.length
@@ -96,12 +142,28 @@ export function extractRequirements(raw = {}) {
 
 function sectionSkills(description, heading) {
   const text = String(description || "");
-  const match = text.match(new RegExp(`(?:${heading.source})[:\\s]*([\\s\\S]{0,1800}?)(?:\\n\\s*\\n|responsibilities|about |benefits|$)`, "i"));
+  const match = text.match(new RegExp(`(?:${heading.source})[:\\s]*([\\s\\S]{0,1800}?)(?:\\n\\s*\\n|responsibilities|aufgaben|about |benefits|$)`, "i"));
   if (!match) return [];
-  return match[1]
-    .split(/\n+|·|•|;/)
-    .map((line) => line.replace(/^[-*•\d.)\s]+/, "").trim())
-    .filter((line) => line.length >= 2 && line.length <= 48 && !/[?]/.test(line));
+  const body = match[1];
+  const lines = body
+    .split(/\n+|·|•|;|\bund\b|\band\b/i)
+    .map((line) => keepSkill(line.replace(/^[-*•\d.)\s]+/, "")))
+    .filter(Boolean);
+  return unique([...lines, ...phrasesIn(body)]);
+}
+
+/** Stored requirements win when they name real skills. Paste headers fall back to the description. */
+export function requirementsForJob(job = {}) {
+  const parsed = parseRequirements(job.requirements, job.skills);
+  const mandatory = unique((parsed.mandatory || []).map(keepSkill).filter(Boolean));
+  const preferred = unique((parsed.preferred || []).map(keepSkill).filter(Boolean));
+  if (mandatory.length) return { ...parsed, mandatory, preferred };
+  return extractRequirements({
+    title: job.title,
+    description: job.description || "",
+    role: job.role,
+    category: job.category,
+  });
 }
 
 function skillsFromDescription(description) {
@@ -242,7 +304,7 @@ export function matchLabelKey(scoreOrLabel) {
  */
 export function matchJob(doc, preferences, job, options = {}) {
   const facts = Array.isArray(options.facts) ? options.facts : [];
-  const requirements = parseRequirements(job.requirements, job.skills);
+  const requirements = requirementsForJob(job);
   const ownedSkills = skillsForMatching(doc.skills || [], facts);
   const owned = ownedSkills.map((skill) => lower(skill));
   const mandatory = requirements.mandatory;

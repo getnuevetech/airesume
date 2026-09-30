@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–Z are implemented (V is schema 29). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Admin MFA stays disabled for now and is not a beta blocker.
+Status: slices Q–Z are implemented (V is schema 29). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AB reads required skills from the role text when a saved list is only a pasted title or company line. Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
@@ -42,9 +42,10 @@ Q  CI on every pull request
               → X  Name the roles behind this week's counts
                 → Z  Show the tailored resume after Assisted Apply
                   → AA  Show a readable match on the job
+                    → AB  Read requirements from the role text
 ```
 
-Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing.
+Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing. AB uses the role text when the saved requirements are only paste headers.
 
 ---
 
@@ -242,6 +243,23 @@ Bootstrap and the README tell operators to open `http://<ip>/` and “use http, 
 - A match that cites `SKILL-001` does not show that id to the candidate.
 - Missing required skills are listed separately from skills that fit.
 - The stored explanation still cites ledger ids for the audit path.
+
+---
+
+### Slice AB — Requirements from the role
+
+**Goal:** A pasted title or company line is not a required skill. The match uses the role’s requirement section, including “What you bring” and “Was du mitbringen solltest”.
+
+**Change**
+
+- Field labels are dropped from requirement lists.
+- A saved list that is only those labels is rebuilt from the description.
+- A catalog list of real skills stays as saved.
+
+**Acceptance**
+
+- “Was du mitbringen solltest” yields Recruiting and Active Sourcing, not “Title:”.
+- A product role whose saved skills are Product management and SQL still matches on those skills.
 
 ---
 
