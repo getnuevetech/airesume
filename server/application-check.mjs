@@ -1,7 +1,7 @@
 /** One-tap outcome check-ins for a tracked application. */
 
 import { db, id } from "./db.mjs";
-import { ensureFollowUpReminder, updateFollowUpReminder } from "./follow-ups.mjs";
+import { ensureFollowUpReminder, reminderTemplatesForStatus, updateFollowUpReminder } from "./follow-ups.mjs";
 
 export const CHECK_ANSWERS = {
   waiting: { label: "Still waiting", status: "", snoozeDays: 3 },
@@ -158,4 +158,51 @@ export function recordApplicationCheck({ userId, reminderId = "", applicationId 
 
   const check = publicCheck(db.prepare("SELECT * FROM application_checks WHERE id = ?").get(checkId));
   return { check, status: toStatus, message: checkMessage(spec, title, savedNote, toStatus) };
+}
+
+/**
+ * Save a status chosen from the tracker menu and keep the reminder matched to that stage.
+ */
+export function recordStatusChange({ userId, applicationId, status, now = Date.now() } = {}) {
+  const next = String(status || "").trim();
+  if (!next) return { error: "Choose a status from the tracker." };
+  const application = db.prepare("SELECT * FROM applications WHERE id = ? AND user_id = ?").get(applicationId, userId);
+  if (!application) return { error: "Application not found." };
+  if (application.status === next) return { status: next, unchanged: true, message: "" };
+
+  const fromStatus = application.status;
+  const label = `Moved to ${next}`;
+  const checkId = id("chk");
+  db.prepare(
+    `INSERT INTO application_checks
+      (id, user_id, application_id, reminder_id, answer, label, note, from_status, to_status, created_at)
+     VALUES (?, ?, ?, '', 'status', ?, '', ?, ?, ?)`,
+  ).run(checkId, userId, application.id, label, fromStatus, next, now);
+  db.prepare("UPDATE applications SET status = ?, updated_at = ? WHERE id = ?").run(next, now, application.id);
+
+  const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(application.job_id);
+  const company = application.target_company || job?.primary_company || job?.company || "";
+  const title = job?.title || "this role";
+  const template = reminderTemplatesForStatus(next);
+  const open = db
+    .prepare(
+      `SELECT * FROM follow_up_reminders
+       WHERE user_id = ? AND application_id = ? AND status IN ('open', 'snoozed')`,
+    )
+    .all(userId, application.id);
+  for (const row of open) {
+    if (template && row.kind === template.kind) continue;
+    updateFollowUpReminder(userId, row.id, "done", { now });
+  }
+  ensureFollowUpReminder({
+    userId,
+    applicationId: application.id,
+    status: next,
+    company,
+    title,
+    now,
+  });
+
+  const check = publicCheck(db.prepare("SELECT * FROM application_checks WHERE id = ?").get(checkId));
+  return { check, status: next, message: `${title} is now ${next}.` };
 }

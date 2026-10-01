@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkAnswer, cleanCheckNote, recordApplicationCheck } from "./application-check.mjs";
+import { checkAnswer, cleanCheckNote, recordApplicationCheck, recordStatusChange } from "./application-check.mjs";
 import { ensureFollowUpReminder, listFollowUpReminders } from "./follow-ups.mjs";
 import { migrate } from "./schema.mjs";
 import { db, id } from "./db.mjs";
@@ -124,5 +124,53 @@ test("a check-in on the application saves one sentence and moves the stage", () 
     db.prepare("DELETE FROM applications WHERE user_id = ?").run(userId);
     db.prepare("DELETE FROM jobs WHERE id = ?").run(jobId);
     db.prepare("DELETE FROM jobs WHERE id = ?").run(preparingJobId);
+  }
+});
+
+test("a status menu change is saved and the previous reminder closes", () => {
+  migrate();
+  const userId = id("usr");
+  const jobId = id("job");
+  const appId = id("app");
+  const now = Date.now();
+  db.prepare(
+    `INSERT INTO jobs (id, title, company, created_at) VALUES (?, 'Growth Product Manager', 'Kindred', ?)`,
+  ).run(jobId, now);
+  db.prepare(
+    `INSERT INTO applications (id, user_id, job_id, mode, status, match_score, target_company, created_at, updated_at)
+     VALUES (?, ?, ?, 'assisted', 'Applied', 82, 'Kindred', ?, ?)`,
+  ).run(appId, userId, jobId, now, now);
+  try {
+    const reminder = ensureFollowUpReminder({
+      userId,
+      applicationId: appId,
+      status: "Applied",
+      company: "Kindred",
+      title: "Growth Product Manager",
+      now: now - 4 * 24 * 60 * 60 * 1000,
+    });
+    const moved = recordStatusChange({ userId, applicationId: appId, status: "Interview", now });
+    assert.equal(moved.status, "Interview");
+    assert.equal(moved.check.label, "Moved to Interview");
+    assert.equal(moved.message, "Growth Product Manager is now Interview.");
+    assert.equal(db.prepare("SELECT status FROM applications WHERE id = ?").get(appId).status, "Interview");
+    assert.equal(db.prepare("SELECT status FROM follow_up_reminders WHERE id = ?").get(reminder.id).status, "done");
+    const open = listFollowUpReminders(userId);
+    assert.equal(open.length, 1);
+    assert.equal(open[0].kind, "interview_followup");
+
+    const again = recordStatusChange({ userId, applicationId: appId, status: "Interview", now: now + 1000 });
+    assert.equal(again.unchanged, true);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM application_checks WHERE application_id = ?").get(appId).count, 1);
+
+    const withdrawn = recordStatusChange({ userId, applicationId: appId, status: "Withdrawn", now: now + 2000 });
+    assert.equal(withdrawn.check.label, "Moved to Withdrawn");
+    assert.equal(listFollowUpReminders(userId).length, 0);
+    assert.equal(recordStatusChange({ userId, applicationId: "missing", status: "Offer", now }).error, "Application not found.");
+  } finally {
+    db.prepare("DELETE FROM application_checks WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM follow_up_reminders WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM applications WHERE id = ?").run(appId);
+    db.prepare("DELETE FROM jobs WHERE id = ?").run(jobId);
   }
 });

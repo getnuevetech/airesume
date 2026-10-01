@@ -1882,7 +1882,20 @@ export function ApplicationsPage() {
                     Email submit
                   </button>
                 ) : null}
-                <select value={item.status} onChange={(event) => void api(`/api/applications/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: event.target.value }) }).then(reload)}>
+                <select
+                  value={item.status}
+                  onChange={(event) =>
+                    void api<{ message?: string }>(`/api/applications/${item.id}`, {
+                      method: "PATCH",
+                      body: JSON.stringify({ status: event.target.value }),
+                    })
+                      .then((result) => {
+                        if (result.message) setMessage(result.message);
+                        return reload();
+                      })
+                      .catch((err: Error) => setError(err.message))
+                  }
+                >
                   {statuses.map((status) => <option key={status}>{status}</option>)}
                 </select>
               </div>
