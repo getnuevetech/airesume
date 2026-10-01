@@ -1834,10 +1834,18 @@ export function ApplicationsPage() {
                       <li key={check.id}>
                         <strong>{check.label}</strong>
                         <time dateTime={new Date(check.createdAt).toISOString()}>{new Date(check.createdAt).toLocaleDateString()}</time>
+                        {check.note ? <span>{check.note}</span> : null}
                         {check.toStatus && check.toStatus !== check.fromStatus ? <span>Stage is now {check.toStatus}</span> : null}
                       </li>
                     ))}
                   </ol>
+                ) : null}
+                {data.features.manual_apply && CHECK_IN_STATUSES.includes(item.status) ? (
+                  <ApplicationCheckIn
+                    applicationId={item.id}
+                    onDone={(message) => { setMessage(message || "Check-in saved."); void reload(); }}
+                    onError={(message) => setError(message)}
+                  />
                 ) : null}
                 {item.versionLabel ? <p className="role">Pinned resume: {item.versionLabel}</p> : null}
                 {item.viaCompany ? <p className="role">Found through {item.viaCompany}{item.sourceName ? ` on ${item.sourceName}` : ""}</p> : null}
@@ -2113,6 +2121,73 @@ const CHECK_ANSWERS = [
   { answer: "rejected", label: "Rejected" },
 ];
 
+const CHECK_IN_STATUSES = [
+  "Applied",
+  "Employer viewed",
+  "Recruiter contact",
+  "Responded",
+  "Interview",
+  "Offer",
+  "Hired",
+];
+
+function ApplicationCheckIn({
+  applicationId,
+  onDone,
+  onError,
+}: {
+  applicationId: string;
+  onDone: (message?: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function checkIn(answer: string) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await api<{ message?: string }>(`/api/applications/${applicationId}/check-in`, {
+        method: "POST",
+        body: JSON.stringify({ answer, note }),
+      });
+      setNote("");
+      onDone(result.message);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Could not save that check-in.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="check-in">
+      <label className="field">
+        <span>What happened</span>
+        <input
+          value={note}
+          maxLength={240}
+          placeholder="Optional sentence you actually heard"
+          onChange={(event) => setNote(event.target.value)}
+        />
+      </label>
+      <div className="check-actions">
+        {CHECK_ANSWERS.map((choice) => (
+          <button
+            className={choice.answer === "rejected" ? "btn btn-ghost btn-sm check-reject" : "btn btn-ghost btn-sm"}
+            type="button"
+            key={choice.answer}
+            disabled={busy}
+            onClick={() => void checkIn(choice.answer)}
+          >
+            {choice.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FollowUpsPanel({
   onDone,
   onError,
@@ -2122,6 +2197,7 @@ function FollowUpsPanel({
 }) {
   const [reminders, setReminders] = useState<FollowUpReminder[]>([]);
   const [metrics, setMetrics] = useState<{ open: number; due: number; done: number } | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function load() {
     const data = await api<{ reminders: FollowUpReminder[]; metrics: { open: number; due: number; done: number } }>("/api/follow-ups");
@@ -2143,12 +2219,18 @@ function FollowUpsPanel({
   }
 
   async function checkIn(id: string, answer: string) {
-    const result = await api<{ message?: string }>(`/api/follow-ups/${id}/check-in`, {
-      method: "POST",
-      body: JSON.stringify({ answer }),
-    });
-    await load();
-    onDone(result.message);
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await api<{ message?: string }>(`/api/follow-ups/${id}/check-in`, {
+        method: "POST",
+        body: JSON.stringify({ answer }),
+      });
+      await load();
+      onDone(result.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (!reminders.length && !metrics?.due) {
@@ -2182,6 +2264,7 @@ function FollowUpsPanel({
                 className={choice.answer === "rejected" ? "btn btn-ghost btn-sm check-reject" : "btn btn-ghost btn-sm"}
                 type="button"
                 key={choice.answer}
+                disabled={busy}
                 onClick={() => void checkIn(item.id, choice.answer).catch((err: Error) => onError(err.message))}
               >
                 {choice.label}

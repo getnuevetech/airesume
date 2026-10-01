@@ -52,6 +52,27 @@ export function registerFollowUps(app, ctx) {
     res.json({ reminder, metrics: followUpMetrics(user.id) });
   });
 
+  app.post("/api/applications/:id/check-in", (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    if (!requireFeature(user, "manual_apply", res)) return;
+    try {
+      const result = recordApplicationCheck({
+        userId: user.id,
+        applicationId: req.params.id,
+        answer: req.body?.answer,
+        note: req.body?.note,
+      });
+      if (result.error) {
+        res.status(400).json({ error: result.error });
+        return;
+      }
+      res.json({ ...result, metrics: followUpMetrics(user.id) });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Could not save that check-in." });
+    }
+  });
+
   app.post("/api/follow-ups/:id/check-in", (req, res) => {
     const user = requireUser(req, res);
     if (!user) return;
@@ -61,6 +82,7 @@ export function registerFollowUps(app, ctx) {
         userId: user.id,
         reminderId: req.params.id,
         answer: req.body?.answer,
+        note: req.body?.note,
       });
       if (result.error) {
         res.status(400).json({ error: result.error });
