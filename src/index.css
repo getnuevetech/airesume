@@ -1479,6 +1479,12 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
 .stage-done .stage-label { color: #046b45; }
 .stage-now .stage-label { color: #0b5f7a; }
 .job-side select { height: 40px; border: 1px solid #d5e6de; border-radius: 10px; padding: 0 10px; background: #fff; }
+.check-reminder { padding: 12px 0; border-top: 1px solid #f0f3f6; }
+.check-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.check-reject { color: #8e2433; border-color: #f0c2c8; }
+.check-history { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.check-history li { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: 13px; }
+.check-history time, .check-history span { color: var(--muted); }
 .match-fit { margin-top: 12px; }
 .match-line { margin: 0 0 6px; font-size: 14px; line-height: 1.45; color: #24344a; }
 .match-line span { font-weight: 700; color: #16324f; margin-right: 8px; }
