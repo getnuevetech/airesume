@@ -8,6 +8,7 @@ import { holdJobDraft, reviewJobIntake } from "./job-intake.mjs";
 import { buildApplyKit } from "./apply-kit.mjs";
 import { applyKitMetrics, recordApplyKitEvent } from "./apply-kit-metrics.mjs";
 import { computeApplicationReadiness } from "./readiness.mjs";
+import { recordStatusChange } from "./application-check.mjs";
 import { ensureFollowUpReminder } from "./follow-ups.mjs";
 import { AUTO_APPLY_AUTH_VERSION, autoApplyAuthorizationPayload, validateAutoApplyEnable } from "./auto-apply-auth.mjs";
 import { isSilentAutoApplyEnabled } from "./prompt-registry.mjs";
@@ -520,23 +521,16 @@ export function registerApplications(app, ctx) {
       res.status(400).json({ error: "Choose a status from the tracker." });
       return;
     }
-    const result = db
-      .prepare("UPDATE applications SET status = ?, updated_at = ? WHERE id = ? AND user_id = ?")
-      .run(status, Date.now(), req.params.id, user.id);
-    if (!result.changes) {
-      res.status(404).json({ error: "Application not found." });
-      return;
-    }
-    const row = db.prepare("SELECT * FROM applications WHERE id = ?").get(req.params.id);
-    const job = row ? db.prepare("SELECT * FROM jobs WHERE id = ?").get(row.job_id) : null;
-    ensureFollowUpReminder({
+    const result = recordStatusChange({
       userId: user.id,
       applicationId: req.params.id,
       status,
-      company: row?.target_company || job?.primary_company || job?.company || "",
-      title: job?.title || "",
     });
-    res.json({ ok: true });
+    if (result.error) {
+      res.status(result.error === "Application not found." ? 404 : 400).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, status: result.status, check: result.check || null, message: result.message || "" });
   });
 
   app.post("/api/jobs/:id/confirm-skill", (req, res) => {

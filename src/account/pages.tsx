@@ -1731,6 +1731,7 @@ export function JobsPage() {
 
 export function ApplicationsPage() {
   const { data, reload, setMessage, setError } = useAccount();
+  const [savingStatusId, setSavingStatusId] = useState("");
   const location = useLocation();
   useEffect(() => {
     const id = location.hash.replace(/^#/, "");
@@ -1882,7 +1883,26 @@ export function ApplicationsPage() {
                     Email submit
                   </button>
                 ) : null}
-                <select value={item.status} onChange={(event) => void api(`/api/applications/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: event.target.value }) }).then(reload)}>
+                <select
+                  value={item.status}
+                  disabled={savingStatusId === item.id}
+                  onChange={(event) => {
+                    const select = event.currentTarget;
+                    const status = select.value;
+                    select.blur();
+                    setSavingStatusId(item.id);
+                    void api<{ message?: string }>(`/api/applications/${item.id}`, {
+                      method: "PATCH",
+                      body: JSON.stringify({ status }),
+                    })
+                      .then((result) => {
+                        if (result.message) setMessage(result.message);
+                        return reload();
+                      })
+                      .catch((err: Error) => setError(err.message))
+                      .finally(() => setSavingStatusId(""));
+                  }}
+                >
                   {statuses.map((status) => <option key={status}>{status}</option>)}
                 </select>
               </div>
