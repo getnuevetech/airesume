@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–Z are implemented (V is schema 29). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AB reads required skills from the role text when a saved list is only a pasted title or company line. Slice AC lets a candidate confirm one of those missing skills into the Fact Ledger. Slice AD writes that skill into the resume already prepared for the same job. Slice AE writes it into every resume already prepared for that candidate. Slice AF lists those skills on the profile without Fact Ledger ids. Slice AG lets a candidate confirm a high-demand insight gap into that same ledger. Slice AH draws account stats as charts and colors category scores so the account is easier to scan. Slice AI shows each tracked role on a colored stage rail. Slice AJ saves a one-tap check-in on each application. Slice AK saves that check-in on the role itself, with one sentence the candidate heard. Slice AL saves a status-menu change on that same card and closes the reminder that no longer matches. Slice AM saves the moment a prepared role is submitted. Admin MFA stays disabled for now and is not a beta blocker.
+Status: slices Q–Z are implemented (V is schema 29). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice Y opens the rest of this week in the tracker. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AB reads required skills from the role text when a saved list is only a pasted title or company line. Slice AC lets a candidate confirm one of those missing skills into the Fact Ledger. Slice AD writes that skill into the resume already prepared for the same job. Slice AE writes it into every resume already prepared for that candidate. Slice AF lists those skills on the profile without Fact Ledger ids. Slice AG lets a candidate confirm a high-demand insight gap into that same ledger. Slice AH draws account stats as charts and colors category scores so the account is easier to scan. Slice AI shows each tracked role on a colored stage rail. Slice AJ saves a one-tap check-in on each application. Slice AK saves that check-in on the role itself, with one sentence the candidate heard. Slice AL saves a status-menu change on that same card and closes the reminder that no longer matches. Slice AM saves the moment a prepared role is submitted. Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
@@ -40,7 +40,8 @@ Q  CI on every pull request
           → V  Admin RBAC on schema 29 (MFA stays off)
             → W  Weekly efficiency on the account overview
               → X  Name the roles behind this week's counts
-                → Z  Show the tailored resume after Assisted Apply
+                → Y  Open the rest of this week in the tracker
+                  → Z  Show the tailored resume after Assisted Apply
                   → AA  Show a readable match on the job
                     → AB  Read requirements from the role text
                       → AC  Confirm a missing skill
@@ -56,7 +57,7 @@ Q  CI on every pull request
                                           → AM  Save the submit moment on the application
 ```
 
-Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing. AB uses the role text when the saved requirements are only paste headers. AC saves a confirmed gap onto the Fact Ledger and the active resume. AD updates the resume already prepared for that job so the confirmed skill is on it. AE updates every prepared resume for that candidate. AF shows those skills on the profile by name. AG confirms one insight gap into the Fact Ledger. AH replaces plain stat numbers with rings and bars, and shows category scores in color. AI shows where each tracked role sits from prepare through offer. AJ asks what happened on a due application and keeps that answer on the card. AK asks the same question on the role and keeps one sentence the candidate heard. AL saves a move from the status menu on that card and closes the reminder for the previous stage. AM saves the moment a prepared role is submitted so the card history starts there.
+Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing. AB uses the role text when the saved requirements are only paste headers. AC saves a confirmed gap onto the Fact Ledger and the active resume. AD updates the resume already prepared for that job so the confirmed skill is on it. AE updates every prepared resume for that candidate. AF shows those skills on the profile by name. AG confirms one insight gap into the Fact Ledger. AH replaces plain stat numbers with rings and bars, and shows category scores in color. AI shows where each tracked role sits from prepare through offer. AJ asks what happened on a due application and keeps that answer on the card. AK asks the same question on the role and keeps one sentence the candidate heard. AL saves a move from the status menu on that card and closes the reminder for the previous stage. Y lets the tracker show every role that counted this week. AM saves the moment a prepared role is submitted so the card history starts there.
 
 ---
 
@@ -218,6 +219,24 @@ Bootstrap and the README tell operators to open `http://<ip>/` and “use http, 
 - Activity before Monday UTC stays off the list.
 - Six in-week roles show five rows and a remainder of one.
 - The follow-up action targets the reminders section.
+
+---
+
+### Slice Y — This week in the tracker
+
+**Goal:** The overview keeps five roles. The tracker can show every role that counted this week, in the same order.
+
+**Change**
+
+- `weeklyEfficiency` returns `roles` for the full week, not only the five overview rows.
+- "N more this week" opens `/account/applications?week=1`.
+- The tracker has All and This week. In-week cards say Submitted, Prepared, or Tracked.
+
+**Acceptance**
+
+- Six in-week roles produce six `roles` and a remainder of one.
+- A role submitted this week appears once.
+- The This week tracker view is empty when nothing moved.
 
 ---
 
@@ -489,4 +508,4 @@ These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them
 
 ## Done when
 
-Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, Z, AA, AB, AC, AD, AE, AF, AG, AH, AI, AJ, AK, AL, and AM are in the product and are not launch gates.
+Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, Y, Z, AA, AB, AC, AD, AE, AF, AG, AH, AI, AJ, AK, AL, and AM are in the product and are not launch gates.

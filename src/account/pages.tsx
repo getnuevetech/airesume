@@ -71,7 +71,7 @@ function WeekCard({ week }: { week: NonNullable<AccountData["week"]> }) {
           </div>
         </Link>
       ))}
-      {week.more ? <p className="role">{week.more} more this week.</p> : null}
+      {week.more ? <Link className="text-btn" to="/account/applications?week=1">{week.more} more this week.</Link> : null}
       {week.quotas.map((line) => <p className="role" key={line}>{line}</p>)}
       <Link className="btn btn-primary" to={week.next.href}>{week.next.title}</Link>
     </section>
@@ -1733,6 +1733,7 @@ export function ApplicationsPage() {
   const { data, reload, setMessage, setError } = useAccount();
   const [savingStatusId, setSavingStatusId] = useState("");
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   useEffect(() => {
     const id = location.hash.replace(/^#/, "");
     if (!id || !data) return;
@@ -1758,6 +1759,14 @@ export function ApplicationsPage() {
         "Rejected",
         "Withdrawn",
       ];
+  const weekOnly = searchParams.get("week") === "1";
+  const weekRoles = new Map((data.week?.roles || []).map((role) => [role.id, role]));
+  const applications = weekOnly
+    ? (data.week?.roles || []).flatMap((role) => {
+        const match = data.applications.find((item) => item.id === role.id);
+        return match ? [match] : [];
+      })
+    : data.applications;
   return (
     <Gate>
       <div className="account-page">
@@ -1817,17 +1826,23 @@ export function ApplicationsPage() {
             <p>Assisted Apply prepares a tailored resume and copy kit. You review everything, submit on the employer site, then mark Applied here. Email submit stays available only when readiness clears.</p>
           </section>
         )}
-        {data.applications.map((item, index) => {
+        <div className="dash-tabs" role="tablist" aria-label="Tracker range">
+          <Link className={searchParams.get("week") === "1" ? "" : "on"} to="/account/applications">All</Link>
+          <Link className={searchParams.get("week") === "1" ? "on" : ""} to="/account/applications?week=1">This week</Link>
+        </div>
+        {applications.length ? applications.map((item, index) => {
           const assistedOpen =
-            index === data.applications.findIndex((row) =>
+            index === applications.findIndex((row) =>
               ["Ready", "Review required", "Resume preparing"].includes(row.status),
             );
+          const weekRole = weekRoles.get(item.id);
           return (
           <article className="account-card" id={`application-${item.id}`} key={item.id}>
             <div className="job-card" style={{ padding: 0, boxShadow: "none", background: "transparent" }}>
               <div>
                 <h2>{item.title}</h2>
                 <p className="role">{[item.company, item.mode].filter(Boolean).join(" · ")}</p>
+                {weekRole ? <p className="role">This week · {weekRole.label}</p> : null}
                 <StageRail status={item.status} />
                 {item.checks?.length ? (
                   <ol className="check-history">
@@ -1934,7 +1949,7 @@ export function ApplicationsPage() {
             ) : null}
           </article>
           );
-        })}
+        }) : <p className="role">{weekOnly ? "No applications moved this week." : "Your tracker is empty."}</p>}
       </div>
     </Gate>
   );
