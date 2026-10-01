@@ -243,6 +243,7 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" | "employer
   const [error, setError] = useState("");
   const [link, setLink] = useState("");
   const [plans, setPlans] = useState<{ id: string; name: string }[]>([]);
+  const [activityUserId, setActivityUserId] = useState("");
 
   async function load() {
     const data = await api<{ users: User[]; levels?: AccessLevelOption[] }>("/api/admin/users");
@@ -407,6 +408,15 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" | "employer
                   Make admin
                 </button>
               ) : null}
+              {roleFilter === "user" && can(me, "admin.users.activity.read") ? (
+                <button
+                  type="button"
+                  className="text-btn"
+                  onClick={() => setActivityUserId((current) => (current === person.id ? "" : person.id || ""))}
+                >
+                  {activityUserId === person.id ? "Hide activity" : "Activity"}
+                </button>
+              ) : null}
               {roleFilter === "admin" && can(me, "admin.admins.demote") ? (
                 <button
                   type="button"
@@ -422,9 +432,102 @@ function PeopleEditor({ roleFilter }: { roleFilter: "user" | "admin" | "employer
                 </button>
               ) : null}
             </div>
+            {roleFilter === "user" && activityUserId === person.id ? (
+              <UserActivityPanel userId={person.id} canComplete={can(me, "admin.users.activity.complete")} />
+            ) : null}
           </article>
         ))}
       </div>
+    </div>
+  );
+}
+
+type ActivityRow = { id: string; summary: string; createdAt: number };
+type StuckCheckout = { id: string; planName: string; amountLabel: string; cycle: string; gatewayKind: string; createdAt: number };
+
+function UserActivityPanel({ userId, canComplete }: { userId: string; canComplete: boolean }) {
+  const [account, setAccount] = useState<ActivityRow[]>([]);
+  const [operations, setOperations] = useState<ActivityRow[]>([]);
+  const [stuck, setStuck] = useState<StuckCheckout[]>([]);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [busyId, setBusyId] = useState("");
+
+  function load() {
+    return api<{ account: ActivityRow[]; operations: ActivityRow[]; stuck: StuckCheckout[] }>(`/api/admin/users/${userId}/activity`).then((data) => {
+      setAccount(data.account || []);
+      setOperations(data.operations || []);
+      setStuck(data.stuck || []);
+    });
+  }
+
+  useEffect(() => {
+    void load().catch((err: Error) => setError(err.message));
+  }, [userId]);
+
+  return (
+    <div className="user-activity-panel">
+      {error ? <p className="form-error">{error}</p> : null}
+      {message ? <p className="role">{message}</p> : null}
+      <h2>Account activity</h2>
+      <p className="role">The same list this person sees on Activity.</p>
+      {account.length ? (
+        <ol className="activity-list">
+          {account.map((row) => (
+            <li key={row.id}>
+              <strong>{row.summary}</strong>
+              <time dateTime={new Date(row.createdAt).toISOString()}>{new Date(row.createdAt).toLocaleString()}</time>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="role">Nothing is recorded yet.</p>
+      )}
+      <h2>Operations</h2>
+      <p className="role">Where this account is stuck, and what support recorded. A card charge is not marked paid from here.</p>
+      {stuck.length ? stuck.map((item) => (
+        <div className="stuck-checkout" key={item.id}>
+          <p>
+            {item.planName} checkout is waiting · {item.amountLabel} · {item.cycle}
+            {item.gatewayKind ? ` · ${item.gatewayKind}` : ""}
+          </p>
+          {canComplete ? (
+            <button
+              className="btn btn-primary btn-sm"
+              type="button"
+              disabled={busyId === item.id}
+              onClick={() => {
+                setBusyId(item.id);
+                setError("");
+                void api<{ message?: string }>(`/api/admin/users/${userId}/checkouts/${item.id}/complete`, { method: "POST" })
+                  .then((result) => {
+                    setMessage(result.message || "Recorded on the manual ledger.");
+                    return load();
+                  })
+                  .catch((err: Error) => setError(err.message))
+                  .finally(() => setBusyId(""));
+              }}
+            >
+              Record on the manual ledger
+            </button>
+          ) : null}
+        </div>
+      )) : (
+        <p className="role">No checkout is waiting on a payment return.</p>
+      )}
+      {stuck.length ? (
+        <p className="role">The payment return did not finish. Recording it here applies the plan on the manual ledger.</p>
+      ) : null}
+      {operations.length ? (
+        <ol className="activity-list">
+          {operations.map((row) => (
+            <li key={row.id}>
+              <strong>{row.summary}</strong>
+              <time dateTime={new Date(row.createdAt).toISOString()}>{new Date(row.createdAt).toLocaleString()}</time>
+            </li>
+          ))}
+        </ol>
+      ) : null}
     </div>
   );
 }

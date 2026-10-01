@@ -7,7 +7,7 @@ import { seedPromptRegistry } from "./prompt-registry.mjs";
 import { disableAllMfaPolicy, seedMfaPolicy } from "./mfa-policy.mjs";
 import { seedAdminAccessLevels } from "./admin-access.mjs";
 
-export const SCHEMA_VERSION = 32;
+export const SCHEMA_VERSION = 33;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -624,6 +624,21 @@ export function migrate() {
   `);
 
   addColumn("application_checks", "note", "TEXT DEFAULT ''");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_activity (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      actor_id TEXT DEFAULT '',
+      audience TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      detail TEXT DEFAULT '',
+      ref_type TEXT DEFAULT '',
+      ref_id TEXT DEFAULT '',
+      created_at INTEGER NOT NULL
+    );
+  `);
 
   const versionRow = db.prepare("SELECT version FROM schema_version LIMIT 1").get();
   const previous = versionRow?.version ?? 0;

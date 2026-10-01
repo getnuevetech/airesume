@@ -64,6 +64,7 @@ import {
   SUPER_LEVEL_ID,
   updateAccessLevel,
 } from "./admin-access.mjs";
+import { recordAccount, recordOperations } from "./user-activity.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const homepageFile = join(here, "..", "shared", "homepage.json");
@@ -349,6 +350,7 @@ app.post("/api/auth/login", (req, res) => {
     return;
   }
   setSession(res, user.id, req);
+  recordAccount(user.id, "sign_in", "Signed in.");
   res.json({ user: enrichPublicUser(user) });
 });
 
@@ -383,13 +385,16 @@ app.post("/api/auth/register", (req, res) => {
   ).run(userId, name, email, hashPassword(password), Date.now(), Date.now());
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
   setSession(res, userId);
+  recordAccount(userId, "account", "Created the account.");
   res.json({ user: enrichPublicUser(user) });
 });
 
 app.post("/api/auth/logout", (req, res) => {
   const token = cookie(req, "jp_session");
+  const session = token ? db.prepare("SELECT user_id FROM sessions WHERE token = ?").get(token) : null;
   if (token) db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
   clearSession(res, req);
+  if (session?.user_id) recordAccount(session.user_id, "sign_out", "Signed out.");
   res.json({ ok: true });
 });
 
@@ -502,6 +507,7 @@ app.get("/api/auth/google/callback", async (req, res) => {
     return;
   }
   let user = db.prepare("SELECT * FROM users WHERE email = ?").get(String(profile.email).toLowerCase());
+  let createdAccount = false;
   if (!user) {
     if (!oauth.consent) {
       res.redirect("/get-started?error=terms");
@@ -513,12 +519,14 @@ app.get("/api/auth/google/callback", async (req, res) => {
        VALUES (?, ?, ?, NULL, 'google', 'user', 'active', ?, ?)`,
     ).run(userId, profile.name || profile.email, String(profile.email).toLowerCase(), Date.now(), Date.now());
     user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+    createdAccount = true;
   }
   if (user.status !== "active") {
     res.redirect("/signin?error=disabled");
     return;
   }
   setSession(res, user.id, req);
+  recordAccount(user.id, createdAccount ? "account" : "sign_in", createdAccount ? "Created the account." : "Signed in.");
   res.redirect(existsProfile(user.id) ? "/dashboard" : "/get-started");
 });
 
@@ -715,6 +723,7 @@ app.post("/api/onboarding/activate", async (req, res) => {
       const userId = activateFromRow(fakeRow);
       syncProfileVersion(userId);
       setSession(res, userId, req);
+      recordAccount(userId, "account", "Created the account.");
       const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
       res.json({ user: enrichPublicUser(user), pending: false });
     } catch (error) {
@@ -756,6 +765,7 @@ app.post("/api/onboarding/verify", (req, res) => {
     const userId = activateFromRow(row);
     syncProfileVersion(userId);
     setSession(res, userId, req);
+    recordAccount(userId, "account", "Created the account.");
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
     res.json({ user: enrichPublicUser(user), pending: false });
   } catch (error) {
@@ -1161,6 +1171,12 @@ app.patch("/api/admin/users/:id", (req, res) => {
     role === "admin" ? accessLevelId : null,
     user.id,
   );
+  if (req.body.planId && planId !== (user.plan_id || "free")) {
+    const plan = db.prepare("SELECT name FROM plans WHERE id = ?").get(planId);
+    const planName = plan?.name || planId;
+    recordAccount(user.id, "plan", `Support set the plan to ${planName}.`, { actorId: admin.id, refType: "plan", refId: planId });
+    recordOperations(user.id, "plan", `Admin set the plan to ${planName}.`, { actorId: admin.id, refType: "plan", refId: planId });
+  }
   if (status === "disabled") db.prepare("DELETE FROM sessions WHERE user_id = ?").run(user.id);
   res.json({ user: enrichPublicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id)) });
 });

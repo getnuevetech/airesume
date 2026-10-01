@@ -14,6 +14,7 @@ const ITEMS = [
   { to: "/account/jobs", label: "Jobs", icon: "briefcase" },
   { to: "/account/applications", label: "Applications", icon: "send" },
   { to: "/account/plan", label: "Plan", icon: "card" },
+  { to: "/account/activity", label: "Activity", icon: "clock" },
   { to: "/account/settings", label: "Settings", icon: "gear" },
 ];
 
@@ -113,6 +114,7 @@ function NavIcon({ name }: { name: string }) {
   if (name === "mic") return <svg {...props}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18v3" /></svg>;
   if (name === "send") return <svg {...props}><path d="M4 12h10" /><path d="m11 6 7 6-7 6" /></svg>;
   if (name === "card") return <svg {...props}><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M3 10h18" /></svg>;
+  if (name === "clock") return <svg {...props}><circle cx="12" cy="12" r="8" /><path d="M12 8v5l3 2" /></svg>;
   if (name === "out") return <svg {...props}><path d="M10 7V5H5v14h5v-2" /><path d="M10 12h9" /><path d="m16 8 4 4-4 4" /></svg>;
   return <svg {...props}><circle cx="12" cy="12" r="3" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2" /></svg>;
 }
