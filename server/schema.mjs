@@ -7,7 +7,7 @@ import { seedPromptRegistry } from "./prompt-registry.mjs";
 import { disableAllMfaPolicy, seedMfaPolicy } from "./mfa-policy.mjs";
 import { seedAdminAccessLevels } from "./admin-access.mjs";
 
-export const SCHEMA_VERSION = 31;
+export const SCHEMA_VERSION = 32;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -420,6 +420,7 @@ export function migrate() {
       reminder_id TEXT DEFAULT '',
       answer TEXT NOT NULL,
       label TEXT NOT NULL,
+      note TEXT DEFAULT '',
       from_status TEXT DEFAULT '',
       to_status TEXT DEFAULT '',
       created_at INTEGER NOT NULL
@@ -621,6 +622,8 @@ export function migrate() {
       decided_at INTEGER
     );
   `);
+
+  addColumn("application_checks", "note", "TEXT DEFAULT ''");
 
   const versionRow = db.prepare("SELECT version FROM schema_version LIMIT 1").get();
   const previous = versionRow?.version ?? 0;
