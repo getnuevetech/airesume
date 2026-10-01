@@ -1878,7 +1878,7 @@ export function ApplicationsPage() {
                   <button
                     className="btn btn-ghost btn-sm"
                     type="button"
-                    onClick={() => void api(`/api/applications/${item.id}/submit`, { method: "POST" }).then(() => { setMessage("Application submitted."); return reload(); }).catch((err: Error) => setError(err.message))}
+                    onClick={() => void api<{ message?: string }>(`/api/applications/${item.id}/submit`, { method: "POST" }).then((result) => { setMessage(result.message || "Application submitted."); return reload(); }).catch((err: Error) => setError(err.message))}
                   >
                     Email submit
                   </button>
@@ -1914,7 +1914,7 @@ export function ApplicationsPage() {
                 defaultOpen={assistedOpen}
                 versions={data.versions}
                 versionId={item.versionId}
-                onDone={() => { setMessage("Marked Applied after Assisted Apply."); void reload(); }}
+                onDone={(message) => { setMessage(message || "Marked Applied after Assisted Apply."); void reload(); }}
                 onError={(message) => setError(message)}
               />
             ) : null}
@@ -1984,7 +1984,7 @@ function BrowserApplyAssistant({
   defaultOpen?: boolean;
   versions?: { id: string; label: string }[];
   versionId?: string;
-  onDone: () => void;
+  onDone: (message?: string) => void;
   onError: (message: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -2072,8 +2072,8 @@ function BrowserApplyAssistant({
                   disabled={busy || !kit.canComplete}
                   onClick={() => {
                     setBusy(true);
-                    void api(`/api/applications/${applicationId}/apply-kit/complete`, { method: "POST" })
-                      .then(onDone)
+                    void api<{ message?: string }>(`/api/applications/${applicationId}/apply-kit/complete`, { method: "POST" })
+                      .then((result) => onDone(result.message))
                       .catch((err: Error) => onError(err.message))
                       .finally(() => setBusy(false));
                   }}

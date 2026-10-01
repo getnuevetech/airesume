@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkAnswer, cleanCheckNote, recordApplicationCheck, recordStatusChange } from "./application-check.mjs";
+import { checkAnswer, cleanCheckNote, recordApplicationCheck, recordStatusChange, recordSubmission } from "./application-check.mjs";
 import { ensureFollowUpReminder, listFollowUpReminders } from "./follow-ups.mjs";
 import { migrate } from "./schema.mjs";
 import { db, id } from "./db.mjs";
@@ -167,6 +167,49 @@ test("a status menu change is saved and the previous reminder closes", () => {
     assert.equal(withdrawn.check.label, "Moved to Withdrawn");
     assert.equal(listFollowUpReminders(userId).length, 0);
     assert.equal(recordStatusChange({ userId, applicationId: "missing", status: "Offer", now }).error, "Application not found.");
+  } finally {
+    db.prepare("DELETE FROM application_checks WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM follow_up_reminders WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM applications WHERE id = ?").run(appId);
+    db.prepare("DELETE FROM jobs WHERE id = ?").run(jobId);
+  }
+});
+
+test("submitting a prepared role is the first line on the card", () => {
+  migrate();
+  const userId = id("usr");
+  const jobId = id("job");
+  const appId = id("app");
+  const now = Date.now();
+  db.prepare(
+    `INSERT INTO jobs (id, title, company, created_at) VALUES (?, 'Growth Product Manager', 'Kindred', ?)`,
+  ).run(jobId, now);
+  db.prepare(
+    `INSERT INTO applications (id, user_id, job_id, mode, status, match_score, target_company, created_at, updated_at)
+     VALUES (?, ?, ?, 'assisted', 'Review required', 82, 'Kindred', ?, ?)`,
+  ).run(appId, userId, jobId, now, now);
+  try {
+    const saved = recordSubmission({
+      userId,
+      applicationId: appId,
+      delivery: "You applied on the employer site with Assisted Apply.",
+      now,
+    });
+    assert.equal(saved.status, "Applied");
+    assert.equal(saved.check.label, "Submitted");
+    assert.equal(saved.check.fromStatus, "Review required");
+    assert.equal(saved.check.toStatus, "Applied");
+    assert.equal(saved.message, "Growth Product Manager is submitted.");
+    assert.equal(db.prepare("SELECT status FROM applications WHERE id = ?").get(appId).status, "Applied");
+    assert.match(db.prepare("SELECT delivery FROM applications WHERE id = ?").get(appId).delivery, /Assisted Apply/);
+    const open = listFollowUpReminders(userId);
+    assert.equal(open.length, 1);
+    assert.equal(open[0].kind, "apply_followup");
+
+    const again = recordSubmission({ userId, applicationId: appId, now: now + 1000 });
+    assert.equal(again.unchanged, true);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM application_checks WHERE application_id = ?").get(appId).count, 1);
+    assert.equal(recordSubmission({ userId, applicationId: "missing", now }).error, "Application not found.");
   } finally {
     db.prepare("DELETE FROM application_checks WHERE user_id = ?").run(userId);
     db.prepare("DELETE FROM follow_up_reminders WHERE user_id = ?").run(userId);

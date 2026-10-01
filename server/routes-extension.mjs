@@ -4,7 +4,7 @@ import { db, id } from "./db.mjs";
 import { matchJob } from "./match.mjs";
 import { buildApplyKit } from "./apply-kit.mjs";
 import { applyKitMetrics, recordApplyKitEvent } from "./apply-kit-metrics.mjs";
-import { ensureFollowUpReminder } from "./follow-ups.mjs";
+import { recordSubmission } from "./application-check.mjs";
 import {
   createExtensionToken,
   listExtensionTokens,
@@ -274,20 +274,21 @@ export function registerExtension(app, ctx) {
       return;
     }
     const delivery = "You applied on the employer site with the JobPilot extension autofill assist.";
-    db.prepare("UPDATE applications SET status = 'Applied', delivery = ?, updated_at = ? WHERE id = ?").run(delivery, Date.now(), row.id);
-    recordApplyKitEvent(user.id, row.id, "completed", "extension");
-    const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(row.job_id);
-    ensureFollowUpReminder({
+    const saved = recordSubmission({
       userId: user.id,
       applicationId: row.id,
-      status: "Applied",
-      company: row.target_company || job?.primary_company || job?.company || "",
-      title: job?.title || "",
+      delivery,
     });
+    if (saved.error) {
+      res.status(400).json({ error: saved.error });
+      return;
+    }
+    recordApplyKitEvent(user.id, row.id, "completed", "extension");
     res.json({
       ok: true,
       status: "Applied",
-      delivery,
+      delivery: saved.delivery || delivery,
+      message: saved.message || "",
       metrics: applyKitMetrics({ userId: user.id, applicationId: row.id }),
     });
   });

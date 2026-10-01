@@ -8,8 +8,7 @@ import { holdJobDraft, reviewJobIntake } from "./job-intake.mjs";
 import { buildApplyKit } from "./apply-kit.mjs";
 import { applyKitMetrics, recordApplyKitEvent } from "./apply-kit-metrics.mjs";
 import { computeApplicationReadiness } from "./readiness.mjs";
-import { recordStatusChange } from "./application-check.mjs";
-import { ensureFollowUpReminder } from "./follow-ups.mjs";
+import { recordStatusChange, recordSubmission } from "./application-check.mjs";
 import { AUTO_APPLY_AUTH_VERSION, autoApplyAuthorizationPayload, validateAutoApplyEnable } from "./auto-apply-auth.mjs";
 import { isSilentAutoApplyEnabled } from "./prompt-registry.mjs";
 import { confirmListedSkill, confirmedSkillMessage } from "./confirm-skill.mjs";
@@ -348,20 +347,21 @@ export function registerApplications(app, ctx) {
       return;
     }
     const delivery = "You applied on the employer site with Assisted Apply.";
-    db.prepare("UPDATE applications SET status = 'Applied', delivery = ?, updated_at = ? WHERE id = ?").run(delivery, Date.now(), row.id);
-    recordApplyKitEvent(user.id, row.id, "completed");
-    const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(row.job_id);
-    ensureFollowUpReminder({
+    const saved = recordSubmission({
       userId: user.id,
       applicationId: row.id,
-      status: "Applied",
-      company: row.target_company || job?.primary_company || job?.company || "",
-      title: job?.title || "",
+      delivery,
     });
+    if (saved.error) {
+      res.status(400).json({ error: saved.error });
+      return;
+    }
+    recordApplyKitEvent(user.id, row.id, "completed");
     res.json({
       ok: true,
       status: "Applied",
-      delivery,
+      delivery: saved.delivery || delivery,
+      message: saved.message || "",
       versionId: row.version_id,
       metrics: applyKitMetrics({ userId: user.id, applicationId: row.id }),
     });
@@ -411,15 +411,16 @@ export function registerApplications(app, ctx) {
       return;
     }
     const delivery = await employerDelivery(user, job, version.rendered || "");
-    db.prepare("UPDATE applications SET status = 'Applied', delivery = ?, updated_at = ? WHERE id = ?").run(delivery, Date.now(), row.id);
-    ensureFollowUpReminder({
+    const saved = recordSubmission({
       userId: user.id,
       applicationId: row.id,
-      status: "Applied",
-      company: row.target_company || job.primary_company || job.company || "",
-      title: job.title || "",
+      delivery,
     });
-    res.json({ ok: true, status: "Applied", delivery, versionId: version.id });
+    if (saved.error) {
+      res.status(400).json({ error: saved.error });
+      return;
+    }
+    res.json({ ok: true, status: "Applied", delivery: saved.delivery || delivery, message: saved.message || "", versionId: version.id });
   });
 
   app.post("/api/applications/auto", async (req, res) => {
@@ -486,19 +487,12 @@ export function registerApplications(app, ctx) {
         const rendered = String(versionRow?.rendered || "");
         if (row && rendered) {
           const delivery = await employerDelivery(user, item.job, rendered);
-          db.prepare("UPDATE applications SET status = 'Applied', delivery = ?, updated_at = ? WHERE id = ?").run(
-            delivery,
-            Date.now(),
-            row.id,
-          );
-          ensureFollowUpReminder({
+          const saved = recordSubmission({
             userId: user.id,
             applicationId: row.id,
-            status: "Applied",
-            company: row.target_company || item.job.primary_company || item.job.company || "",
-            title: item.job.title || "",
+            delivery,
           });
-          summary.applied += 1;
+          if (!saved.error) summary.applied += 1;
           continue;
         }
       }

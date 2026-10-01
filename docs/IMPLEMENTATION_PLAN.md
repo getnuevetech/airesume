@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–Z are implemented (V is schema 29). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AC lets a candidate confirm one of those missing skills into the Fact Ledger. Slice AD writes that skill into the resume already prepared for the same job. Slice AE writes it into every resume already prepared for that candidate. Slice AF lists those skills on the profile without Fact Ledger ids. Slice AG lets a candidate confirm a high-demand insight gap into that same ledger. Slice AH draws account stats as charts and colors category scores so the account is easier to scan. Slice AI shows each tracked role on a colored stage rail. Slice AJ saves a one-tap check-in on each application. Slice AK saves that check-in on the role itself, with one sentence the candidate heard. Slice AL saves a status-menu change on that same card and closes the reminder that no longer matches. Admin MFA stays disabled for now and is not a beta blocker.
+Status: slices Q–Z are implemented (V is schema 29). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AC lets a candidate confirm one of those missing skills into the Fact Ledger. Slice AD writes that skill into the resume already prepared for the same job. Slice AE writes it into every resume already prepared for that candidate. Slice AF lists those skills on the profile without Fact Ledger ids. Slice AG lets a candidate confirm a high-demand insight gap into that same ledger. Slice AH draws account stats as charts and colors category scores so the account is easier to scan. Slice AI shows each tracked role on a colored stage rail. Slice AJ saves a one-tap check-in on each application. Slice AK saves that check-in on the role itself, with one sentence the candidate heard. Slice AL saves a status-menu change on that same card and closes the reminder that no longer matches. Slice AM saves the moment a prepared role is submitted. Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
@@ -52,9 +52,10 @@ Q  CI on every pull request
                                   → AJ  Save a one-tap check-in on each application
                                     → AK  Save a note with the check-in on the role
                                       → AL  Save a status-menu change on the application
+                                        → AM  Save the submit moment on the application
 ```
 
-Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing. AC saves a confirmed gap onto the Fact Ledger and the active resume. AD updates the resume already prepared for that job so the confirmed skill is on it. AE updates every prepared resume for that candidate. AF shows those skills on the profile by name. AG confirms one insight gap into the Fact Ledger. AH replaces plain stat numbers with rings and bars, and shows category scores in color. AI shows where each tracked role sits from prepare through offer. AJ asks what happened on a due application and keeps that answer on the card. AK asks the same question on the role and keeps one sentence the candidate heard. AL saves a move from the status menu on that card and closes the reminder for the previous stage.
+Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing. AC saves a confirmed gap onto the Fact Ledger and the active resume. AD updates the resume already prepared for that job so the confirmed skill is on it. AE updates every prepared resume for that candidate. AF shows those skills on the profile by name. AG confirms one insight gap into the Fact Ledger. AH replaces plain stat numbers with rings and bars, and shows category scores in color. AI shows where each tracked role sits from prepare through offer. AJ asks what happened on a due application and keeps that answer on the card. AK asks the same question on the role and keeps one sentence the candidate heard. AL saves a move from the status menu on that card and closes the reminder for the previous stage. AM saves the moment a prepared role is submitted so the card history starts there.
 
 ---
 
@@ -435,6 +436,24 @@ Bootstrap and the README tell operators to open `http://<ip>/` and “use http, 
 
 ---
 
+### Slice AM — Save the submit moment on the application
+
+**Goal:** The card history starts when the candidate later checks in or uses the menu. Marking a prepared role submitted should be the first line.
+
+**Change**
+
+- Assisted Apply, email submit, the extension, and an authorized silent submit save “Submitted” on the application and move the stage to Applied.
+- The Applied follow-up is created. Submitting a role that is already Applied does not add another line.
+- The delivery sentence already stored on the card stays with that role.
+
+**Acceptance**
+
+- Marking a Review required role submitted records “Submitted” and the status is Applied.
+- The application follow-up is open.
+- Submitting again does not add a second Submitted line.
+
+---
+
 ## Ops the repo cannot finish
 
 These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them executable.
@@ -452,4 +471,4 @@ These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them
 
 ## Done when
 
-Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, Z, AA, AC, AD, AE, AF, AG, AH, AI, AJ, AK, and AL are in the product and are not launch gates.
+Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, Z, AA, AC, AD, AE, AF, AG, AH, AI, AJ, AK, AL, and AM are in the product and are not launch gates.
