@@ -53,6 +53,78 @@ export function CountBars({ title, rows }: { title?: string; rows: { label: stri
   );
 }
 
+export const PIPELINE = [
+  { id: "prepare", label: "Prepare" },
+  { id: "applied", label: "Applied" },
+  { id: "response", label: "Response" },
+  { id: "interview", label: "Interview" },
+  { id: "offer", label: "Offer" },
+] as const;
+
+const STAGE_BY_STATUS: Record<string, (typeof PIPELINE)[number]["id"]> = {
+  Found: "prepare",
+  Reviewed: "prepare",
+  "Resume preparing": "prepare",
+  Ready: "prepare",
+  "Review required": "prepare",
+  Applied: "applied",
+  "Employer viewed": "response",
+  "Recruiter contact": "response",
+  Responded: "response",
+  Interview: "interview",
+  Offer: "offer",
+  Hired: "offer",
+};
+
+export function applicationStage(status: string): { id: string; closed: string } {
+  if (status === "Rejected" || status === "Withdrawn" || status === "Skipped") {
+    return { id: "", closed: status };
+  }
+  return { id: STAGE_BY_STATUS[status] || "prepare", closed: "" };
+}
+
+export function pipelineRows(statuses: string[]) {
+  const counts = new Map<string, number>([
+    ["Prepare", 0],
+    ["Applied", 0],
+    ["Response", 0],
+    ["Interview", 0],
+    ["Offer", 0],
+    ["Closed", 0],
+  ]);
+  for (const status of statuses) {
+    const stage = applicationStage(status);
+    if (stage.closed) {
+      counts.set("Closed", (counts.get("Closed") || 0) + 1);
+      continue;
+    }
+    const label = PIPELINE.find((step) => step.id === stage.id)?.label || "Prepare";
+    counts.set(label, (counts.get(label) || 0) + 1);
+  }
+  return [...counts.entries()].map(([label, value]) => ({ label, value }));
+}
+
+export function StageRail({ status }: { status: string }) {
+  const stage = applicationStage(status);
+  const index = PIPELINE.findIndex((step) => step.id === stage.id);
+  return (
+    <div className="stage-wrap">
+      {stage.closed ? <span className="score-pill tone-weak">{stage.closed}</span> : null}
+      <ol className="stage-rail" aria-label={stage.closed ? `${stage.closed}` : `Stage: ${status}`}>
+        {PIPELINE.map((step, stepIndex) => {
+          const state = stage.closed ? "wait" : stepIndex < index ? "done" : stepIndex === index ? "now" : "wait";
+          return (
+            <li key={step.id} className={`stage stage-${state}`} aria-current={state === "now" ? "step" : undefined}>
+              <span className="stage-dot" aria-hidden="true" />
+              <span className="stage-label">{step.label}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
 export function CategoryBars({
   rows,
 }: {
