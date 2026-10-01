@@ -183,26 +183,54 @@ export function recordStatusChange({ userId, applicationId, status, now = Date.n
   const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(application.job_id);
   const company = application.target_company || job?.primary_company || job?.company || "";
   const title = job?.title || "this role";
-  const template = reminderTemplatesForStatus(next);
+  settleReminders({ userId, applicationId: application.id, status: next, company, title, now });
+
+  const check = publicCheck(db.prepare("SELECT * FROM application_checks WHERE id = ?").get(checkId));
+  return { check, status: next, message: `${title} is now ${next}.` };
+}
+
+function settleReminders({ userId, applicationId, status, company, title, now }) {
+  const template = reminderTemplatesForStatus(status);
   const open = db
     .prepare(
       `SELECT * FROM follow_up_reminders
        WHERE user_id = ? AND application_id = ? AND status IN ('open', 'snoozed')`,
     )
-    .all(userId, application.id);
+    .all(userId, applicationId);
   for (const row of open) {
     if (template && row.kind === template.kind) continue;
     updateFollowUpReminder(userId, row.id, "done", { now });
   }
-  ensureFollowUpReminder({
-    userId,
-    applicationId: application.id,
-    status: next,
-    company,
-    title,
+  ensureFollowUpReminder({ userId, applicationId, status, company, title, now });
+}
+
+/**
+ * Save the moment the candidate submits a prepared role and open the Applied reminder.
+ */
+export function recordSubmission({ userId, applicationId, delivery = "", now = Date.now() } = {}) {
+  const application = db.prepare("SELECT * FROM applications WHERE id = ? AND user_id = ?").get(applicationId, userId);
+  if (!application) return { error: "Application not found." };
+  if (application.status === "Applied") return { status: "Applied", unchanged: true, message: "" };
+
+  const fromStatus = application.status;
+  const checkId = id("chk");
+  db.prepare(
+    `INSERT INTO application_checks
+      (id, user_id, application_id, reminder_id, answer, label, note, from_status, to_status, created_at)
+     VALUES (?, ?, ?, '', 'submitted', 'Submitted', '', ?, 'Applied', ?)`,
+  ).run(checkId, userId, application.id, fromStatus, now);
+  const nextDelivery = String(delivery || application.delivery || "");
+  db.prepare("UPDATE applications SET status = 'Applied', delivery = ?, updated_at = ? WHERE id = ?").run(
+    nextDelivery,
     now,
-  });
+    application.id,
+  );
+
+  const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(application.job_id);
+  const company = application.target_company || job?.primary_company || job?.company || "";
+  const title = job?.title || "this role";
+  settleReminders({ userId, applicationId: application.id, status: "Applied", company, title, now });
 
   const check = publicCheck(db.prepare("SELECT * FROM application_checks WHERE id = ?").get(checkId));
-  return { check, status: next, message: `${title} is now ${next}.` };
+  return { check, status: "Applied", delivery: nextDelivery, message: `${title} is submitted.` };
 }
