@@ -6,6 +6,7 @@ import { TRACKER_STATUSES, isOutcomeStatus, isSubmittedStatus } from "./apply-ru
 import { allowExplanation, explanationQuota, redactMatch, reviewQuota } from "./quota.mjs";
 import { publicPlan, resolveTemplate, templateLimitOf, RESUME_TEMPLATES } from "./schema.mjs";
 import { applyKitMetrics } from "./apply-kit-metrics.mjs";
+import { checksByApplication } from "./application-check.mjs";
 import { followUpMetrics, syncFollowUpsForUser } from "./follow-ups.mjs";
 import { autoApplyAuthorizationPayload } from "./auto-apply-auth.mjs";
 import { billingDisclosurePayload } from "./billing-disclosure.mjs";
@@ -131,6 +132,7 @@ export function registerDashboard(app, ctx) {
     syncFollowUpsForUser(user.id, applications, jobsById);
     const followUps = followUpMetrics(user.id);
     const versionLabels = new Map(versions.map((item) => [item.id, item.label]));
+    const checks = checksByApplication(user.id);
     const recommendedCount = ranked.filter((item) => item.score >= 70 || item.label === "strong" || item.label === "good").length;
     const week = weeklyEfficiency({
       applications: applications.map((item) => {
@@ -211,6 +213,7 @@ export function registerDashboard(app, ctx) {
           versionLabel: versionLabels.get(item.version_id) || "",
           tailored: tailoringPreview(versionRows.find((row) => row.id === item.version_id), versionRows),
           questions: parse(item.questions, []),
+          checks: checks.get(item.id) || [],
         };
       }),
       review: review

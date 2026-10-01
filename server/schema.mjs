@@ -7,7 +7,7 @@ import { seedPromptRegistry } from "./prompt-registry.mjs";
 import { disableAllMfaPolicy, seedMfaPolicy } from "./mfa-policy.mjs";
 import { seedAdminAccessLevels } from "./admin-access.mjs";
 
-export const SCHEMA_VERSION = 30;
+export const SCHEMA_VERSION = 31;
 
 export const AI_FUNCTIONS = [
   { key: "career_extraction", label: "Career extraction", detail: "Reads a resume into a structured profile." },
@@ -412,6 +412,17 @@ export function migrate() {
       due_at INTEGER NOT NULL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS application_checks (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      application_id TEXT NOT NULL,
+      reminder_id TEXT DEFAULT '',
+      answer TEXT NOT NULL,
+      label TEXT NOT NULL,
+      from_status TEXT DEFAULT '',
+      to_status TEXT DEFAULT '',
+      created_at INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS extension_tokens (
       id TEXT PRIMARY KEY,

@@ -1795,7 +1795,7 @@ export function ApplicationsPage() {
         </section>
         {data.features.manual_apply ? (
           <FollowUpsPanel
-            onDone={() => { setMessage("Follow-up updated."); void reload(); }}
+            onDone={(message) => { setMessage(message || "Follow-up updated."); void reload(); }}
             onError={(message) => setError(message)}
           />
         ) : null}
@@ -1828,6 +1828,17 @@ export function ApplicationsPage() {
                 <h2>{item.title}</h2>
                 <p className="role">{[item.company, item.mode].filter(Boolean).join(" · ")}</p>
                 <StageRail status={item.status} />
+                {item.checks?.length ? (
+                  <ol className="check-history">
+                    {item.checks.map((check) => (
+                      <li key={check.id}>
+                        <strong>{check.label}</strong>
+                        <time dateTime={new Date(check.createdAt).toISOString()}>{new Date(check.createdAt).toLocaleDateString()}</time>
+                        {check.toStatus && check.toStatus !== check.fromStatus ? <span>Stage is now {check.toStatus}</span> : null}
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
                 {item.versionLabel ? <p className="role">Pinned resume: {item.versionLabel}</p> : null}
                 {item.viaCompany ? <p className="role">Found through {item.viaCompany}{item.sourceName ? ` on ${item.sourceName}` : ""}</p> : null}
                 {item.delivery ? <p className="role">{item.delivery}</p> : null}
@@ -2095,11 +2106,18 @@ type FollowUpReminder = {
   overdue: boolean;
 };
 
+const CHECK_ANSWERS = [
+  { answer: "waiting", label: "Still waiting" },
+  { answer: "replied", label: "They replied" },
+  { answer: "interview", label: "Interview" },
+  { answer: "rejected", label: "Rejected" },
+];
+
 function FollowUpsPanel({
   onDone,
   onError,
 }: {
-  onDone: () => void;
+  onDone: (message?: string) => void;
   onError: (message: string) => void;
 }) {
   const [reminders, setReminders] = useState<FollowUpReminder[]>([]);
@@ -2124,11 +2142,20 @@ function FollowUpsPanel({
     onDone();
   }
 
+  async function checkIn(id: string, answer: string) {
+    const result = await api<{ message?: string }>(`/api/follow-ups/${id}/check-in`, {
+      method: "POST",
+      body: JSON.stringify({ answer }),
+    });
+    await load();
+    onDone(result.message);
+  }
+
   if (!reminders.length && !metrics?.due) {
     return (
       <section className="account-card" id="follow-ups">
         <h2>Follow-up reminders</h2>
-        <p className="role">Reminders appear after Applied, Employer viewed, Recruiter contact, Responded, Interview, Offer, or Hired.</p>
+        <p className="role">After you apply, each role asks what happened. Still waiting, They replied, Interview, or Rejected is saved on that application.</p>
       </section>
     );
   }
@@ -2140,7 +2167,7 @@ function FollowUpsPanel({
         {metrics ? `${metrics.due} due · ${metrics.open} open · ${metrics.done} done` : "Loading…"}
       </p>
       {reminders.map((item) => (
-        <div className="quiet-row" key={item.id}>
+        <div className="check-reminder" key={item.id}>
           <div>
             <strong>{item.title}</strong>
             <p className="role">
@@ -2149,9 +2176,17 @@ function FollowUpsPanel({
             </p>
             <p className="role">{item.detail}</p>
           </div>
-          <div className="job-actions">
-            <button className="btn btn-primary btn-sm" type="button" onClick={() => void act(item.id, "done").catch((err: Error) => onError(err.message))}>Done</button>
-            <button className="btn btn-ghost btn-sm" type="button" onClick={() => void act(item.id, "snooze").catch((err: Error) => onError(err.message))}>Snooze 2d</button>
+          <div className="check-actions">
+            {CHECK_ANSWERS.map((choice) => (
+              <button
+                className={choice.answer === "rejected" ? "btn btn-ghost btn-sm check-reject" : "btn btn-ghost btn-sm"}
+                type="button"
+                key={choice.answer}
+                onClick={() => void checkIn(item.id, choice.answer).catch((err: Error) => onError(err.message))}
+              >
+                {choice.label}
+              </button>
+            ))}
             <button className="text-btn" type="button" onClick={() => void act(item.id, "dismiss").catch((err: Error) => onError(err.message))}>Dismiss</button>
           </div>
         </div>

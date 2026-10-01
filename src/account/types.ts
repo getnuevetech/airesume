@@ -188,6 +188,7 @@ export type AccountData = {
       changes: { kind: string; before: string; after: string; detail: string }[];
     } | null;
     questions?: ApplicationQuestion[];
+    checks?: { id: string; label: string; fromStatus: string; toStatus: string; createdAt: number }[];
   }[];
   review: { id: string; rating: number; feedback: string[]; recommendations: Recommendation[] } | null;
   versions: { id: string; label: string; kind: string; active: boolean; rendered: string }[];
