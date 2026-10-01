@@ -1767,6 +1767,13 @@ export function ApplicationsPage() {
         return match ? [match] : [];
       })
     : data.applications;
+  const weekKindCounts = { Submitted: 0, Prepared: 0, Tracked: 0 };
+  for (const role of data.week?.roles || []) {
+    if (role.label === "Submitted" || role.label === "Prepared" || role.label === "Tracked") {
+      weekKindCounts[role.label] += 1;
+    }
+  }
+  const stageStatuses = (weekOnly ? applications : data.applications).map((item) => item.status);
   return (
     <Gate>
       <div className="account-page">
@@ -1782,26 +1789,33 @@ export function ApplicationsPage() {
         <section className="account-card chart-card">
           <h2>Tracker at a glance</h2>
           <div className="chart-layout">
-            {typeof data.stats.kitCompletionRate === "number" ? (
+            {!weekOnly && typeof data.stats.kitCompletionRate === "number" ? (
               <ScoreRing label="Kit completion" value={data.stats.kitCompletionRate} />
             ) : null}
             <CountBars
               title="Tracker at a glance"
-              rows={[
-                { label: "In tracker", value: data.stats.tracked ?? data.stats.applied },
-                { label: "Ready", value: data.stats.ready || 0 },
-                { label: "Need review", value: data.stats.reviewRequired || 0 },
-                { label: "Follow-ups due", value: data.stats.followUpsDue || 0 },
-              ]}
+              rows={weekOnly
+                ? [
+                    { label: "This week", value: applications.length },
+                    { label: "Submitted", value: weekKindCounts.Submitted },
+                    { label: "Prepared", value: weekKindCounts.Prepared },
+                    { label: "Tracked", value: weekKindCounts.Tracked },
+                  ]
+                : [
+                    { label: "In tracker", value: data.stats.tracked ?? data.stats.applied },
+                    { label: "Ready", value: data.stats.ready || 0 },
+                    { label: "Need review", value: data.stats.reviewRequired || 0 },
+                    { label: "Follow-ups due", value: data.stats.followUpsDue || 0 },
+                  ]}
             />
           </div>
-          {typeof data.stats.kitCompletionRate === "number" ? (
+          {!weekOnly && typeof data.stats.kitCompletionRate === "number" ? (
             <p className="role">{data.stats.kitCompleted || 0} of {data.stats.kitOpened || 0} kits finished.</p>
           ) : null}
         </section>
         <section className="account-card chart-card">
           <h2>Where your roles are</h2>
-          <CountBars title="Application stages" rows={pipelineRows(data.applications.map((item) => item.status))} />
+          <CountBars title="Application stages" rows={pipelineRows(stageStatuses)} />
         </section>
         {data.features.manual_apply ? (
           <FollowUpsPanel
@@ -1949,7 +1963,7 @@ export function ApplicationsPage() {
             ) : null}
           </article>
           );
-        }) : <p className="role">{weekOnly ? "No applications moved this week." : "Your tracker is empty."}</p>}
+        }) : <p className="role">{weekOnly ? "Nothing moved this week." : "Your tracker is empty."}</p>}
       </div>
     </Gate>
   );
