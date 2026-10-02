@@ -2,7 +2,7 @@
 
 JobPilot is an AI job application manager. Quality of applications comes before volume. The fact ledger is the source of truth: AI may rewrite wording, never invent employers, dates, credentials, skills, or numbers.
 
-Next build: `docs/IMPLEMENTATION_PLAN.md` (CI, launch-doc truth, backups, candidate-path regression, manual-only live billing).
+Next build: `docs/IMPLEMENTATION_PLAN.md` Slice AP (full CI test suite), then operator items on `docs/LAUNCH_CHECKLIST.md`. Slices Q–AO are on `main`.
 
 `docs/SPEC_REVIEW_AND_PLAN.md` is the v1.2 gap review through PR #32. Slices G–P in that review are shipped; do not treat it as the queue.
 
@@ -12,11 +12,11 @@ Already live beyond early Phase 1:
 
 - Homepage CMS, email/Google auth, password reset, admin users
 - Resume-first onboarding with extraction + claim review + confirm
-- Account shell: profile, resume review/upscale/versions, templates, jobs, applications, plan, settings
+- Account shell: profile, resume review/upscale/versions, templates, jobs, applications, plan, settings, activity
 - Job catalog + JSON/RSS/HTML feeds, verification labels, hybrid match score with explanations
 - Requirements JSON on jobs (mandatory/preferred skills, education, years)
 - Job-specific resume shaping that reorders existing facts only
-- Review-first application tracker + Assisted Apply kit + readiness gates
+- Review-first application tracker + Assisted Apply kit + readiness gates + weekly tracker charts
 - Autopilot queues Ready or Review required with daily cap, exclusions, preference checks, and separate Auto-Apply authorization
 - Paste-a-job + browser extension capture (MV3 unpacked)
 - Application question drafts; salary, sponsorship, authorization, disability, veteran stay blank for the user
@@ -24,6 +24,7 @@ Already live beyond early Phase 1:
 - Career insights tied to outcomes; interview prep + voice practice; follow-up reminders
 - Employer accounts, pipeline, postings, rooms, analytics, WebRTC signaling + TURN/STUN env config
 - Terms + Privacy pack; security headers; rate limits; no AI vendor/model names in customer UI
+- Admin RBAC, launch readiness panel, backup/restore scripts, manual-only live billing gate, account + operations activity logs
 
 Default admin on first boot uses `ADMIN_EMAIL` / `ADMIN_PASSWORD` when set. Session cookies set `Secure` when the request is HTTPS (`x-forwarded-proto`) or `COOKIE_SECURE=1`.
 
