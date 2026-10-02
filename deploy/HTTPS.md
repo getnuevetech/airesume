@@ -17,9 +17,10 @@ See `nginx.jobpilot.conf` for the HTTP proxy skeleton. After certbot, prefer a `
 
 ## App env
 
-- Set `COOKIE_SECURE=1` when the public site is HTTPS (or rely on `X-Forwarded-Proto: https`).
+- Set `COOKIE_SECURE=1` when the public site is HTTPS. Admin → Launch fails `opsReady` in production until this is set (do not rely on auto `X-Forwarded-Proto` alone for the launch gate).
 - Leave admin MFA disabled. Do not set `REQUIRE_ADMIN_MFA=1` until authenticator codes are an intentional requirement.
 - Configure TURN via `deploy/turn.env.example` before relying on interview rooms across NATs.
+- After deploy: `bash deploy/smoke.sh https://YOUR_HOST`
 - Full pre-launch gate: `docs/LAUNCH_CHECKLIST.md` and Admin → Launch.
 - Env template: `deploy/env.production.example`.
 

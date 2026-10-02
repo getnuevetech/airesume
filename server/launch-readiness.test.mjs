@@ -74,6 +74,25 @@ test("launch readiness opsReady when production signals are green (counsel still
   assert.ok(report.checks.some((item) => item.id === "counsel" && !item.ok));
   assert.ok(report.checks.some((item) => item.id === "legal_placeholders" && item.ok));
   assert.ok(report.checks.some((item) => item.id === "default_admin_password" && item.ok));
+  assert.ok(report.checks.some((item) => item.id === "cookie_secure" && item.ok));
+});
+
+test("production without COOKIE_SECURE=1 blocks opsReady", () => {
+  const report = computeLaunchReadiness({
+    env: { NODE_ENV: "production" },
+    mail: { configured: true, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    ice: { productionReady: true, warning: "" },
+    adminMfaEnrolled: true,
+    legal: cleanLegal,
+    defaultAdmin: cleanDefaultAdmin,
+    betaSafety: cleanBetaSafety,
+  });
+  assert.equal(report.opsReady, false);
+  assert.ok(report.checks.some((item) => item.id === "cookie_secure" && !item.ok));
+  assert.match(
+    report.checks.find((item) => item.id === "cookie_secure").detail,
+    /COOKIE_SECURE=1/,
+  );
 });
 
 test("unfinished legal placeholders block opsReady even when SMTP and production are green", () => {

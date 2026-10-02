@@ -69,12 +69,14 @@ export function computeLaunchReadiness(options = {}) {
     check(
       "cookie_secure",
       "Secure session cookies",
-      cookieSecureMode(env) !== "forced_off",
+      production ? cookieSecureMode(env) === "forced_on" : cookieSecureMode(env) !== "forced_off",
       cookieSecureMode(env) === "forced_on"
         ? "COOKIE_SECURE=1 is set."
         : cookieSecureMode(env) === "forced_off"
           ? "COOKIE_SECURE=0 disables Secure cookies — turn this off before HTTPS launch."
-          : "Cookies use Secure when X-Forwarded-Proto is https (or set COOKIE_SECURE=1).",
+          : production
+            ? "Production launch requires COOKIE_SECURE=1 after HTTPS is terminated at nginx."
+            : "Cookies use Secure when X-Forwarded-Proto is https (or set COOKIE_SECURE=1).",
       "required",
     ),
     check(

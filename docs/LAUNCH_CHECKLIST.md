@@ -6,7 +6,7 @@ Pre-public launch gate for JobPilot. Ops signals are also visible in **Admin →
 
 - [ ] `NODE_ENV=production`
 - [ ] HTTPS terminated at nginx/LB (`deploy/HTTPS.md`); Node stays on localhost `:3000`
-- [ ] `COOKIE_SECURE=1` (or verified `X-Forwarded-Proto: https`)
+- [ ] `COOKIE_SECURE=1` (required for production launch; Admin → Launch fails `opsReady` without it)
 - [ ] SMTP host + from address configured (Admin → Email) so resets/notices deliver
 - [ ] Legal copy placeholders filled in `src/content/terms.ts` and `src/content/privacy.ts` (company name, mailing address, privacy/support emails; remove draft/arbitration placeholders). Admin → Launch fails `opsReady` until this is clean.
 - [ ] Published default admin password rotated (`admin@jobpilot.app` must not accept `JobPilot-Admin-2026`; `admin-bootstrap.txt` must not store a plaintext password). Admin → Launch fails `opsReady` until this is clean.
@@ -35,8 +35,15 @@ Pre-public launch gate for JobPilot. Ops signals are also visible in **Admin →
 ## Smoke after deploy
 
 ```bash
+bash deploy/smoke.sh https://YOUR_HOST
+# Expect: health ok · https://YOUR_HOST/api/health
+```
+
+Or manually:
+
+```bash
 curl -fsS https://YOUR_HOST/api/health
 # Expect { "ok": true }
 ```
 
-Sign in as admin → **Launch** tab → confirm ops checks. Complete counsel checkbox externally before calling the product publicly launched.
+Sign in as admin → **Launch** tab → confirm ops checks. Complete counsel review externally before calling the product publicly launched.
