@@ -2582,15 +2582,27 @@ export function PlanPage() {
     const checkoutId = params.get("checkout_id");
     if (params.get("checkout") === "success" && checkoutId) {
       void api("/api/billing/confirm", { method: "POST", body: JSON.stringify({ checkoutId }) })
-        .then(() => refresh())
         .then(reload)
         .then(() => setMessage("Plan updated."))
+        .then(() => refresh())
         .catch((err: Error) => setError(err.message));
       setParams({}, { replace: true });
     }
   }, [params, refresh, reload, setMessage, setError, setParams]);
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="account-page">
+        <header className="account-head">
+          <div>
+            <p className="eyebrow">Plan</p>
+            <h1>Loading plan…</h1>
+            <p className="lede">Refreshing your account.</p>
+          </div>
+        </header>
+      </div>
+    );
+  }
   const disclosure = data.billingDisclosure;
   const needsDisclosure = !disclosure?.accepted;
 
@@ -2603,8 +2615,8 @@ export function PlanPage() {
       if (result.url) window.location.href = result.url;
       else {
         setMessage("Plan updated.");
-        void refresh();
         await reload();
+        void refresh();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Checkout failed.");
@@ -2616,7 +2628,7 @@ export function PlanPage() {
       <header className="account-head">
         <div>
           <p className="eyebrow">Plan</p>
-          <h1>{data.plan.name}</h1>
+          <h1>{data.plan?.name || "Plan"}</h1>
           <p className="lede">{data.policy.allowUpgrade ? "Upgrades are open." : "Upgrades are closed."} {data.policy.allowDowngrade ? "Downgrades are open." : "Downgrades are closed."} {data.policy.allowProration ? "Unused time is credited." : ""} {data.policy.allowRefund ? "Downgrades record a refund." : ""}</p>
         </div>
       </header>

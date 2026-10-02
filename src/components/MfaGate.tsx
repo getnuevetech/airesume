@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
+import { mfaGateUserKey } from "./mfa-gate-user";
 
 type MfaStatus = {
   required: boolean;
@@ -145,35 +146,45 @@ export function MfaGate({
 
 export function useMfaGate() {
   const { user } = useApp();
+  const userId = mfaGateUserKey(user);
   const [mfa, setMfa] = useState<MfaStatus | null>(null);
   const [checked, setChecked] = useState(false);
 
+  // Key on user id, not the user object. refresh() after plan upgrade returns a new
+  // object for the same account; re-running this effect used to set checked=false,
+  // unmount AccountProvider, and leave Plan (and the rest of /account) blank.
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setMfa(null);
       setChecked(true);
       return;
     }
+    let cancelled = false;
     setChecked(false);
     void api<MfaStatus>("/api/mfa")
       .then((status) => {
+        if (cancelled) return;
         setMfa(status);
         setChecked(true);
       })
-      .catch((err: Error & { mfaRequired?: boolean }) => {
+      .catch((err: Error & { mfaRequired?: boolean; mfaEnrolled?: boolean }) => {
+        if (cancelled) return;
         const message = String(err.message || "");
         if (err.mfaRequired || /mfa/i.test(message)) {
           setMfa({
             required: true,
-            enrolled: Boolean(user.mfaEnrolled),
-            verified: Boolean(user.mfaVerified),
+            enrolled: Boolean(err.mfaEnrolled),
+            verified: false,
           });
         } else {
-          setMfa({ required: false, enrolled: Boolean(user.mfaEnrolled), verified: Boolean(user.mfaVerified) });
+          setMfa({ required: false, enrolled: false, verified: false });
         }
         setChecked(true);
       });
-  }, [user]);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   const needsGate = Boolean(checked && mfa?.required && (!mfa.enrolled || !mfa.verified));
   return { mfa, checked, needsGate, setMfa };
