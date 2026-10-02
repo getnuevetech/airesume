@@ -154,7 +154,9 @@ export function computeLaunchReadiness(options = {}) {
       "counsel",
       "Counsel review of legal copy",
       false,
-      "Outside counsel must sign off Terms, Privacy, billing disclosure, and Auto-Apply authorization text (process gate).",
+      legal.counselDraftIds?.length
+        ? `Outside counsel must sign off Terms, Privacy, billing disclosure, and Auto-Apply authorization text. Draft markers still in source: ${legal.counselDraftIds.join(", ")}.`
+        : "Outside counsel must sign off Terms, Privacy, billing disclosure, and Auto-Apply authorization text (process gate).",
       "required",
     ),
     check(

@@ -167,11 +167,28 @@ test("BILLING_LIVE unlocks block opsReady", () => {
 });
 
 test("scanLegalPlaceholders finds company and counsel markers in the repo copy", () => {
-  const result = scanLegalPlaceholders(join(import.meta.dirname, ".."));
+  const result = scanLegalPlaceholders(join(import.meta.dirname, ".."), undefined, {
+    legalName: "",
+    mailingAddress: "",
+    privacyEmail: "",
+    supportEmail: "",
+  });
   assert.equal(result.ok, false);
   assert.ok(result.placeholderIds.includes("COMPANY_LEGAL_NAME"));
   assert.ok(result.placeholderIds.includes("PRIVACY_EMAIL"));
-  assert.ok(result.placeholderIds.includes("ARBITRATION_PLACEHOLDER") || result.placeholderIds.includes("DRAFT_FOR_COUNSEL"));
+  assert.ok(result.counselDraftIds.includes("ARBITRATION_PLACEHOLDER") || result.counselDraftIds.includes("DRAFT_FOR_COUNSEL"));
+});
+
+test("scanLegalPlaceholders passes company fields when legal entity is filled", () => {
+  const result = scanLegalPlaceholders(join(import.meta.dirname, ".."), undefined, {
+    legalName: "Example Inc.",
+    mailingAddress: "1 Main St",
+    privacyEmail: "privacy@example.com",
+    supportEmail: "legal@example.com",
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.placeholderIds, []);
+  assert.ok(result.counselDraftIds.length > 0);
 });
 
 test("scanLegalPlaceholders passes when bracket fields are filled", () => {
@@ -188,6 +205,23 @@ test("scanLegalPlaceholders passes when bracket fields are filled", () => {
   const result = scanLegalPlaceholders(root);
   assert.equal(result.ok, true);
   assert.deepEqual(result.placeholderIds, []);
+});
+
+test("applyLegalEntityToText replaces company brackets", async () => {
+  const { applyLegalEntityToText } = await import("./legal-entity.mjs");
+  const text = applyLegalEntityToText(
+    "Operated by [COMPANY LEGAL NAME]. Write [PRIVACY EMAIL] or [LEGAL / SUPPORT EMAIL]. Mail: [COMPANY MAILING ADDRESS]",
+    {
+      legalName: "Example Inc",
+      mailingAddress: "1 Main St",
+      privacyEmail: "privacy@example.com",
+      supportEmail: "legal@example.com",
+    },
+  );
+  assert.equal(
+    text,
+    "Operated by Example Inc. Write privacy@example.com or legal@example.com. Mail: 1 Main St",
+  );
 });
 
 test("defaultAdminPasswordStatus fails when the published password still verifies", () => {

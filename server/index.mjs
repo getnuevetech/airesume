@@ -52,6 +52,7 @@ import {
 } from "./mfa-policy.mjs";
 import { computeLaunchReadiness } from "./launch-readiness.mjs";
 import { writeAdminBootstrapFile } from "./bootstrap-note.mjs";
+import { getLegalEntity, saveLegalEntity } from "./legal-entity.mjs";
 import {
   adminAccessSummary,
   adminHasPermission,
@@ -313,6 +314,25 @@ app.get("/api/health", (_req, res) => {
 app.get("/api/admin/launch-readiness", (req, res) => {
   if (!requireAdmin(req, res, "admin.launch.read")) return;
   res.json(computeLaunchReadiness());
+});
+
+app.get("/api/legal-entity", (_req, res) => {
+  res.json({ entity: getLegalEntity() });
+});
+
+app.get("/api/admin/legal-entity", (req, res) => {
+  if (!requireAdmin(req, res, "admin.launch.read")) return;
+  res.json({ entity: getLegalEntity() });
+});
+
+app.put("/api/admin/legal-entity", (req, res) => {
+  if (!requireAdmin(req, res, "admin.launch.write")) return;
+  const result = saveLegalEntity(req.body || {});
+  if (!result.ok) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ entity: result.entity, launch: computeLaunchReadiness() });
 });
 
 app.get("/api/content/homepage", (_req, res) => {

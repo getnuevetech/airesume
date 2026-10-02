@@ -2,7 +2,7 @@
 
 JobPilot is an AI job application manager. Quality of applications comes before volume. The fact ledger is the source of truth: AI may rewrite wording, never invent employers, dates, credentials, skills, or numbers.
 
-Next build: operator items on `docs/LAUNCH_CHECKLIST.md` (HTTPS, SMTP, fill legal entity fields, rotate default admin password, counsel). Slices Q–AT are on `main` once AT lands.
+Next build: operator items on `docs/LAUNCH_CHECKLIST.md` (HTTPS, SMTP, counsel). Slices Q–AU are on `main` once AU lands.
 
 `docs/SPEC_REVIEW_AND_PLAN.md` is the v1.2 gap review through PR #32. Slices G–P in that review are shipped; do not treat it as the queue.
 

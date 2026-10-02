@@ -8,7 +8,7 @@ Pre-public launch gate for JobPilot. Ops signals are also visible in **Admin →
 - [ ] HTTPS terminated at nginx/LB (`deploy/HTTPS.md`); Node stays on localhost `:3000`
 - [ ] `COOKIE_SECURE=1` (required for production launch; Admin → Launch fails `opsReady` without it)
 - [ ] SMTP host + from address configured (Admin → Email) so resets/notices deliver
-- [ ] Legal copy placeholders filled in `src/content/terms.ts` and `src/content/privacy.ts` (company name, mailing address, privacy/support emails; remove draft/arbitration placeholders). Admin → Launch fails `opsReady` until this is clean.
+- [ ] Legal entity saved under Admin → Launch (company name, mailing address, privacy email, legal/support email). Public Terms/Privacy use these fields. Admin → Launch fails `opsReady` until company brackets are cleared.
 - [ ] Published default admin password rotated (`admin@jobpilot.app` must not accept `JobPilot-Admin-2026`; `admin-bootstrap.txt` must not store a plaintext password). Admin → Launch fails `opsReady` until this is clean.
 - [ ] Silent Auto-Apply kill switch stays off (Admin → AI). Admin → Launch fails `opsReady` if it is on.
 - [ ] Live card billing stays off (`BILLING_LIVE` unset; no enabled live Stripe/PayPal gateway). Use the manual ledger. Admin → Launch fails `opsReady` if live billing is unlocked.

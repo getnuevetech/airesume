@@ -24,6 +24,7 @@ export const ADMIN_PERMISSION_GROUPS = [
     label: "Launch",
     permissions: [
       { key: "admin.launch.read", label: "View launch readiness", detail: "See production launch checks." },
+      { key: "admin.launch.write", label: "Edit launch legal entity", detail: "Save company name, address, and contact emails used in Terms and Privacy." },
     ],
   },
   {
@@ -190,6 +191,7 @@ const PRESET_LEVELS = [
     permissions: [
       "admin.portal.access",
       "admin.launch.read",
+      "admin.launch.write",
       "admin.email.read",
       "admin.email.write",
       "admin.email.test",
@@ -431,6 +433,7 @@ export function seedAdminAccessLevels() {
     ["aal_support", "admin.users.activity.complete"],
     ["aal_billing", "admin.users.activity.read"],
     ["aal_billing", "admin.users.activity.complete"],
+    ["aal_ops", "admin.launch.write"],
   ];
   const insertPresetPermission = db.prepare(
     "INSERT OR IGNORE INTO admin_access_level_permissions (level_id, permission_key) VALUES (?, ?)",

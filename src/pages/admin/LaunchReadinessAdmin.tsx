@@ -25,17 +25,37 @@ type LaunchReport = {
   };
 };
 
+type LegalEntity = {
+  legalName: string;
+  mailingAddress: string;
+  privacyEmail: string;
+  supportEmail: string;
+};
+
+const emptyEntity: LegalEntity = {
+  legalName: "",
+  mailingAddress: "",
+  privacyEmail: "",
+  supportEmail: "",
+};
+
 export function LaunchReadinessAdmin() {
   const [report, setReport] = useState<LaunchReport | null>(null);
+  const [entity, setEntity] = useState<LegalEntity>(emptyEntity);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function load() {
     setBusy(true);
     setError("");
     try {
-      const data = await api<LaunchReport>("/api/admin/launch-readiness");
+      const [data, legal] = await Promise.all([
+        api<LaunchReport>("/api/admin/launch-readiness"),
+        api<{ entity: LegalEntity }>("/api/admin/legal-entity"),
+      ]);
       setReport(data);
+      setEntity(legal.entity || emptyEntity);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load launch readiness.");
     } finally {
@@ -46,6 +66,26 @@ export function LaunchReadinessAdmin() {
   useEffect(() => {
     void load();
   }, []);
+
+  async function saveEntity(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await api<{ entity: LegalEntity; launch: LaunchReport }>("/api/admin/legal-entity", {
+        method: "PUT",
+        body: JSON.stringify(entity),
+      });
+      setEntity(result.entity);
+      setReport(result.launch);
+      setMessage("Legal entity saved. Terms and Privacy use these fields on the public pages.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save legal entity.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div>
@@ -59,6 +99,53 @@ export function LaunchReadinessAdmin() {
         </button>
       </header>
       {error ? <p className="form-error">{error}</p> : null}
+      {message ? <p className="form-success">{message}</p> : null}
+      <section className="admin-card">
+        <h2>Legal entity</h2>
+        <p className="role">
+          Fills company brackets on Terms and Privacy. Draft and arbitration markers still need counsel before public launch.
+        </p>
+        <form className="admin-form" onSubmit={(event) => void saveEntity(event)}>
+          <label className="field">
+            <span>Company legal name</span>
+            <input
+              value={entity.legalName}
+              onChange={(event) => setEntity({ ...entity, legalName: event.target.value })}
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Mailing address</span>
+            <textarea
+              rows={2}
+              value={entity.mailingAddress}
+              onChange={(event) => setEntity({ ...entity, mailingAddress: event.target.value })}
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Privacy email</span>
+            <input
+              type="email"
+              value={entity.privacyEmail}
+              onChange={(event) => setEntity({ ...entity, privacyEmail: event.target.value })}
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Legal / support email</span>
+            <input
+              type="email"
+              value={entity.supportEmail}
+              onChange={(event) => setEntity({ ...entity, supportEmail: event.target.value })}
+              required
+            />
+          </label>
+          <button className="btn btn-primary" type="submit" disabled={busy}>
+            Save legal entity
+          </button>
+        </form>
+      </section>
       {report ? (
         <>
           <section className="admin-card">

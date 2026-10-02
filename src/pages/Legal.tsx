@@ -1,6 +1,41 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { api } from "../api";
 import { privacyDoc } from "../content/privacy";
 import { termsDoc, type LegalDoc } from "../content/terms";
+
+type LegalEntity = {
+  legalName: string;
+  mailingAddress: string;
+  privacyEmail: string;
+  supportEmail: string;
+};
+
+function applyEntity(text: string, entity: LegalEntity) {
+  let out = text;
+  if (entity.legalName) out = out.split("[COMPANY LEGAL NAME]").join(entity.legalName);
+  if (entity.mailingAddress) out = out.split("[COMPANY MAILING ADDRESS]").join(entity.mailingAddress);
+  if (entity.privacyEmail) out = out.split("[PRIVACY EMAIL]").join(entity.privacyEmail);
+  if (entity.supportEmail) {
+    out = out.split("[LEGAL / SUPPORT EMAIL]").join(entity.supportEmail);
+    out = out.split("[LEGAL/SUPPORT EMAIL]").join(entity.supportEmail);
+  }
+  return out;
+}
+
+function applyEntityToDoc(doc: LegalDoc, entity: LegalEntity): LegalDoc {
+  return {
+    ...doc,
+    sections: doc.sections.map((section) => ({
+      ...section,
+      blocks: section.blocks.map((block) =>
+        block.type === "ul"
+          ? { ...block, items: block.items.map((item) => applyEntity(item, entity)) }
+          : { ...block, text: applyEntity(block.text, entity) },
+      ),
+    })),
+  };
+}
 
 function LegalArticle({ doc }: { doc: LegalDoc }) {
   return (
@@ -40,7 +75,28 @@ function LegalArticle({ doc }: { doc: LegalDoc }) {
 }
 
 export function LegalPage({ kind }: { kind: "privacy" | "terms" }) {
-  return <LegalArticle doc={kind === "privacy" ? privacyDoc : termsDoc} />;
+  const base = kind === "privacy" ? privacyDoc : termsDoc;
+  const [doc, setDoc] = useState<LegalDoc>(base);
+
+  useEffect(() => {
+    let alive = true;
+    const source = kind === "privacy" ? privacyDoc : termsDoc;
+    void api<{ entity: LegalEntity }>("/api/legal-entity")
+      .then((data) => {
+        if (!alive) return;
+        setDoc(
+          applyEntityToDoc(source, data.entity || { legalName: "", mailingAddress: "", privacyEmail: "", supportEmail: "" }),
+        );
+      })
+      .catch(() => {
+        if (alive) setDoc(source);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [kind]);
+
+  return <LegalArticle doc={doc} />;
 }
 
 export function NotFoundPage() {
