@@ -5,6 +5,7 @@ import { publicMailSettings } from "./mail.mjs";
 import { iceConfigSummary, resolveIceServers } from "./webrtc-signaling.mjs";
 import { db } from "./db.mjs";
 import { repoRootFromHere, scanLegalPlaceholders } from "./legal-placeholders.mjs";
+import { defaultAdminPasswordStatus } from "./default-admin-password.mjs";
 
 function cookieSecureMode(env = process.env) {
   if (String(env.COOKIE_SECURE || "") === "1") return "forced_on";
@@ -23,6 +24,7 @@ function check(id, label, ok, detail, severity = "required") {
  * @param {ReturnType<typeof iceConfigSummary> | null} [options.ice]
  * @param {boolean} [options.adminMfaEnrolled]
  * @param {ReturnType<typeof scanLegalPlaceholders> | null} [options.legal]
+ * @param {ReturnType<typeof defaultAdminPasswordStatus> | null} [options.defaultAdmin]
  * @param {string} [options.rootDir]
  */
 export function computeLaunchReadiness(options = {}) {
@@ -32,6 +34,7 @@ export function computeLaunchReadiness(options = {}) {
   const legal =
     options.legal ||
     scanLegalPlaceholders(options.rootDir || repoRootFromHere());
+  const defaultAdmin = options.defaultAdmin || defaultAdminPasswordStatus();
   const nodeEnv = String(env.NODE_ENV || "development");
   const production = nodeEnv === "production";
   const mfaRequired = mfaRequiredForRole("admin", env);
@@ -88,6 +91,13 @@ export function computeLaunchReadiness(options = {}) {
         ? "An admin account has TOTP enabled."
         : "No admin has enrolled TOTP. Enrollment stays optional while MFA is disabled.",
       "info",
+    ),
+    check(
+      "default_admin_password",
+      "Default admin password rotated",
+      defaultAdmin.ok,
+      defaultAdmin.detail,
+      "required",
     ),
     check(
       "smtp",

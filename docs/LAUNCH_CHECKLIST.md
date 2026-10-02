@@ -9,6 +9,7 @@ Pre-public launch gate for JobPilot. Ops signals are also visible in **Admin →
 - [ ] `COOKIE_SECURE=1` (or verified `X-Forwarded-Proto: https`)
 - [ ] SMTP host + from address configured (Admin → Email) so resets/notices deliver
 - [ ] Legal copy placeholders filled in `src/content/terms.ts` and `src/content/privacy.ts` (company name, mailing address, privacy/support emails; remove draft/arbitration placeholders). Admin → Launch fails `opsReady` until this is clean.
+- [ ] Published default admin password rotated (`admin@jobpilot.app` must not accept `JobPilot-Admin-2026`; `admin-bootstrap.txt` must not store a plaintext password). Admin → Launch fails `opsReady` until this is clean.
 - [ ] Outside counsel review of Terms, Privacy, billing disclosure, and Auto-Apply authorization text
 - [ ] Confirm U.S.-first / 18+ positioning still accurate in legal copy
 - [ ] Confirm no advertising/cross-site cookies without updating Privacy + Cookie Settings
