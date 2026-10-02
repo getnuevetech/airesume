@@ -532,13 +532,37 @@ function UserActivityPanel({ userId, canComplete }: { userId: string; canComplet
   );
 }
 
-type MailSettings = { host: string; port: number; secure: boolean; user: string; fromEmail: string; fromName: string; hasPassword: boolean; configured: boolean };
+type MailSettings = {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  fromEmail: string;
+  fromName: string;
+  hasPassword: boolean;
+  configured: boolean;
+  deliveryProven?: boolean;
+  lastTestAt?: number | null;
+  lastTestTo?: string | null;
+};
 
 function MailEditor() {
   const [messages, setMessages] = useState<Mail[]>([]);
   const [entries, setEntries] = useState<Audit[]>([]);
   const [summary, setSummary] = useState<AuditSummary | null>(null);
-  const [settings, setSettings] = useState<MailSettings>({ host: "", port: 587, secure: false, user: "", fromEmail: "", fromName: "JobPilot", hasPassword: false, configured: false });
+  const [settings, setSettings] = useState<MailSettings>({
+    host: "",
+    port: 587,
+    secure: false,
+    user: "",
+    fromEmail: "",
+    fromName: "JobPilot",
+    hasPassword: false,
+    configured: false,
+    deliveryProven: false,
+    lastTestAt: null,
+    lastTestTo: null,
+  });
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -559,7 +583,7 @@ function MailEditor() {
   return (
     <div>
       <h1>Outbound email</h1>
-      <p className="lede">Password resets and applications sent to an employer email use these SMTP details. Until a host and from address are saved, messages stay in the list below.</p>
+      <p className="lede">Password resets and applications sent to an employer email use these SMTP details. Admin → Launch stays blocked until a test email delivers successfully.</p>
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="role">{message}</p> : null}
       <form
@@ -588,6 +612,13 @@ function MailEditor() {
           <label className="field"><span>From email</span><input type="email" value={settings.fromEmail} onChange={(event) => setSettings({ ...settings, fromEmail: event.target.value })} /></label>
         </div>
         <label className="check-row"><input type="checkbox" checked={settings.secure} onChange={(event) => setSettings({ ...settings, secure: event.target.checked })} /> Use implicit TLS, usually port 465</label>
+        <p className="role">
+          {settings.deliveryProven && settings.lastTestAt
+            ? `Last successful test: ${new Date(settings.lastTestAt).toLocaleString()}${settings.lastTestTo ? ` → ${settings.lastTestTo}` : ""}.`
+            : settings.configured
+              ? "Host and from address are saved. Send a test to prove delivery for Admin → Launch."
+              : "Save a host and from address, then send a test."}
+        </p>
         <div className="admin-actions">
           <button className="btn btn-primary btn-sm" type="submit">Save email settings</button>
           <button
@@ -595,8 +626,11 @@ function MailEditor() {
             type="button"
             onClick={() => {
               setError("");
-              void api("/api/admin/email/test", { method: "POST", body: "{}" })
-                .then(() => setMessage("Test email sent."))
+              void api<{ ok: boolean; settings?: MailSettings }>("/api/admin/email/test", { method: "POST", body: "{}" })
+                .then((data) => {
+                  if (data.settings) setSettings(data.settings);
+                  setMessage("Test email sent. Admin → Launch can treat SMTP as proven.");
+                })
                 .catch((err: Error) => setError(err.message));
             }}
           >

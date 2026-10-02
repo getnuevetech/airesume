@@ -47,7 +47,7 @@ const cleanAiHealth = {
 test("launch readiness fails closed without SMTP and production env; MFA stays informational", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "development", COOKIE_SECURE: "0", REQUIRE_ADMIN_MFA: "0" },
-    mail: { configured: false, host: "", fromEmail: "" },
+    mail: { configured: false, deliveryProven: false, host: "", fromEmail: "" },
     ice: { productionReady: false, warning: "TURN missing" },
     adminMfaEnrolled: false,
     legal: cleanLegal,
@@ -66,10 +66,28 @@ test("launch readiness fails closed without SMTP and production env; MFA stays i
   assert.ok(report.checks.some((item) => item.id === "billing_live" && item.ok));
 });
 
+test("SMTP host alone without a successful test blocks opsReady", () => {
+  const report = computeLaunchReadiness({
+    env: { NODE_ENV: "production", COOKIE_SECURE: "1" },
+    mail: { configured: true, deliveryProven: false, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    ice: { productionReady: true, warning: "" },
+    adminMfaEnrolled: true,
+    legal: cleanLegal,
+    defaultAdmin: cleanDefaultAdmin,
+    betaSafety: cleanBetaSafety,
+    aiHealth: cleanAiHealth,
+  });
+  assert.equal(report.opsReady, false);
+  const smtp = report.checks.find((item) => item.id === "smtp");
+  assert.equal(smtp.ok, false);
+  assert.match(smtp.detail, /test/i);
+  assert.match(smtp.label, /test email/i);
+});
+
 test("launch readiness opsReady when production signals are green (counsel still open)", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "production", COOKIE_SECURE: "1", REQUIRE_ADMIN_MFA: "1" },
-    mail: { configured: true, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    mail: { configured: true, deliveryProven: true, host: "smtp.example.com", fromEmail: "hello@example.com", lastTestAt: 1_700_000_000_000 },
     ice: { productionReady: true, warning: "" },
     adminMfaEnrolled: true,
     legal: cleanLegal,
@@ -89,7 +107,7 @@ test("launch readiness opsReady when production signals are green (counsel still
 test("production without COOKIE_SECURE=1 blocks opsReady", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "production" },
-    mail: { configured: true, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    mail: { configured: true, deliveryProven: true, host: "smtp.example.com", fromEmail: "hello@example.com", lastTestAt: 1_700_000_000_000 },
     ice: { productionReady: true, warning: "" },
     adminMfaEnrolled: true,
     legal: cleanLegal,
@@ -108,7 +126,7 @@ test("production without COOKIE_SECURE=1 blocks opsReady", () => {
 test("unfinished legal placeholders block opsReady even when SMTP and production are green", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "production", COOKIE_SECURE: "1" },
-    mail: { configured: true, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    mail: { configured: true, deliveryProven: true, host: "smtp.example.com", fromEmail: "hello@example.com", lastTestAt: 1_700_000_000_000 },
     ice: { productionReady: true, warning: "" },
     adminMfaEnrolled: true,
     legal: {
@@ -129,7 +147,7 @@ test("unfinished legal placeholders block opsReady even when SMTP and production
 test("published default admin password blocks opsReady", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "production", COOKIE_SECURE: "1" },
-    mail: { configured: true, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    mail: { configured: true, deliveryProven: true, host: "smtp.example.com", fromEmail: "hello@example.com", lastTestAt: 1_700_000_000_000 },
     ice: { productionReady: true, warning: "" },
     adminMfaEnrolled: true,
     legal: cleanLegal,
@@ -147,7 +165,7 @@ test("published default admin password blocks opsReady", () => {
 test("silent Auto-Apply on blocks opsReady", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "production", COOKIE_SECURE: "1" },
-    mail: { configured: true, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    mail: { configured: true, deliveryProven: true, host: "smtp.example.com", fromEmail: "hello@example.com", lastTestAt: 1_700_000_000_000 },
     ice: { productionReady: true, warning: "" },
     adminMfaEnrolled: true,
     legal: cleanLegal,
@@ -165,7 +183,7 @@ test("silent Auto-Apply on blocks opsReady", () => {
 test("BILLING_LIVE unlocks block opsReady", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "production", COOKIE_SECURE: "1", BILLING_LIVE: "1" },
-    mail: { configured: true, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    mail: { configured: true, deliveryProven: true, host: "smtp.example.com", fromEmail: "hello@example.com", lastTestAt: 1_700_000_000_000 },
     ice: { productionReady: true, warning: "" },
     adminMfaEnrolled: true,
     legal: cleanLegal,
@@ -183,7 +201,7 @@ test("BILLING_LIVE unlocks block opsReady", () => {
 test("missing live AI API keys block opsReady", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "production", COOKIE_SECURE: "1" },
-    mail: { configured: true, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    mail: { configured: true, deliveryProven: true, host: "smtp.example.com", fromEmail: "hello@example.com", lastTestAt: 1_700_000_000_000 },
     ice: { productionReady: true, warning: "" },
     adminMfaEnrolled: true,
     legal: cleanLegal,
@@ -203,7 +221,7 @@ test("missing live AI API keys block opsReady", () => {
 test("rules-only career extraction is recommended, not ops blocking", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "production", COOKIE_SECURE: "1" },
-    mail: { configured: true, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    mail: { configured: true, deliveryProven: true, host: "smtp.example.com", fromEmail: "hello@example.com", lastTestAt: 1_700_000_000_000 },
     ice: { productionReady: true, warning: "" },
     adminMfaEnrolled: true,
     legal: cleanLegal,

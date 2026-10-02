@@ -17,7 +17,7 @@ import {
 import { cleanResumeText, extractCareerProfile, loadResumeText } from "./extract.mjs";
 import { isResumeImageFilename } from "./resume-ocr.mjs";
 import { registerPlatform, syncProfileVersion } from "./platform.mjs";
-import { deliverMail, publicMailSettings, saveMailSettings } from "./mail.mjs";
+import { deliverMail, publicMailSettings, recordSmtpTestSuccess, saveMailSettings } from "./mail.mjs";
 import { auditCostSummary, moneyFromMicros } from "./ai-cost.mjs";
 import {
   activateFromRow,
@@ -1307,7 +1307,8 @@ app.post("/api/admin/email/test", async (req, res) => {
     res.status(400).json({ error: delivery.error || "The test email was not sent." });
     return;
   }
-  res.json({ ok: true });
+  const proven = recordSmtpTestSuccess({ to });
+  res.json({ ok: true, settings: publicMailSettings(), delivery: proven });
 });
 
 app.get("/api/admin/outbox", (req, res) => {
