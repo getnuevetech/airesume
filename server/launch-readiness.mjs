@@ -7,6 +7,7 @@ import { db } from "./db.mjs";
 import { repoRootFromHere, scanLegalPlaceholders } from "./legal-placeholders.mjs";
 import { defaultAdminPasswordStatus } from "./default-admin-password.mjs";
 import { betaSafetyStatus } from "./beta-safety.mjs";
+import { aiPipelineHealth } from "./ai-pipeline-health.mjs";
 
 function cookieSecureMode(env = process.env) {
   if (String(env.COOKIE_SECURE || "") === "1") return "forced_on";
@@ -27,6 +28,7 @@ function check(id, label, ok, detail, severity = "required") {
  * @param {ReturnType<typeof scanLegalPlaceholders> | null} [options.legal]
  * @param {ReturnType<typeof defaultAdminPasswordStatus> | null} [options.defaultAdmin]
  * @param {ReturnType<typeof betaSafetyStatus> | null} [options.betaSafety]
+ * @param {ReturnType<typeof aiPipelineHealth> | null} [options.aiHealth]
  * @param {string} [options.rootDir]
  */
 export function computeLaunchReadiness(options = {}) {
@@ -38,6 +40,7 @@ export function computeLaunchReadiness(options = {}) {
     scanLegalPlaceholders(options.rootDir || repoRootFromHere());
   const defaultAdmin = options.defaultAdmin || defaultAdminPasswordStatus();
   const betaSafety = options.betaSafety || betaSafetyStatus({ env });
+  const aiHealth = options.aiHealth || aiPipelineHealth();
   const nodeEnv = String(env.NODE_ENV || "development");
   const production = nodeEnv === "production";
   const mfaRequired = mfaRequiredForRole("admin", env);
@@ -117,6 +120,20 @@ export function computeLaunchReadiness(options = {}) {
       betaSafety.billing.ok,
       betaSafety.billing.detail,
       "required",
+    ),
+    check(
+      "ai_provider_keys",
+      "AI provider API keys",
+      aiHealth.keys.ok,
+      aiHealth.keys.detail,
+      "required",
+    ),
+    check(
+      "ai_career_extraction",
+      "Career extraction uses a live model",
+      aiHealth.modelQuality.ok,
+      aiHealth.modelQuality.detail,
+      "recommended",
     ),
     check(
       "smtp",

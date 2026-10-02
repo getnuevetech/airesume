@@ -12,6 +12,7 @@ Pre-public launch gate for JobPilot. Ops signals are also visible in **Admin →
 - [ ] Published default admin password rotated (`admin@jobpilot.app` must not accept `JobPilot-Admin-2026`; `admin-bootstrap.txt` must not store a plaintext password). Admin → Launch fails `opsReady` until this is clean.
 - [ ] Silent Auto-Apply kill switch stays off (Admin → AI). Admin → Launch fails `opsReady` if it is on.
 - [ ] Live card billing stays off (`BILLING_LIVE` unset; no enabled live Stripe/PayPal gateway). Use the manual ledger. Admin → Launch fails `opsReady` if live billing is unlocked.
+- [ ] Live AI providers have API keys (Admin → AI). Admin → Launch fails `opsReady` if an enabled OpenAI/Anthropic/Google provider has a blank key.
 - [ ] Outside counsel review of Terms, Privacy, billing disclosure, and Auto-Apply authorization text
 - [ ] Confirm U.S.-first / 18+ positioning still accurate in legal copy
 - [ ] Confirm no advertising/cross-site cookies without updating Privacy + Cookie Settings
@@ -19,6 +20,7 @@ Pre-public launch gate for JobPilot. Ops signals are also visible in **Admin →
 ## Strongly recommended
 
 - [ ] TURN credentials set (`deploy/turn.env.example`) so interview rooms report `productionReady`
+- [ ] Career extraction assigned to a live AI provider (not Built-in rules only). Admin → Launch shows this as recommended.
 - [ ] AI providers: training-on-customer-data disabled where the vendor allows (`docs/AI_GOVERNANCE_CHECKLIST.md`)
 - [ ] Retention / deletion drill once on staging (`docs/RETENTION_AND_DELETION.md`)
 - [ ] Backup strategy for `server/data/` (SQLite + uploads). Take a copy with `deploy/backup.sh /path/outside/the/repo`, then restore that copy once onto a non-production directory with `deploy/restore.sh <backup> <target> --yes` and confirm `/api/health` after a real restore drill.

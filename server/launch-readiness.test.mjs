@@ -37,6 +37,13 @@ const cleanBetaSafety = {
   },
 };
 
+const cleanAiHealth = {
+  keys: { ok: true, detail: "Enabled OpenAI / Anthropic / Google providers have API keys set." },
+  modelQuality: { ok: true, detail: "Career extraction is assigned to a live AI provider." },
+  rulesOnly: [],
+  missingKeys: [],
+};
+
 test("launch readiness fails closed without SMTP and production env; MFA stays informational", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "development", COOKIE_SECURE: "0", REQUIRE_ADMIN_MFA: "0" },
@@ -46,6 +53,7 @@ test("launch readiness fails closed without SMTP and production env; MFA stays i
     legal: cleanLegal,
     defaultAdmin: cleanDefaultAdmin,
     betaSafety: cleanBetaSafety,
+    aiHealth: cleanAiHealth,
   });
   assert.equal(report.opsReady, false);
   assert.equal(report.launchReady, false);
@@ -67,6 +75,7 @@ test("launch readiness opsReady when production signals are green (counsel still
     legal: cleanLegal,
     defaultAdmin: cleanDefaultAdmin,
     betaSafety: cleanBetaSafety,
+    aiHealth: cleanAiHealth,
   });
   assert.equal(report.opsReady, true);
   assert.equal(report.launchReady, false);
@@ -86,6 +95,7 @@ test("production without COOKIE_SECURE=1 blocks opsReady", () => {
     legal: cleanLegal,
     defaultAdmin: cleanDefaultAdmin,
     betaSafety: cleanBetaSafety,
+    aiHealth: cleanAiHealth,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "cookie_secure" && !item.ok));
@@ -109,6 +119,7 @@ test("unfinished legal placeholders block opsReady even when SMTP and production
     },
     defaultAdmin: cleanDefaultAdmin,
     betaSafety: cleanBetaSafety,
+    aiHealth: cleanAiHealth,
   });
   assert.equal(report.opsReady, false);
   assert.equal(report.launchReady, false);
@@ -127,6 +138,7 @@ test("published default admin password blocks opsReady", () => {
       detail: "admin@jobpilot.app still accepts the published default password.",
     },
     betaSafety: cleanBetaSafety,
+    aiHealth: cleanAiHealth,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "default_admin_password" && !item.ok));
@@ -144,6 +156,7 @@ test("silent Auto-Apply on blocks opsReady", () => {
       silent: { ok: false, detail: "Silent Auto-Apply is on." },
       billing: cleanBetaSafety.billing,
     },
+    aiHealth: cleanAiHealth,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "silent_auto_apply" && !item.ok));
@@ -161,9 +174,88 @@ test("BILLING_LIVE unlocks block opsReady", () => {
       silent: cleanBetaSafety.silent,
       billing: { ok: false, detail: "BILLING_LIVE=1 unlocks live card gateways." },
     },
+    aiHealth: cleanAiHealth,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "billing_live" && !item.ok));
+});
+
+test("missing live AI API keys block opsReady", () => {
+  const report = computeLaunchReadiness({
+    env: { NODE_ENV: "production", COOKIE_SECURE: "1" },
+    mail: { configured: true, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    ice: { productionReady: true, warning: "" },
+    adminMfaEnrolled: true,
+    legal: cleanLegal,
+    defaultAdmin: cleanDefaultAdmin,
+    betaSafety: cleanBetaSafety,
+    aiHealth: {
+      keys: { ok: false, detail: "Live AI providers are missing API keys: career_extraction (OpenAI)." },
+      modelQuality: cleanAiHealth.modelQuality,
+      rulesOnly: [],
+      missingKeys: ["career_extraction (OpenAI)"],
+    },
+  });
+  assert.equal(report.opsReady, false);
+  assert.ok(report.checks.some((item) => item.id === "ai_provider_keys" && !item.ok));
+});
+
+test("rules-only career extraction is recommended, not ops blocking", () => {
+  const report = computeLaunchReadiness({
+    env: { NODE_ENV: "production", COOKIE_SECURE: "1" },
+    mail: { configured: true, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    ice: { productionReady: true, warning: "" },
+    adminMfaEnrolled: true,
+    legal: cleanLegal,
+    defaultAdmin: cleanDefaultAdmin,
+    betaSafety: cleanBetaSafety,
+    aiHealth: {
+      keys: cleanAiHealth.keys,
+      modelQuality: { ok: false, detail: "Career extraction still uses Built-in rules only." },
+      rulesOnly: ["career_extraction"],
+      missingKeys: [],
+    },
+  });
+  assert.equal(report.opsReady, true);
+  assert.ok(report.checks.some((item) => item.id === "ai_career_extraction" && !item.ok && item.severity === "recommended"));
+});
+
+test("aiPipelineHealth flags blank live keys and rules-only extraction", async () => {
+  const { aiPipelineHealth } = await import("./ai-pipeline-health.mjs");
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE ai_providers (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    kind TEXT,
+    api_key TEXT,
+    enabled INTEGER
+  )`);
+  database
+    .prepare("INSERT INTO ai_providers (id, name, kind, api_key, enabled) VALUES ('p1', 'OpenAI', 'openai', '', 1)")
+    .run();
+
+  const bad = aiPipelineHealth({
+    db: database,
+    assignmentFor: () => ({
+      assignment_enabled: 1,
+      enabled: 1,
+      kind: "openai",
+      name: "OpenAI",
+      api_key: "",
+    }),
+  });
+  assert.equal(bad.keys.ok, false);
+  assert.equal(bad.modelQuality.ok, true);
+
+  const rules = aiPipelineHealth({
+    db: database,
+    assignmentFor: (key) =>
+      key === "career_extraction"
+        ? { assignment_enabled: 1, enabled: 1, kind: "deterministic", name: "rules", api_key: "" }
+        : { assignment_enabled: 1, enabled: 1, kind: "openai", name: "OpenAI", api_key: "sk-test" },
+  });
+  assert.equal(rules.modelQuality.ok, false);
+  assert.ok(rules.rulesOnly.includes("career_extraction"));
 });
 
 test("scanLegalPlaceholders finds company and counsel markers in the repo copy", () => {
