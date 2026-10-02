@@ -6,6 +6,7 @@ import { iceConfigSummary, resolveIceServers } from "./webrtc-signaling.mjs";
 import { db } from "./db.mjs";
 import { repoRootFromHere, scanLegalPlaceholders } from "./legal-placeholders.mjs";
 import { defaultAdminPasswordStatus } from "./default-admin-password.mjs";
+import { betaSafetyStatus } from "./beta-safety.mjs";
 
 function cookieSecureMode(env = process.env) {
   if (String(env.COOKIE_SECURE || "") === "1") return "forced_on";
@@ -25,6 +26,7 @@ function check(id, label, ok, detail, severity = "required") {
  * @param {boolean} [options.adminMfaEnrolled]
  * @param {ReturnType<typeof scanLegalPlaceholders> | null} [options.legal]
  * @param {ReturnType<typeof defaultAdminPasswordStatus> | null} [options.defaultAdmin]
+ * @param {ReturnType<typeof betaSafetyStatus> | null} [options.betaSafety]
  * @param {string} [options.rootDir]
  */
 export function computeLaunchReadiness(options = {}) {
@@ -35,6 +37,7 @@ export function computeLaunchReadiness(options = {}) {
     options.legal ||
     scanLegalPlaceholders(options.rootDir || repoRootFromHere());
   const defaultAdmin = options.defaultAdmin || defaultAdminPasswordStatus();
+  const betaSafety = options.betaSafety || betaSafetyStatus({ env });
   const nodeEnv = String(env.NODE_ENV || "development");
   const production = nodeEnv === "production";
   const mfaRequired = mfaRequiredForRole("admin", env);
@@ -97,6 +100,20 @@ export function computeLaunchReadiness(options = {}) {
       "Default admin password rotated",
       defaultAdmin.ok,
       defaultAdmin.detail,
+      "required",
+    ),
+    check(
+      "silent_auto_apply",
+      "Silent Auto-Apply stays off",
+      betaSafety.silent.ok,
+      betaSafety.silent.detail,
+      "required",
+    ),
+    check(
+      "billing_live",
+      "Live card billing stays off",
+      betaSafety.billing.ok,
+      betaSafety.billing.detail,
       "required",
     ),
     check(

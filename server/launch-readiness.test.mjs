@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { hashPassword, verifyPassword } from "./db.mjs";
 import { computeLaunchReadiness } from "./launch-readiness.mjs";
 import { scanLegalPlaceholders } from "./legal-placeholders.mjs";
+import { betaSafetyStatus } from "./beta-safety.mjs";
 import {
   PUBLISHED_DEFAULT_ADMIN_EMAIL,
   PUBLISHED_DEFAULT_ADMIN_PASSWORD,
@@ -25,6 +26,17 @@ const cleanDefaultAdmin = {
   detail: "Published default admin password is not active, and the bootstrap file does not store a plaintext password.",
 };
 
+const cleanBetaSafety = {
+  silent: {
+    ok: true,
+    detail: "Silent Auto-Apply kill switch is off. Autopilot queues Ready or Review required only.",
+  },
+  billing: {
+    ok: true,
+    detail: "Live card billing stays off. Manual ledger / test mode only.",
+  },
+};
+
 test("launch readiness fails closed without SMTP and production env; MFA stays informational", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "development", COOKIE_SECURE: "0", REQUIRE_ADMIN_MFA: "0" },
@@ -33,6 +45,7 @@ test("launch readiness fails closed without SMTP and production env; MFA stays i
     adminMfaEnrolled: false,
     legal: cleanLegal,
     defaultAdmin: cleanDefaultAdmin,
+    betaSafety: cleanBetaSafety,
   });
   assert.equal(report.opsReady, false);
   assert.equal(report.launchReady, false);
@@ -41,6 +54,8 @@ test("launch readiness fails closed without SMTP and production env; MFA stays i
   assert.ok(report.checks.some((item) => item.id === "counsel" && !item.ok));
   assert.ok(report.checks.some((item) => item.id === "legal_placeholders" && item.ok));
   assert.ok(report.checks.some((item) => item.id === "default_admin_password" && item.ok));
+  assert.ok(report.checks.some((item) => item.id === "silent_auto_apply" && item.ok));
+  assert.ok(report.checks.some((item) => item.id === "billing_live" && item.ok));
 });
 
 test("launch readiness opsReady when production signals are green (counsel still open)", () => {
@@ -51,6 +66,7 @@ test("launch readiness opsReady when production signals are green (counsel still
     adminMfaEnrolled: true,
     legal: cleanLegal,
     defaultAdmin: cleanDefaultAdmin,
+    betaSafety: cleanBetaSafety,
   });
   assert.equal(report.opsReady, true);
   assert.equal(report.launchReady, false);
@@ -73,6 +89,7 @@ test("unfinished legal placeholders block opsReady even when SMTP and production
       detail: "Unfinished legal copy in Terms: COMPANY_LEGAL_NAME.",
     },
     defaultAdmin: cleanDefaultAdmin,
+    betaSafety: cleanBetaSafety,
   });
   assert.equal(report.opsReady, false);
   assert.equal(report.launchReady, false);
@@ -90,9 +107,44 @@ test("published default admin password blocks opsReady", () => {
       ok: false,
       detail: "admin@jobpilot.app still accepts the published default password.",
     },
+    betaSafety: cleanBetaSafety,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "default_admin_password" && !item.ok));
+});
+
+test("silent Auto-Apply on blocks opsReady", () => {
+  const report = computeLaunchReadiness({
+    env: { NODE_ENV: "production", COOKIE_SECURE: "1" },
+    mail: { configured: true, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    ice: { productionReady: true, warning: "" },
+    adminMfaEnrolled: true,
+    legal: cleanLegal,
+    defaultAdmin: cleanDefaultAdmin,
+    betaSafety: {
+      silent: { ok: false, detail: "Silent Auto-Apply is on." },
+      billing: cleanBetaSafety.billing,
+    },
+  });
+  assert.equal(report.opsReady, false);
+  assert.ok(report.checks.some((item) => item.id === "silent_auto_apply" && !item.ok));
+});
+
+test("BILLING_LIVE unlocks block opsReady", () => {
+  const report = computeLaunchReadiness({
+    env: { NODE_ENV: "production", COOKIE_SECURE: "1", BILLING_LIVE: "1" },
+    mail: { configured: true, host: "smtp.example.com", fromEmail: "hello@example.com" },
+    ice: { productionReady: true, warning: "" },
+    adminMfaEnrolled: true,
+    legal: cleanLegal,
+    defaultAdmin: cleanDefaultAdmin,
+    betaSafety: {
+      silent: cleanBetaSafety.silent,
+      billing: { ok: false, detail: "BILLING_LIVE=1 unlocks live card gateways." },
+    },
+  });
+  assert.equal(report.opsReady, false);
+  assert.ok(report.checks.some((item) => item.id === "billing_live" && !item.ok));
 });
 
 test("scanLegalPlaceholders finds company and counsel markers in the repo copy", () => {
@@ -166,4 +218,43 @@ test("defaultAdminPasswordStatus passes after rotation and bootstrap wipe", () =
     verifyPassword,
   });
   assert.equal(result.ok, true);
+});
+
+test("betaSafetyStatus fails when silent apply or live billing is on", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE payment_gateways (
+    id TEXT PRIMARY KEY,
+    kind TEXT,
+    mode TEXT,
+    enabled INTEGER
+  )`);
+  database
+    .prepare("INSERT INTO payment_gateways (id, kind, mode, enabled) VALUES ('gw1', 'stripe', 'live', 1)")
+    .run();
+
+  const on = betaSafetyStatus({
+    env: { BILLING_LIVE: "1" },
+    isSilentAutoApplyEnabled: () => true,
+    db: database,
+  });
+  assert.equal(on.silent.ok, false);
+  assert.equal(on.billing.ok, false);
+
+  const off = betaSafetyStatus({
+    env: {},
+    isSilentAutoApplyEnabled: () => false,
+    db: database,
+  });
+  assert.equal(off.silent.ok, true);
+  assert.equal(off.billing.ok, false);
+  assert.match(off.billing.detail, /live card gateway/i);
+
+  database.prepare("UPDATE payment_gateways SET enabled = 0 WHERE id = 'gw1'").run();
+  const clean = betaSafetyStatus({
+    env: {},
+    isSilentAutoApplyEnabled: () => false,
+    db: database,
+  });
+  assert.equal(clean.silent.ok, true);
+  assert.equal(clean.billing.ok, true);
 });
