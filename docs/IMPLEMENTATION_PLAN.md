@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–AO are implemented (AO is schema 33). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice Y opens the rest of this week in the tracker. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AB reads required skills from the role text when a saved list is only a pasted title or company line. Slice AC lets a candidate confirm one of those missing skills into the Fact Ledger. Slice AD writes that skill into the resume already prepared for the same job. Slice AE writes it into every resume already prepared for that candidate. Slice AF lists those skills on the profile without Fact Ledger ids. Slice AG lets a candidate confirm a high-demand insight gap into that same ledger. Slice AH draws account stats as charts and colors category scores so the account is easier to scan. Slice AI shows each tracked role on a colored stage rail. Slice AJ saves a one-tap check-in on each application. Slice AK saves that check-in on the role itself, with one sentence the candidate heard. Slice AL saves a status-menu change on that same card and closes the reminder that no longer matches. Slice AM saves the moment a prepared role is submitted. Slice AN counts only this week's roles in the tracker charts. Slice AO keeps an account activity log the candidate and an admin can both read, and an operations log an admin uses to record a checkout whose payment return never finished. Slice AP puts every on-disk Node test into `npm test` so CI cannot skip them. Admin MFA stays disabled for now and is not a beta blocker.
+Status: slices Q–AQ are implemented (AO is schema 33). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice Y opens the rest of this week in the tracker. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AB reads required skills from the role text when a saved list is only a pasted title or company line. Slice AC lets a candidate confirm one of those missing skills into the Fact Ledger. Slice AD writes that skill into the resume already prepared for the same job. Slice AE writes it into every resume already prepared for that candidate. Slice AF lists those skills on the profile without Fact Ledger ids. Slice AG lets a candidate confirm a high-demand insight gap into that same ledger. Slice AH draws account stats as charts and colors category scores so the account is easier to scan. Slice AI shows each tracked role on a colored stage rail. Slice AJ saves a one-tap check-in on each application. Slice AK saves that check-in on the role itself, with one sentence the candidate heard. Slice AL saves a status-menu change on that same card and closes the reminder that no longer matches. Slice AM saves the moment a prepared role is submitted. Slice AN counts only this week's roles in the tracker charts. Slice AO keeps an account activity log the candidate and an admin can both read, and an operations log an admin uses to record a checkout whose payment return never finished. Slice AP puts every on-disk Node test into `npm test` so CI cannot skip them. Slice AQ fails Admin → Launch when Terms or Privacy still contain unfinished company or counsel placeholders. Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
@@ -8,7 +8,7 @@ Source of truth for the next build. Slices A–P and the post-plan add-ons (prom
 
 ## Verdict
 
-The product surface is wide enough for a private beta. It is not ready to call publicly launched. Slices AN and AO are on `main`. The next work is Slice AP (CI test completeness), then operator launch checklist items — not new product surface.
+The product surface is wide enough for a private beta. It is not ready to call publicly launched. Slices AN–AQ are on `main` once this lands. The next work is operator launch checklist items (HTTPS, SMTP, entity fields in Terms/Privacy, counsel) — not new product surface.
 
 ## Out of scope until this plan is done
 
@@ -57,9 +57,10 @@ Q  CI on every pull request
                                             → AN  Count this week's roles in the tracker charts
                                               → AO  Keep two activity histories and finish a stuck checkout on the ledger
                                                 → AP  Run every on-disk Node test in CI
+                                                  → AQ  Fail launch readiness on unfinished legal placeholders
 ```
 
-Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing. AB uses the role text when the saved requirements are only paste headers. AC saves a confirmed gap onto the Fact Ledger and the active resume. AD updates the resume already prepared for that job so the confirmed skill is on it. AE updates every prepared resume for that candidate. AF shows those skills on the profile by name. AG confirms one insight gap into the Fact Ledger. AH replaces plain stat numbers with rings and bars, and shows category scores in color. AI shows where each tracked role sits from prepare through offer. AJ asks what happened on a due application and keeps that answer on the card. AK asks the same question on the role and keeps one sentence the candidate heard. AL saves a move from the status menu on that card and closes the reminder for the previous stage. Y lets the tracker show every role that counted this week. AM saves the moment a prepared role is submitted so the card history starts there. AN makes the tracker glance and stage chart follow that same week. AO keeps the candidate's activity where they and an admin can read it, and lets an admin record an unfinished payment return on the manual ledger. AP adds the five on-disk Node tests that were missing from `npm test` so CI runs the full suite.
+Q–U are the beta gate. V is admin access levels. W is the weekly overview. X lists the roles in those counts and opens the matching tracker card. Z shows the fact-checked resume prepared for a job. AA shows which resume skills fit a listing and which required skills are missing. AB uses the role text when the saved requirements are only paste headers. AC saves a confirmed gap onto the Fact Ledger and the active resume. AD updates the resume already prepared for that job so the confirmed skill is on it. AE updates every prepared resume for that candidate. AF shows those skills on the profile by name. AG confirms one insight gap into the Fact Ledger. AH replaces plain stat numbers with rings and bars, and shows category scores in color. AI shows where each tracked role sits from prepare through offer. AJ asks what happened on a due application and keeps that answer on the card. AK asks the same question on the role and keeps one sentence the candidate heard. AL saves a move from the status menu on that card and closes the reminder for the previous stage. Y lets the tracker show every role that counted this week. AM saves the moment a prepared role is submitted so the card history starts there. AN makes the tracker glance and stage chart follow that same week. AO keeps the candidate's activity where they and an admin can read it, and lets an admin record an unfinished payment return on the manual ledger. AP adds the five on-disk Node tests that were missing from `npm test` so CI runs the full suite. AQ fails Admin → Launch when Terms or Privacy still show unfinished company or counsel placeholders.
 
 ---
 
@@ -546,6 +547,25 @@ Bootstrap and the README tell operators to open `http://<ip>/` and “use http, 
 
 ---
 
+### Slice AQ — Fail launch readiness on unfinished legal placeholders
+
+**Goal:** Terms and Privacy still ship with `[COMPANY LEGAL NAME]`, privacy/support email blanks, and counsel-draft markers. Admin → Launch did not call that out, so an operator could miss it.
+
+**Change**
+
+- Scan `src/content/terms.ts` and `src/content/privacy.ts` for unfinished bracket fields and counsel-draft markers.
+- Add a required `legal_placeholders` check to Admin → Launch. It blocks `opsReady` until those fields are filled.
+- Keep the separate counsel process gate. Filling placeholders is not counsel sign-off.
+- Document the check on `docs/LAUNCH_CHECKLIST.md`.
+
+**Acceptance**
+
+- With the current draft copy, Admin → Launch shows Legal copy placeholders as Open and `opsReady` is false.
+- After those markers are removed from both files, the check passes.
+- Counsel review stays Open.
+
+---
+
 ## Ops the repo cannot finish
 
 These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them executable.
@@ -555,6 +575,7 @@ These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them
 | DNS, certbot, port 443, `COOKIE_SECURE=1` | Operator, using `deploy/HTTPS.md` |
 | Admin MFA | Disabled for now. Do not enroll or set `REQUIRE_ADMIN_MFA` until that decision changes |
 | SMTP host and from address, then a real reset email | Operator, Admin → Email |
+| Fill Terms/Privacy company name, address, and contact emails | Operator (Slice AQ detects unfinished markers) |
 | Counsel review of legal and Auto-Apply text | Outside counsel |
 | Confirm U.S.-first / 18+ copy and no ad cookies | Operator plus counsel |
 | TURN only if interview rooms are in the beta | Operator, `deploy/turn.env.example` |
@@ -563,4 +584,4 @@ These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them
 
 ## Done when
 
-Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, Y, Z, AA, AB, AC, AD, AE, AF, AG, AH, AI, AJ, AK, AL, AM, AN, AO, and AP are in the product and are not launch gates.
+Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, Y, Z, AA, AB, AC, AD, AE, AF, AG, AH, AI, AJ, AK, AL, AM, AN, AO, AP, and AQ are in the product and are not launch gates.

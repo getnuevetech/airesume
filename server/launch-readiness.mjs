@@ -4,6 +4,7 @@ import { mfaRequiredForRole, getMfaPolicy } from "./mfa-policy.mjs";
 import { publicMailSettings } from "./mail.mjs";
 import { iceConfigSummary, resolveIceServers } from "./webrtc-signaling.mjs";
 import { db } from "./db.mjs";
+import { repoRootFromHere, scanLegalPlaceholders } from "./legal-placeholders.mjs";
 
 function cookieSecureMode(env = process.env) {
   if (String(env.COOKIE_SECURE || "") === "1") return "forced_on";
@@ -21,11 +22,16 @@ function check(id, label, ok, detail, severity = "required") {
  * @param {{ host?: string, configured?: boolean, fromEmail?: string } | null} [options.mail]
  * @param {ReturnType<typeof iceConfigSummary> | null} [options.ice]
  * @param {boolean} [options.adminMfaEnrolled]
+ * @param {ReturnType<typeof scanLegalPlaceholders> | null} [options.legal]
+ * @param {string} [options.rootDir]
  */
 export function computeLaunchReadiness(options = {}) {
   const env = options.env || process.env;
   const mail = options.mail || publicMailSettings();
   const ice = options.ice || iceConfigSummary(resolveIceServers(env));
+  const legal =
+    options.legal ||
+    scanLegalPlaceholders(options.rootDir || repoRootFromHere());
   const nodeEnv = String(env.NODE_ENV || "development");
   const production = nodeEnv === "production";
   const mfaRequired = mfaRequiredForRole("admin", env);
@@ -109,6 +115,13 @@ export function computeLaunchReadiness(options = {}) {
       "info",
     ),
     check(
+      "legal_placeholders",
+      "Legal copy placeholders",
+      legal.ok,
+      legal.detail,
+      "required",
+    ),
+    check(
       "counsel",
       "Counsel review of legal copy",
       false,
@@ -125,7 +138,9 @@ export function computeLaunchReadiness(options = {}) {
   ];
 
   const required = checks.filter((item) => item.severity === "required");
-  const blocking = required.filter((item) => !item.ok && item.id !== "counsel" && item.id !== "https_docs");
+  const blocking = required.filter(
+    (item) => !item.ok && item.id !== "counsel" && item.id !== "https_docs",
+  );
   const counselOpen = required.some((item) => item.id === "counsel" && !item.ok);
 
   return {

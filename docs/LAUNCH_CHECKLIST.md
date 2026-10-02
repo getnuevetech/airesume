@@ -8,6 +8,7 @@ Pre-public launch gate for JobPilot. Ops signals are also visible in **Admin →
 - [ ] HTTPS terminated at nginx/LB (`deploy/HTTPS.md`); Node stays on localhost `:3000`
 - [ ] `COOKIE_SECURE=1` (or verified `X-Forwarded-Proto: https`)
 - [ ] SMTP host + from address configured (Admin → Email) so resets/notices deliver
+- [ ] Legal copy placeholders filled in `src/content/terms.ts` and `src/content/privacy.ts` (company name, mailing address, privacy/support emails; remove draft/arbitration placeholders). Admin → Launch fails `opsReady` until this is clean.
 - [ ] Outside counsel review of Terms, Privacy, billing disclosure, and Auto-Apply authorization text
 - [ ] Confirm U.S.-first / 18+ positioning still accurate in legal copy
 - [ ] Confirm no advertising/cross-site cookies without updating Privacy + Cookie Settings
