@@ -26,6 +26,7 @@ import { registerInterview } from "./routes-interview.mjs";
 import { registerVoice } from "./routes-voice.mjs";
 import { registerFollowUps } from "./routes-follow-ups.mjs";
 import { registerExtension } from "./routes-extension.mjs";
+import { registerActivity } from "./routes-activity.mjs";
 import { autoApplyAuthorizationPayload } from "./auto-apply-auth.mjs";
 
 migrate();
@@ -575,7 +576,7 @@ function creditFor(user) {
   return Math.round(price * remaining);
 }
 
-function applyPlan(user, plan, gateway, cycle, externalId, amount, credit) {
+function applyPlan(user, plan, gateway, cycle, externalId, amount, credit, note) {
   const from = user.plan_id || "free";
   const now = Date.now();
   const period = cycle === "yearly" ? 365 : 30;
@@ -588,7 +589,7 @@ function applyPlan(user, plan, gateway, cycle, externalId, amount, credit) {
   const direction = (plan.sort_order || 0) >= (planRow(from)?.sort_order || 0) ? "upgrade" : "downgrade";
   db.prepare(
     "INSERT INTO billing_events (id, user_id, type, from_plan, to_plan, amount_cents, gateway_id, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-  ).run(id("bill"), user.id, direction, from, plan.id, amount, gateway?.id || "", `${cycle} change`, now);
+  ).run(id("bill"), user.id, direction, from, plan.id, amount, gateway?.id || "", note || `${cycle} change`, now);
   if (credit > 0) {
     db.prepare(
       "INSERT INTO billing_events (id, user_id, type, from_plan, to_plan, amount_cents, gateway_id, note, created_at) VALUES (?, ?, 'proration', ?, ?, ?, ?, 'Unused time credited', ?)",
@@ -738,6 +739,11 @@ export function registerPlatform(app, { requireUser, requireAdmin, audit, upload
     originOf,
     publicProviderGateway,
     maskSecret,
+  });
+  registerActivity(app, {
+    requireUser,
+    requireAdmin,
+    applyPlan,
   });
   registerResume(app, {
     requireUser,

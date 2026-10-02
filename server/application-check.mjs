@@ -2,6 +2,7 @@
 
 import { db, id } from "./db.mjs";
 import { ensureFollowUpReminder, reminderTemplatesForStatus, updateFollowUpReminder } from "./follow-ups.mjs";
+import { recordAccount } from "./user-activity.mjs";
 
 export const CHECK_ANSWERS = {
   waiting: { label: "Still waiting", status: "", snoozeDays: 3 },
@@ -157,6 +158,7 @@ export function recordApplicationCheck({ userId, reminderId = "", applicationId 
   }
 
   const check = publicCheck(db.prepare("SELECT * FROM application_checks WHERE id = ?").get(checkId));
+  recordAccount(userId, "check_in", `${spec.label} on ${title}.`, { refType: "application", refId: application.id, now });
   return { check, status: toStatus, message: checkMessage(spec, title, savedNote, toStatus) };
 }
 
@@ -186,6 +188,7 @@ export function recordStatusChange({ userId, applicationId, status, now = Date.n
   settleReminders({ userId, applicationId: application.id, status: next, company, title, now });
 
   const check = publicCheck(db.prepare("SELECT * FROM application_checks WHERE id = ?").get(checkId));
+  recordAccount(userId, "status", `${title} is now ${next}.`, { refType: "application", refId: application.id, now });
   return { check, status: next, message: `${title} is now ${next}.` };
 }
 
@@ -232,5 +235,6 @@ export function recordSubmission({ userId, applicationId, delivery = "", now = D
   settleReminders({ userId, applicationId: application.id, status: "Applied", company, title, now });
 
   const check = publicCheck(db.prepare("SELECT * FROM application_checks WHERE id = ?").get(checkId));
+  recordAccount(userId, "submitted", `${title} is submitted.`, { refType: "application", refId: application.id, now });
   return { check, status: "Applied", delivery: nextDelivery, message: `${title} is submitted.` };
 }

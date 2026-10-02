@@ -6,6 +6,7 @@ import { confirmInsightGap, confirmListedSkill, confirmedSkillMessage } from "./
 import { storeConfirmedSkill } from "./confirm-skill-store.mjs";
 import { answerJobCoach } from "./job-coach.mjs";
 import { followUpMetrics } from "./follow-ups.mjs";
+import { recordAccount } from "./user-activity.mjs";
 
 export function registerCareer(app, ctx) {
   const {
@@ -124,6 +125,7 @@ export function registerCareer(app, ctx) {
           renderDocument,
         });
     if (!result.already) {
+      recordAccount(user.id, "skill", `Confirmed ${result.skill}.`);
       audit?.({
         userId: user.id,
         functionName: "confirm_skill",

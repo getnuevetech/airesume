@@ -8,6 +8,7 @@ import { db, id, uploadsDir } from "./db.mjs";
 import { completeJson } from "./ai-run.mjs";
 import { rebuildFactsFromProfile } from "./fact-ledger.mjs";
 import { RESUME_TEMPLATES, resolveTemplate, templateLimitOf } from "./schema.mjs";
+import { recordAccount } from "./user-activity.mjs";
 
 function clamp(value, fallback) {
   const number = Number(value);
@@ -104,6 +105,7 @@ export function registerProfile(app, ctx) {
     if (current) {
       db.prepare("UPDATE resume_versions SET document = ?, rendered = ? WHERE id = ?").run(JSON.stringify(document), renderDocument(document), current.id);
     }
+    recordAccount(user.id, "profile", "Saved the profile.");
     res.json({ ok: true, slug });
   });
 

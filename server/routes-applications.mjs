@@ -13,6 +13,7 @@ import { AUTO_APPLY_AUTH_VERSION, autoApplyAuthorizationPayload, validateAutoApp
 import { isSilentAutoApplyEnabled } from "./prompt-registry.mjs";
 import { confirmListedSkill, confirmedSkillMessage } from "./confirm-skill.mjs";
 import { storeConfirmedSkill } from "./confirm-skill-store.mjs";
+import { recordAccount } from "./user-activity.mjs";
 
 export function registerApplications(app, ctx) {
   const {
@@ -570,6 +571,7 @@ export function registerApplications(app, ctx) {
           renderDocument,
         });
     if (!result.already) {
+      recordAccount(user.id, "skill", `Confirmed ${result.skill}.`);
       audit?.({
         userId: user.id,
         functionName: "confirm_skill",

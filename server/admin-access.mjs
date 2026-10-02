@@ -44,6 +44,8 @@ export const ADMIN_PERMISSION_GROUPS = [
       { key: "admin.users.plan.write", label: "Assign candidate plans", detail: "Change a candidate’s plan." },
       { key: "admin.users.reset_link", label: "Candidate password reset links", detail: "Issue password reset links for candidates." },
       { key: "admin.users.promote_admin", label: "Promote candidate to admin", detail: "Grant admin access to a candidate." },
+      { key: "admin.users.activity.read", label: "View candidate activity", detail: "See the account log and the operations log for a candidate." },
+      { key: "admin.users.activity.complete", label: "Record a stuck checkout", detail: "Record an unfinished payment return on the manual ledger." },
     ],
   },
   {
@@ -171,6 +173,8 @@ const PRESET_LEVELS = [
       "admin.users.status.write",
       "admin.users.plan.write",
       "admin.users.reset_link",
+      "admin.users.activity.read",
+      "admin.users.activity.complete",
       "admin.employers.read",
       "admin.employers.status.write",
       "admin.employers.plan.write",
@@ -237,6 +241,8 @@ const PRESET_LEVELS = [
       "admin.payments.gateways.create",
       "admin.payments.gateways.write",
       "admin.payments.events.read",
+      "admin.users.activity.read",
+      "admin.users.activity.complete",
       "admin.users.plan.write",
       "admin.employers.plan.write",
       "admin.admins.plan.write",
@@ -419,6 +425,17 @@ export function seedAdminAccessLevels() {
       );
     }
   }
+
+  const presetExtras = [
+    ["aal_support", "admin.users.activity.read"],
+    ["aal_support", "admin.users.activity.complete"],
+    ["aal_billing", "admin.users.activity.read"],
+    ["aal_billing", "admin.users.activity.complete"],
+  ];
+  const insertPresetPermission = db.prepare(
+    "INSERT OR IGNORE INTO admin_access_level_permissions (level_id, permission_key) VALUES (?, ?)",
+  );
+  for (const [levelId, key] of presetExtras) insertPresetPermission.run(levelId, key);
 
   // Keep Super Admin permission set complete as new keys are added.
   const superCount = db

@@ -8,6 +8,17 @@ import {
   validateBillingDisclosure,
 } from "./billing-disclosure.mjs";
 import { liveGatewayWriteError, normalizeGatewayMode } from "./billing-live.mjs";
+import { moneyLabel, recordAccount, recordOperations } from "./user-activity.mjs";
+
+function notePendingCheckout(user, plan, checkoutId, amount) {
+  recordAccount(user.id, "checkout", `Started a ${plan.name} checkout.`, { refType: "checkout", refId: checkoutId });
+  recordOperations(user.id, "checkout", `${plan.name} checkout is waiting. The payment return has not finished.`, {
+    actorId: user.id,
+    detail: moneyLabel(amount),
+    refType: "checkout",
+    refId: checkoutId,
+  });
+}
 
 export function registerBilling(app, ctx) {
   const {
@@ -65,6 +76,12 @@ export function registerBilling(app, ctx) {
     }
     if (gateway.kind === "manual" || amount === 0) {
       applyPlan(user, plan, gateway, cycle, "", amount, rules.allowProration ? credit : 0);
+      recordAccount(user.id, "plan", `Plan is now ${plan.name}.`, { refType: "plan", refId: plan.id });
+      recordOperations(user.id, "plan", `Plan change applied for ${plan.name} on the manual ledger.`, {
+        actorId: user.id,
+        refType: "plan",
+        refId: plan.id,
+      });
       res.json({ applied: true, amount, credit, disclosure: billingDisclosurePayload(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id)) });
       return;
     }
@@ -93,6 +110,7 @@ export function registerBilling(app, ctx) {
       db.prepare(
         "INSERT INTO checkouts (id, user_id, plan_id, gateway_id, cycle, amount_cents, credit_cents, status, external_id, disclosure_version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)",
       ).run(checkoutId, user.id, plan.id, gateway.id, cycle, amount, credit, session.id, BILLING_DISCLOSURE_VERSION, Date.now());
+      notePendingCheckout(user, plan, checkoutId, amount);
       res.json({ url: session.url, checkoutId });
       return;
     }
@@ -132,6 +150,7 @@ export function registerBilling(app, ctx) {
       db.prepare(
         "INSERT INTO checkouts (id, user_id, plan_id, gateway_id, cycle, amount_cents, credit_cents, status, external_id, disclosure_version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)",
       ).run(checkoutId, user.id, plan.id, gateway.id, cycle, amount, credit, order.id, BILLING_DISCLOSURE_VERSION, Date.now());
+      notePendingCheckout(user, plan, checkoutId, amount);
       res.json({ url: approve, checkoutId });
       return;
     }
@@ -146,7 +165,7 @@ export function registerBilling(app, ctx) {
       res.status(404).json({ error: "Checkout not found." });
       return;
     }
-    if (checkout.status === "paid") {
+    if (checkout.status === "paid" || checkout.status === "ledger") {
       res.json({ applied: true });
       return;
     }
@@ -184,6 +203,12 @@ export function registerBilling(app, ctx) {
     }
     applyPlan(user, plan, gateway, checkout.cycle, checkout.external_id, checkout.amount_cents, checkout.credit_cents);
     db.prepare("UPDATE checkouts SET status = 'paid' WHERE id = ?").run(checkout.id);
+    recordAccount(user.id, "plan", `Plan is now ${plan.name}.`, { refType: "checkout", refId: checkout.id });
+    recordOperations(user.id, "plan", `Payment return finished for ${plan.name}.`, {
+      actorId: user.id,
+      refType: "checkout",
+      refId: checkout.id,
+    });
     res.json({ applied: true });
   });
 

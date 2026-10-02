@@ -1326,6 +1326,7 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
   gap: 12px;
   align-items: center;
 }
+.admin-table article { flex-wrap: wrap; }
 .admin-table article {
   background: #fff;
   border: 1px solid var(--line);
@@ -1488,6 +1489,12 @@ button.chip.on { border-color: #67c39a; background: #e7f7ef; }
 .check-history { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
 .check-history li { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: 13px; }
 .check-history time, .check-history span { color: var(--muted); }
+.activity-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.activity-list li { display: grid; gap: 2px; }
+.activity-list time { color: var(--muted); font-size: 13px; }
+.stuck-checkout { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px solid #e6edf2; }
+.user-activity-panel { flex: 1 0 100%; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
+.user-activity-panel h2 { font-size: 16px; margin: 14px 0 4px; }
 .match-fit { margin-top: 12px; }
 .match-line { margin: 0 0 6px; font-size: 14px; line-height: 1.45; color: #24344a; }
 .match-line span { font-weight: 700; color: #16324f; margin-right: 8px; }

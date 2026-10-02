@@ -7,6 +7,7 @@ import { AdminPage } from "./pages/Admin";
 import { BlogPage, BlogPostPage } from "./pages/Blog";
 import { ContactPage } from "./pages/Contact";
 import { AccountShell } from "./account/Shell";
+import { ActivityPage } from "./account/ActivityPage";
 import { ApplicationsPage, InsightsPage, InterviewPage, InvitesPage, JobsPage, OverviewPage, PlanPage, ProfilePage, ResumePage, SettingsPage, TemplatesPage } from "./account/pages";
 import { EmployerAnalyticsPage, EmployerCandidatesPage, EmployerCompanyPage, EmployerInterviewsPage, EmployerLandingPage, EmployerPipelinePage, EmployerPostingsPage, EmployerRoomHostPage, EmployerRoomsPage, EmployerShell, EmployerVoiceSessionPage, VoiceJoinPage } from "./employer/pages";
 import { DashboardPage } from "./pages/Dashboard";
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="jobs" element={<JobsPage />} />
             <Route path="applications" element={<ApplicationsPage />} />
             <Route path="plan" element={<PlanPage />} />
+            <Route path="activity" element={<ActivityPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
           <Route path="employer" element={<EmployerShell />}>
