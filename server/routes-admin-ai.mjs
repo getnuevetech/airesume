@@ -12,6 +12,7 @@ import {
   isPromptRegistryEnabled,
   isSilentAutoApplyEnabled,
 } from "./prompt-registry.mjs";
+import { readAiTrainingAttestation, saveAiTrainingAttestation } from "./ai-training-attestation.mjs";
 
 function publicProvider(row, maskSecret) {
   return { id: row.id, name: row.name, kind: row.kind, model: row.model, enabled: Boolean(row.enabled), apiKey: maskSecret(row.api_key), hasKey: Boolean(row.api_key) };
@@ -29,6 +30,7 @@ export function registerAdminAi(app, ctx) {
       assignments: db.prepare("SELECT * FROM ai_assignments").all(),
       promptRegistryEnabled: registry.registryEnabled,
       silentAutoApplyEnabled: registry.silentAutoApplyEnabled,
+      aiTrainingAttestation: readAiTrainingAttestation(),
       prompts: registry.functions,
     });
   });
@@ -41,10 +43,18 @@ export function registerAdminAi(app, ctx) {
     if (req.body.silentAutoApplyEnabled !== undefined) {
       setSilentAutoApplyEnabled(Boolean(req.body.silentAutoApplyEnabled));
     }
+    let training = readAiTrainingAttestation();
+    if (req.body.aiTrainingAttested !== undefined) {
+      training = saveAiTrainingAttestation({
+        attested: Boolean(req.body.aiTrainingAttested),
+        note: req.body.aiTrainingNote,
+      });
+    }
     res.json({
       ok: true,
       promptRegistryEnabled: isPromptRegistryEnabled(),
       silentAutoApplyEnabled: isSilentAutoApplyEnabled(),
+      aiTrainingAttestation: training,
     });
   });
 

@@ -18,7 +18,7 @@ Pre-launch and ongoing checks for JobPilot multi-AI use.
 
 ## Provider contracts
 
-- [ ] Training-on-customer-data disabled where the provider allows
+- [ ] Training-on-customer-data disabled where the provider allows — attest under Admin → AI (recorded for Admin → Launch)
 - [ ] No sale of resume/application data for advertising
 - [ ] Failover path documented when a provider is unavailable
 
