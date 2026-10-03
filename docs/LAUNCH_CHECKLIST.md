@@ -14,8 +14,8 @@ Pre-public launch gate for JobPilot. Ops signals are also visible in **Admin →
 - [ ] Live card billing stays off (`BILLING_LIVE` unset; no enabled live Stripe/PayPal gateway). Use the manual ledger. Admin → Launch fails `opsReady` if live billing is unlocked.
 - [ ] Live AI providers have API keys (Admin → AI). Admin → Launch fails `opsReady` if an enabled OpenAI/Anthropic/Google provider has a blank key.
 - [ ] Outside counsel review of Terms, Privacy, billing disclosure, and Auto-Apply authorization text
-- [ ] Confirm U.S.-first / 18+ positioning still accurate in legal copy
-- [ ] Confirm no advertising/cross-site cookies without updating Privacy + Cookie Settings
+- [ ] Confirm U.S.-first / 18+ positioning still accurate in legal copy. Attest under Admin → Launch after the Privacy scan passes. Admin → Launch fails `opsReady` until attested.
+- [ ] Confirm no advertising/cross-site cookies without updating Privacy + Cookie Settings. Attest under Admin → Launch after the scan passes (Privacy no-ads line + no ad scripts in the app shell). Admin → Launch fails `opsReady` until attested.
 
 ## Strongly recommended
 

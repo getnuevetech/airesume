@@ -11,6 +11,7 @@ import { aiPipelineHealth } from "./ai-pipeline-health.mjs";
 import { backupDrillStatus } from "./backup-ops.mjs";
 import { deletionDrillStatus } from "./deletion-drill.mjs";
 import { aiTrainingAttestationStatus } from "./ai-training-attestation.mjs";
+import { adsCookieStatus, audiencePositioningStatus } from "./launch-copy-attestations.mjs";
 
 function cookieSecureMode(env = process.env) {
   if (String(env.COOKIE_SECURE || "") === "1") return "forced_on";
@@ -35,6 +36,8 @@ function check(id, label, ok, detail, severity = "required") {
  * @param {ReturnType<typeof backupDrillStatus> | null} [options.backupDrill]
  * @param {ReturnType<typeof deletionDrillStatus> | null} [options.deletionDrill]
  * @param {ReturnType<typeof aiTrainingAttestationStatus> | null} [options.aiTraining]
+ * @param {ReturnType<typeof audiencePositioningStatus> | null} [options.audience]
+ * @param {ReturnType<typeof adsCookieStatus> | null} [options.adsCookies]
  * @param {string} [options.rootDir]
  * @param {string} [options.dataDir]
  */
@@ -51,6 +54,8 @@ export function computeLaunchReadiness(options = {}) {
   const backupDrill = options.backupDrill || backupDrillStatus(options.dataDir || dataDir);
   const deletionDrill = options.deletionDrill || deletionDrillStatus(options.dataDir || dataDir);
   const aiTraining = options.aiTraining || aiTrainingAttestationStatus();
+  const audience = options.audience || audiencePositioningStatus({ rootDir: options.rootDir });
+  const adsCookies = options.adsCookies || adsCookieStatus({ rootDir: options.rootDir });
   const nodeEnv = String(env.NODE_ENV || "development");
   const production = nodeEnv === "production";
   const mfaRequired = mfaRequiredForRole("admin", env);
@@ -200,6 +205,20 @@ export function computeLaunchReadiness(options = {}) {
       "Legal copy placeholders",
       legal.ok,
       legal.detail,
+      "required",
+    ),
+    check(
+      "audience_positioning",
+      "U.S.-first / 18+ positioning",
+      Boolean(audience.ok),
+      audience.detail,
+      "required",
+    ),
+    check(
+      "ads_cookies",
+      "No advertising / cross-site cookies",
+      Boolean(adsCookies.ok),
+      adsCookies.detail,
       "required",
     ),
     check(
