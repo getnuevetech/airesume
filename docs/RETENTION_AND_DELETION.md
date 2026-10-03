@@ -28,3 +28,11 @@ Confirm these clear on `POST /api/account/delete`:
 ## Launch gate
 
 Counsel must confirm retention windows and deletion fan-out before public personal-data scale.
+
+On staging, run the automated fan-out drill once:
+
+```bash
+bash deploy/deletion-drill.sh
+```
+
+That creates a throwaway candidate, runs the same `deleteAccountData` path as `POST /api/account/delete`, verifies core tables are cleared, and records `ops-last-deletion-drill.json` for Admin → Launch.
