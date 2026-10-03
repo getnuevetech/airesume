@@ -23,7 +23,7 @@ Pre-public launch gate for JobPilot. Ops signals are also visible in **Admin →
 - [ ] Career extraction assigned to a live AI provider (not Built-in rules only). Admin → Launch shows this as recommended.
 - [ ] AI providers: training-on-customer-data disabled where the vendor allows (`docs/AI_GOVERNANCE_CHECKLIST.md`)
 - [ ] Retention / deletion drill once on staging (`docs/RETENTION_AND_DELETION.md`)
-- [ ] Backup strategy for `server/data/` (SQLite + uploads). Take a copy with `deploy/backup.sh /path/outside/the/repo`, then restore that copy once onto a non-production directory with `deploy/restore.sh <backup> <target> --yes` and confirm `/api/health` after a real restore drill.
+- [ ] Backup strategy for `server/data/` (SQLite + uploads). Take a copy with `deploy/backup.sh /path/outside/the/repo`, then restore that copy once onto a non-production directory with `deploy/restore.sh <backup> <target> --yes` and confirm `/api/health` after a real restore drill. Admin → Launch shows this as recommended once both markers are recorded.
 - [ ] Extension remains **unpacked** until autofill quality is proven; then follow `extension/STORE.md`
 
 ## Explicitly deferred
