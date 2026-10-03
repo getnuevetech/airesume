@@ -2,6 +2,8 @@ import net from "node:net";
 import tls from "node:tls";
 import { db, id } from "./db.mjs";
 
+const SMTP_LAST_TEST_KEY = "smtp_last_test";
+
 export function mailSettings() {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'smtp'").get();
   const saved = row ? JSON.parse(row.value) : {};
@@ -17,8 +19,90 @@ export function mailSettings() {
   };
 }
 
+function readSmtpLastTest() {
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(SMTP_LAST_TEST_KEY);
+  if (!row?.value) return null;
+  try {
+    const parsed = JSON.parse(row.value);
+    const at = Number(parsed.at || 0);
+    if (!at) return null;
+    return {
+      at,
+      to: String(parsed.to || ""),
+      host: String(parsed.host || ""),
+      fromEmail: String(parsed.fromEmail || ""),
+      port: Number(parsed.port || 0) || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function clearSmtpLastTest() {
+  db.prepare("DELETE FROM settings WHERE key = ?").run(SMTP_LAST_TEST_KEY);
+}
+
+/** Fingerprint of the SMTP path that was proven by Admin → Email → Send a test. */
+export function smtpDeliveryFingerprint(settings = mailSettings()) {
+  return {
+    host: String(settings.host || "").trim().toLowerCase(),
+    fromEmail: String(settings.fromEmail || "").trim().toLowerCase(),
+    port: Number(settings.port) || 0,
+    user: String(settings.user || "").trim(),
+    secure: Boolean(settings.secure),
+  };
+}
+
+export function smtpDeliveryStatus(settings = mailSettings()) {
+  const configured = Boolean(settings.host && settings.fromEmail);
+  const last = readSmtpLastTest();
+  if (!configured || !last) {
+    return {
+      configured,
+      deliveryProven: false,
+      lastTestAt: last?.at || null,
+      lastTestTo: last?.to || null,
+      detail: configured
+        ? "SMTP host and from address are saved. Send a test from Admin → Email before launch."
+        : "SMTP host + from address missing. Password resets and notices will stay queued.",
+    };
+  }
+  const now = smtpDeliveryFingerprint(settings);
+  const matches =
+    last.host === now.host &&
+    last.fromEmail === now.fromEmail &&
+    Number(last.port || 0) === now.port;
+  return {
+    configured,
+    deliveryProven: matches,
+    lastTestAt: last.at,
+    lastTestTo: last.to || null,
+    detail: matches
+      ? `Test email delivered to ${last.to || "admin"} via ${settings.host} at ${new Date(last.at).toISOString()}.`
+      : "SMTP settings changed since the last successful test. Send a test again from Admin → Email.",
+  };
+}
+
+export function recordSmtpTestSuccess({ to, settings = mailSettings(), at = Date.now() } = {}) {
+  const finger = smtpDeliveryFingerprint(settings);
+  db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(
+    SMTP_LAST_TEST_KEY,
+    JSON.stringify({
+      at,
+      to: String(to || ""),
+      host: finger.host,
+      fromEmail: finger.fromEmail,
+      port: finger.port,
+      user: finger.user,
+      secure: finger.secure,
+    }),
+  );
+  return smtpDeliveryStatus(settings);
+}
+
 export function publicMailSettings() {
   const settings = mailSettings();
+  const delivery = smtpDeliveryStatus(settings);
   return {
     host: settings.host,
     port: settings.port,
@@ -27,12 +111,16 @@ export function publicMailSettings() {
     fromEmail: settings.fromEmail,
     fromName: settings.fromName,
     hasPassword: Boolean(settings.password),
-    configured: Boolean(settings.host && settings.fromEmail),
+    configured: delivery.configured,
+    deliveryProven: delivery.deliveryProven,
+    lastTestAt: delivery.lastTestAt,
+    lastTestTo: delivery.lastTestTo,
   };
 }
 
 export function saveMailSettings(input) {
   const current = mailSettings();
+  const before = smtpDeliveryFingerprint(current);
   const port = Number(input.port);
   const next = {
     host: String(input.host ?? current.host).trim(),
@@ -44,6 +132,18 @@ export function saveMailSettings(input) {
     fromName: String(input.fromName ?? current.fromName).trim() || "JobPilot",
   };
   db.prepare("INSERT INTO settings (key, value) VALUES ('smtp', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(next));
+  const after = smtpDeliveryFingerprint(next);
+  const passwordChanged = Boolean(input.password && !String(input.password).startsWith("••••"));
+  if (
+    passwordChanged ||
+    before.host !== after.host ||
+    before.fromEmail !== after.fromEmail ||
+    before.port !== after.port ||
+    before.user !== after.user ||
+    before.secure !== after.secure
+  ) {
+    clearSmtpLastTest();
+  }
   return publicMailSettings();
 }
 

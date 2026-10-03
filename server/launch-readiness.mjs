@@ -137,11 +137,15 @@ export function computeLaunchReadiness(options = {}) {
     ),
     check(
       "smtp",
-      "SMTP configured",
-      Boolean(mail.configured),
-      mail.configured
-        ? `Outbound mail ready via ${mail.host || "saved host"} (${mail.fromEmail || "from address set"}).`
-        : "SMTP host + from address missing. Password resets and notices will stay queued.",
+      "SMTP delivers a test email",
+      Boolean(mail.configured && mail.deliveryProven),
+      mail.deliveryProven
+        ? mail.lastTestAt
+          ? `Outbound mail proven via ${mail.host || "saved host"} (test at ${new Date(mail.lastTestAt).toISOString()}).`
+          : `Outbound mail ready via ${mail.host || "saved host"} (${mail.fromEmail || "from address set"}).`
+        : mail.configured
+          ? "SMTP host and from address are saved, but Admin → Email has not delivered a test yet."
+          : "SMTP host + from address missing. Password resets and notices will stay queued.",
       "required",
     ),
     check(
