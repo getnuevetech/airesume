@@ -7,7 +7,7 @@ Pre-public launch gate for JobPilot. Ops signals are also visible in **Admin →
 - [ ] `NODE_ENV=production`
 - [ ] HTTPS terminated at nginx/LB (`deploy/HTTPS.md`); Node stays on localhost `:3000`
 - [ ] `COOKIE_SECURE=1` (required for production launch; Admin → Launch fails `opsReady` without it)
-- [ ] SMTP host + from address configured, then **Send a test** succeeds (Admin → Email). Admin → Launch fails `opsReady` until that test is recorded for the current SMTP settings.
+- [ ] SMTP host + from address configured, then **Send a test** succeeds (Admin → Email). Admin → Launch fails `opsReady` until that test is recorded for the current SMTP settings. Use port **587** without implicit TLS (STARTTLS), or **465** with TLS checked. If the test says the mail server did not respond, fix TLS/port first; on Lightsail/VPS also confirm outbound 587/465 is allowed (port 25 is often blocked).
 - [ ] Legal entity saved under Admin → Launch (company name, mailing address, privacy email, legal/support email). Public Terms/Privacy use these fields. Admin → Launch fails `opsReady` until company brackets are cleared.
 - [ ] Published default admin password rotated (`admin@jobpilot.app` must not accept `JobPilot-Admin-2026`; `admin-bootstrap.txt` must not store a plaintext password). Admin → Launch fails `opsReady` until this is clean.
 - [ ] Silent Auto-Apply kill switch stays off (Admin → AI). Admin → Launch fails `opsReady` if it is on.
