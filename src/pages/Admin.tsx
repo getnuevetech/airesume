@@ -605,13 +605,38 @@ function MailEditor() {
       >
         <div className="admin-grid">
           <label className="field"><span>SMTP host</span><input value={settings.host} onChange={(event) => setSettings({ ...settings, host: event.target.value })} placeholder="smtp.example.com" /></label>
-          <label className="field"><span>Port</span><input type="number" value={settings.port} onChange={(event) => setSettings({ ...settings, port: Number(event.target.value) })} /></label>
+          <label className="field">
+            <span>Port</span>
+            <input
+              type="number"
+              value={settings.port}
+              onChange={(event) => {
+                const port = Number(event.target.value);
+                setSettings({
+                  ...settings,
+                  port,
+                  secure: port === 465 ? true : port === 587 || port === 25 ? false : settings.secure,
+                });
+              }}
+            />
+          </label>
           <label className="field"><span>Username</span><input value={settings.user} onChange={(event) => setSettings({ ...settings, user: event.target.value })} /></label>
           <label className="field"><span>Password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={settings.hasPassword ? "Saved. Leave blank to keep it." : ""} /></label>
           <label className="field"><span>From name</span><input value={settings.fromName} onChange={(event) => setSettings({ ...settings, fromName: event.target.value })} /></label>
           <label className="field"><span>From email</span><input type="email" value={settings.fromEmail} onChange={(event) => setSettings({ ...settings, fromEmail: event.target.value })} /></label>
         </div>
-        <label className="check-row"><input type="checkbox" checked={settings.secure} onChange={(event) => setSettings({ ...settings, secure: event.target.checked })} /> Use implicit TLS, usually port 465</label>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={settings.secure}
+            onChange={(event) => setSettings({ ...settings, secure: event.target.checked })}
+          />
+          Use implicit TLS (required for port 465; leave off for 587 STARTTLS)
+        </label>
+        <p className="role">
+          Typical provider setup: host from your mail docs, port <strong>587</strong>, TLS unchecked, then username + app password.
+          Port <strong>465</strong> needs TLS checked. “Did not respond” usually means the TLS mode is wrong or the VPS blocks outbound SMTP.
+        </p>
         <p className="role">
           {settings.deliveryProven && settings.lastTestAt
             ? `Last successful test: ${new Date(settings.lastTestAt).toLocaleString()}${settings.lastTestTo ? ` → ${settings.lastTestTo}` : ""}.`

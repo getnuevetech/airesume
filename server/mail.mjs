@@ -8,10 +8,12 @@ export function mailSettings() {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'smtp'").get();
   const saved = row ? JSON.parse(row.value) : {};
   const port = Number(saved.port || process.env.SMTP_PORT || 587);
+  const normalizedPort = Number.isFinite(port) && port > 0 ? port : 587;
+  const secureFlag = saved.secure === true || process.env.SMTP_SECURE === "true" || normalizedPort === 465;
   return {
     host: String(saved.host || process.env.SMTP_HOST || "").trim(),
-    port: Number.isFinite(port) && port > 0 ? port : 587,
-    secure: saved.secure === true || process.env.SMTP_SECURE === "true" || port === 465,
+    port: normalizedPort,
+    secure: smtpSecureForPort(normalizedPort, secureFlag),
     user: String(saved.user || process.env.SMTP_USER || ""),
     password: String(saved.password || process.env.SMTP_PASSWORD || ""),
     fromEmail: String(saved.fromEmail || process.env.SMTP_FROM || "").trim(),
@@ -118,14 +120,23 @@ export function publicMailSettings() {
   };
 }
 
+/** Port 465 is implicit TLS; 587/25 use plain connect then STARTTLS when offered. */
+export function smtpSecureForPort(port, secureFlag) {
+  const normalized = Number(port) || 0;
+  if (normalized === 465) return true;
+  if (normalized === 587 || normalized === 25) return false;
+  return Boolean(secureFlag);
+}
+
 export function saveMailSettings(input) {
   const current = mailSettings();
   const before = smtpDeliveryFingerprint(current);
   const port = Number(input.port);
+  const nextPort = Number.isFinite(port) && port > 0 ? port : current.port;
   const next = {
     host: String(input.host ?? current.host).trim(),
-    port: Number.isFinite(port) && port > 0 ? port : current.port,
-    secure: Boolean(input.secure),
+    port: nextPort,
+    secure: smtpSecureForPort(nextPort, input.secure ?? current.secure),
     user: String(input.user ?? current.user),
     password: input.password && !String(input.password).startsWith("••••") ? String(input.password) : current.password,
     fromEmail: String(input.fromEmail ?? current.fromEmail).trim(),
@@ -223,30 +234,83 @@ function attachReader(socket) {
   };
 }
 
-async function expectOk(socket, reader, line) {
+async function expectOk(socket, reader, line, { timeoutMs = 15000 } = {}) {
   if (line != null) socket.write(`${line}\r\n`);
-  const text = await reader.read();
-  const code = Number(String(text).slice(0, 3));
-  if (code >= 400) throw new Error(String(text).trim().slice(0, 300));
-  return { code, text };
+  let timer;
+  try {
+    const text = await Promise.race([
+      reader.read(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error("The mail server stopped responding during the SMTP handshake."));
+        }, timeoutMs);
+      }),
+    ]);
+    const code = Number(String(text).slice(0, 3));
+    if (code >= 400) throw new Error(String(text).trim().slice(0, 300));
+    return { code, text };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function smtpEndpointLabel(settings) {
+  const mode = settings.secure ? "implicit TLS" : "STARTTLS / plain";
+  return `${settings.host}:${settings.port} (${mode})`;
+}
+
+export function formatSmtpConnectError(settings, cause) {
+  const where = smtpEndpointLabel(settings);
+  const code = cause && typeof cause === "object" ? String(cause.code || "") : "";
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
+    return `Could not resolve SMTP host ${settings.host}. Check the hostname.`;
+  }
+  if (code === "ECONNREFUSED") {
+    return `SMTP refused the connection at ${where}. Wrong port, or the provider is not listening there.`;
+  }
+  if (code === "ECONNRESET") {
+    return `SMTP reset the connection at ${where}. Try the other TLS mode (port 587 unchecked, or 465 with TLS).`;
+  }
+  if (code === "ETIMEDOUT" || code === "ESOCKETTIMEDOUT") {
+    return (
+      `Timed out connecting to ${where}. ` +
+      "Confirm port 587 without “implicit TLS”, or 465 with it checked; many VPS firewalls also block outbound SMTP."
+    );
+  }
+  const detail = cause instanceof Error && cause.message ? cause.message : "The mail server did not respond.";
+  if (/did not respond/i.test(detail)) {
+    return (
+      `The mail server did not respond at ${where}. ` +
+      "Port 587 must leave “implicit TLS” unchecked (STARTTLS). Port 465 must check it. " +
+      "If settings look right, the host may block outbound SMTP — allow 587/465 or use your provider’s relay."
+    );
+  }
+  return `Could not reach SMTP at ${where}: ${detail}`;
 }
 
 function openSocket(settings) {
   return new Promise((resolve, reject) => {
     const socket = settings.secure
-      ? tls.connect({ host: settings.host, port: settings.port, servername: settings.host })
+      ? tls.connect({ host: settings.host, port: settings.port, servername: settings.host, timeout: 15000 })
       : net.connect({ host: settings.host, port: settings.port });
+    if (typeof socket.setTimeout === "function") socket.setTimeout(15000);
     const reader = attachReader(socket);
     const timer = setTimeout(() => {
       socket.destroy();
-      reject(new Error("The mail server did not respond."));
+      reject(new Error(formatSmtpConnectError(settings, { code: "ETIMEDOUT" })));
     }, 15000);
-    socket.once("error", (error) => {
+    const fail = (error) => {
       clearTimeout(timer);
-      reject(error);
+      reject(new Error(formatSmtpConnectError(settings, error)));
+    };
+    socket.once("timeout", () => {
+      socket.destroy();
+      fail({ code: "ETIMEDOUT" });
     });
+    socket.once("error", fail);
     socket.once(settings.secure ? "secureConnect" : "connect", () => {
       clearTimeout(timer);
+      if (typeof socket.setTimeout === "function") socket.setTimeout(0);
       resolve({ socket, reader });
     });
   });
