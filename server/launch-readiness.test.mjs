@@ -57,6 +57,13 @@ const cleanDeletionDrill = {
   detail: "Deletion fan-out drill recorded.",
 };
 
+const cleanAiTraining = {
+  ok: true,
+  attested: true,
+  at: 1_700_000_300_000,
+  detail: "Operator attested training-on-customer-data is disabled.",
+};
+
 test("launch readiness fails closed without SMTP and production env; MFA stays informational", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "development", COOKIE_SECURE: "0", REQUIRE_ADMIN_MFA: "0" },
@@ -69,6 +76,7 @@ test("launch readiness fails closed without SMTP and production env; MFA stays i
     aiHealth: cleanAiHealth,
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
+    aiTraining: cleanAiTraining,
   });
   assert.equal(report.opsReady, false);
   assert.equal(report.launchReady, false);
@@ -93,6 +101,7 @@ test("SMTP host alone without a successful test blocks opsReady", () => {
     aiHealth: cleanAiHealth,
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
+    aiTraining: cleanAiTraining,
   });
   assert.equal(report.opsReady, false);
   const smtp = report.checks.find((item) => item.id === "smtp");
@@ -113,12 +122,14 @@ test("launch readiness opsReady when production signals are green (counsel still
     aiHealth: cleanAiHealth,
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
+    aiTraining: cleanAiTraining,
   });
   assert.equal(report.opsReady, true);
   assert.equal(report.launchReady, false);
   assert.ok(report.checks.some((item) => item.id === "turn" && item.ok));
   assert.ok(report.checks.some((item) => item.id === "backup_drill" && item.ok));
   assert.ok(report.checks.some((item) => item.id === "deletion_drill" && item.ok));
+  assert.ok(report.checks.some((item) => item.id === "ai_training" && item.ok));
   assert.ok(report.checks.some((item) => item.id === "counsel" && !item.ok));
   assert.ok(report.checks.some((item) => item.id === "legal_placeholders" && item.ok));
   assert.ok(report.checks.some((item) => item.id === "default_admin_password" && item.ok));
@@ -137,6 +148,7 @@ test("production without COOKIE_SECURE=1 blocks opsReady", () => {
     aiHealth: cleanAiHealth,
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
+    aiTraining: cleanAiTraining,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "cookie_secure" && !item.ok));
@@ -163,6 +175,7 @@ test("unfinished legal placeholders block opsReady even when SMTP and production
     aiHealth: cleanAiHealth,
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
+    aiTraining: cleanAiTraining,
   });
   assert.equal(report.opsReady, false);
   assert.equal(report.launchReady, false);
@@ -184,6 +197,7 @@ test("published default admin password blocks opsReady", () => {
     aiHealth: cleanAiHealth,
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
+    aiTraining: cleanAiTraining,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "default_admin_password" && !item.ok));
@@ -204,6 +218,7 @@ test("silent Auto-Apply on blocks opsReady", () => {
     aiHealth: cleanAiHealth,
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
+    aiTraining: cleanAiTraining,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "silent_auto_apply" && !item.ok));
@@ -224,6 +239,7 @@ test("BILLING_LIVE unlocks block opsReady", () => {
     aiHealth: cleanAiHealth,
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
+    aiTraining: cleanAiTraining,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "billing_live" && !item.ok));
@@ -246,6 +262,7 @@ test("missing live AI API keys block opsReady", () => {
     },
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
+    aiTraining: cleanAiTraining,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "ai_provider_keys" && !item.ok));
@@ -268,6 +285,7 @@ test("rules-only career extraction is recommended, not ops blocking", () => {
     },
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
+    aiTraining: cleanAiTraining,
   });
   assert.equal(report.opsReady, true);
   assert.ok(report.checks.some((item) => item.id === "ai_career_extraction" && !item.ok && item.severity === "recommended"));
@@ -290,6 +308,7 @@ test("missing backup restore drill is recommended, not ops blocking", () => {
       detail: "No backup or restore drill recorded.",
     },
     deletionDrill: cleanDeletionDrill,
+    aiTraining: cleanAiTraining,
   });
   assert.equal(report.opsReady, true);
   const drill = report.checks.find((item) => item.id === "backup_drill");
@@ -314,12 +333,39 @@ test("missing deletion fan-out drill is recommended, not ops blocking", () => {
       lastAt: null,
       detail: "No deletion drill recorded.",
     },
+    aiTraining: cleanAiTraining,
   });
   assert.equal(report.opsReady, true);
   const drill = report.checks.find((item) => item.id === "deletion_drill");
   assert.equal(drill.ok, false);
   assert.equal(drill.severity, "recommended");
   assert.match(drill.detail, /deletion drill/i);
+});
+
+test("missing AI training attestation is recommended, not ops blocking", () => {
+  const report = computeLaunchReadiness({
+    env: { NODE_ENV: "production", COOKIE_SECURE: "1" },
+    mail: { configured: true, deliveryProven: true, host: "smtp.example.com", fromEmail: "hello@example.com", lastTestAt: 1_700_000_000_000 },
+    ice: { productionReady: true, warning: "" },
+    adminMfaEnrolled: true,
+    legal: cleanLegal,
+    defaultAdmin: cleanDefaultAdmin,
+    betaSafety: cleanBetaSafety,
+    aiHealth: cleanAiHealth,
+    backupDrill: cleanBackupDrill,
+    deletionDrill: cleanDeletionDrill,
+    aiTraining: {
+      ok: false,
+      attested: false,
+      at: null,
+      detail: "Confirm in each live AI vendor console.",
+    },
+  });
+  assert.equal(report.opsReady, true);
+  const check = report.checks.find((item) => item.id === "ai_training");
+  assert.equal(check.ok, false);
+  assert.equal(check.severity, "recommended");
+  assert.match(check.label, /training/i);
 });
 
 test("aiPipelineHealth flags blank live keys and rules-only extraction", async () => {

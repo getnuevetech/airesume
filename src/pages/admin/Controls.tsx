@@ -29,6 +29,7 @@ type AiPayload = {
   assignments: Assignment[];
   promptRegistryEnabled: boolean;
   silentAutoApplyEnabled: boolean;
+  aiTrainingAttestation?: { attested: boolean; at: number | null; note: string };
   prompts: PromptFunction[];
 };
 
@@ -42,12 +43,16 @@ export function AiAdmin() {
   const [apiKey, setApiKey] = useState("");
   const [registryOn, setRegistryOn] = useState(false);
   const [silentOn, setSilentOn] = useState(false);
+  const [trainingAttested, setTrainingAttested] = useState(false);
+  const [trainingAt, setTrainingAt] = useState<number | null>(null);
 
   async function load() {
     const payload = await api<AiPayload>("/api/admin/ai");
     setData(payload);
     setRegistryOn(Boolean(payload.promptRegistryEnabled));
     setSilentOn(Boolean(payload.silentAutoApplyEnabled));
+    setTrainingAttested(Boolean(payload.aiTrainingAttestation?.attested));
+    setTrainingAt(payload.aiTrainingAttestation?.at ?? null);
   }
 
   useEffect(() => {
@@ -67,20 +72,39 @@ export function AiAdmin() {
     }
   }
 
-  async function saveSwitches(next: { promptRegistryEnabled?: boolean; silentAutoApplyEnabled?: boolean }) {
+  async function saveSwitches(next: {
+    promptRegistryEnabled?: boolean;
+    silentAutoApplyEnabled?: boolean;
+    aiTrainingAttested?: boolean;
+  }) {
     setError("");
     try {
-      const result = await api<{ promptRegistryEnabled: boolean; silentAutoApplyEnabled: boolean }>("/api/admin/ai/switches", {
+      const result = await api<{
+        promptRegistryEnabled: boolean;
+        silentAutoApplyEnabled: boolean;
+        aiTrainingAttestation?: { attested: boolean; at: number | null; note: string };
+      }>("/api/admin/ai/switches", {
         method: "PUT",
         body: JSON.stringify(next),
       });
       setRegistryOn(result.promptRegistryEnabled);
       setSilentOn(result.silentAutoApplyEnabled);
+      if (result.aiTrainingAttestation) {
+        setTrainingAttested(Boolean(result.aiTrainingAttestation.attested));
+        setTrainingAt(result.aiTrainingAttestation.at);
+      }
       setMessage(
         [
           result.promptRegistryEnabled ? "Prompt registry on." : "Prompt registry off — code defaults used.",
           result.silentAutoApplyEnabled ? "Silent Auto-Apply on." : "Silent Auto-Apply off — queue Ready only.",
-        ].join(" "),
+          result.aiTrainingAttestation?.attested
+            ? "AI training attestation saved for Admin → Launch."
+            : next.aiTrainingAttested === false
+              ? "AI training attestation cleared."
+              : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
       );
       await load();
     } catch (err) {
@@ -124,6 +148,23 @@ export function AiAdmin() {
           />
           Silent Auto-Apply (transmit when Autopilot rules and readiness clear)
         </label>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={trainingAttested}
+            onChange={(event) => {
+              const attested = event.target.checked;
+              setTrainingAttested(attested);
+              void saveSwitches({ aiTrainingAttested: attested });
+            }}
+          />
+          Training on customer data is disabled where each live AI vendor allows it
+        </label>
+        <p className="role">
+          {trainingAttested && trainingAt
+            ? `Attested ${new Date(trainingAt).toLocaleString()}. Admin → Launch treats this as recommended Pass.`
+            : "Check vendor consoles (OpenAI / Anthropic / Google) before attesting. See docs/AI_GOVERNANCE_CHECKLIST.md."}
+        </p>
       </section>
 
       <form className="admin-card admin-grid" onSubmit={add}>

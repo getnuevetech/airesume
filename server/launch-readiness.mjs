@@ -10,6 +10,7 @@ import { betaSafetyStatus } from "./beta-safety.mjs";
 import { aiPipelineHealth } from "./ai-pipeline-health.mjs";
 import { backupDrillStatus } from "./backup-ops.mjs";
 import { deletionDrillStatus } from "./deletion-drill.mjs";
+import { aiTrainingAttestationStatus } from "./ai-training-attestation.mjs";
 
 function cookieSecureMode(env = process.env) {
   if (String(env.COOKIE_SECURE || "") === "1") return "forced_on";
@@ -33,6 +34,7 @@ function check(id, label, ok, detail, severity = "required") {
  * @param {ReturnType<typeof aiPipelineHealth> | null} [options.aiHealth]
  * @param {ReturnType<typeof backupDrillStatus> | null} [options.backupDrill]
  * @param {ReturnType<typeof deletionDrillStatus> | null} [options.deletionDrill]
+ * @param {ReturnType<typeof aiTrainingAttestationStatus> | null} [options.aiTraining]
  * @param {string} [options.rootDir]
  * @param {string} [options.dataDir]
  */
@@ -48,6 +50,7 @@ export function computeLaunchReadiness(options = {}) {
   const aiHealth = options.aiHealth || aiPipelineHealth();
   const backupDrill = options.backupDrill || backupDrillStatus(options.dataDir || dataDir);
   const deletionDrill = options.deletionDrill || deletionDrillStatus(options.dataDir || dataDir);
+  const aiTraining = options.aiTraining || aiTrainingAttestationStatus();
   const nodeEnv = String(env.NODE_ENV || "development");
   const production = nodeEnv === "production";
   const mfaRequired = mfaRequiredForRole("admin", env);
@@ -140,6 +143,13 @@ export function computeLaunchReadiness(options = {}) {
       "Career extraction uses a live model",
       aiHealth.modelQuality.ok,
       aiHealth.modelQuality.detail,
+      "recommended",
+    ),
+    check(
+      "ai_training",
+      "AI training on customer data disabled",
+      Boolean(aiTraining.ok),
+      aiTraining.detail,
       "recommended",
     ),
     check(
