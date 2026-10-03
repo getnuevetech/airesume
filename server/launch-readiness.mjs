@@ -3,11 +3,12 @@
 import { mfaRequiredForRole, getMfaPolicy } from "./mfa-policy.mjs";
 import { publicMailSettings } from "./mail.mjs";
 import { iceConfigSummary, resolveIceServers } from "./webrtc-signaling.mjs";
-import { db } from "./db.mjs";
+import { db, dataDir } from "./db.mjs";
 import { repoRootFromHere, scanLegalPlaceholders } from "./legal-placeholders.mjs";
 import { defaultAdminPasswordStatus } from "./default-admin-password.mjs";
 import { betaSafetyStatus } from "./beta-safety.mjs";
 import { aiPipelineHealth } from "./ai-pipeline-health.mjs";
+import { backupDrillStatus } from "./backup-ops.mjs";
 
 function cookieSecureMode(env = process.env) {
   if (String(env.COOKIE_SECURE || "") === "1") return "forced_on";
@@ -29,7 +30,9 @@ function check(id, label, ok, detail, severity = "required") {
  * @param {ReturnType<typeof defaultAdminPasswordStatus> | null} [options.defaultAdmin]
  * @param {ReturnType<typeof betaSafetyStatus> | null} [options.betaSafety]
  * @param {ReturnType<typeof aiPipelineHealth> | null} [options.aiHealth]
+ * @param {ReturnType<typeof backupDrillStatus> | null} [options.backupDrill]
  * @param {string} [options.rootDir]
+ * @param {string} [options.dataDir]
  */
 export function computeLaunchReadiness(options = {}) {
   const env = options.env || process.env;
@@ -41,6 +44,7 @@ export function computeLaunchReadiness(options = {}) {
   const defaultAdmin = options.defaultAdmin || defaultAdminPasswordStatus();
   const betaSafety = options.betaSafety || betaSafetyStatus({ env });
   const aiHealth = options.aiHealth || aiPipelineHealth();
+  const backupDrill = options.backupDrill || backupDrillStatus(options.dataDir || dataDir);
   const nodeEnv = String(env.NODE_ENV || "development");
   const production = nodeEnv === "production";
   const mfaRequired = mfaRequiredForRole("admin", env);
@@ -155,6 +159,13 @@ export function computeLaunchReadiness(options = {}) {
       ice.productionReady
         ? "TURN credentials present — room RTC reports productionReady."
         : ice.warning || "TURN missing. Interview audio may fail on restrictive NATs.",
+      "recommended",
+    ),
+    check(
+      "backup_drill",
+      "Backup and restore drill",
+      Boolean(backupDrill.ok),
+      backupDrill.detail,
       "recommended",
     ),
     check(

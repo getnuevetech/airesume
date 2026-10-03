@@ -44,6 +44,13 @@ const cleanAiHealth = {
   missingKeys: [],
 };
 
+const cleanBackupDrill = {
+  ok: true,
+  lastBackupAt: 1_700_000_000_000,
+  lastRestoreAt: 1_700_000_100_000,
+  detail: "Backup and restore drill recorded.",
+};
+
 test("launch readiness fails closed without SMTP and production env; MFA stays informational", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "development", COOKIE_SECURE: "0", REQUIRE_ADMIN_MFA: "0" },
@@ -54,6 +61,7 @@ test("launch readiness fails closed without SMTP and production env; MFA stays i
     defaultAdmin: cleanDefaultAdmin,
     betaSafety: cleanBetaSafety,
     aiHealth: cleanAiHealth,
+    backupDrill: cleanBackupDrill,
   });
   assert.equal(report.opsReady, false);
   assert.equal(report.launchReady, false);
@@ -76,6 +84,7 @@ test("SMTP host alone without a successful test blocks opsReady", () => {
     defaultAdmin: cleanDefaultAdmin,
     betaSafety: cleanBetaSafety,
     aiHealth: cleanAiHealth,
+    backupDrill: cleanBackupDrill,
   });
   assert.equal(report.opsReady, false);
   const smtp = report.checks.find((item) => item.id === "smtp");
@@ -94,10 +103,12 @@ test("launch readiness opsReady when production signals are green (counsel still
     defaultAdmin: cleanDefaultAdmin,
     betaSafety: cleanBetaSafety,
     aiHealth: cleanAiHealth,
+    backupDrill: cleanBackupDrill,
   });
   assert.equal(report.opsReady, true);
   assert.equal(report.launchReady, false);
   assert.ok(report.checks.some((item) => item.id === "turn" && item.ok));
+  assert.ok(report.checks.some((item) => item.id === "backup_drill" && item.ok));
   assert.ok(report.checks.some((item) => item.id === "counsel" && !item.ok));
   assert.ok(report.checks.some((item) => item.id === "legal_placeholders" && item.ok));
   assert.ok(report.checks.some((item) => item.id === "default_admin_password" && item.ok));
@@ -114,6 +125,7 @@ test("production without COOKIE_SECURE=1 blocks opsReady", () => {
     defaultAdmin: cleanDefaultAdmin,
     betaSafety: cleanBetaSafety,
     aiHealth: cleanAiHealth,
+    backupDrill: cleanBackupDrill,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "cookie_secure" && !item.ok));
@@ -138,6 +150,7 @@ test("unfinished legal placeholders block opsReady even when SMTP and production
     defaultAdmin: cleanDefaultAdmin,
     betaSafety: cleanBetaSafety,
     aiHealth: cleanAiHealth,
+    backupDrill: cleanBackupDrill,
   });
   assert.equal(report.opsReady, false);
   assert.equal(report.launchReady, false);
@@ -157,6 +170,7 @@ test("published default admin password blocks opsReady", () => {
     },
     betaSafety: cleanBetaSafety,
     aiHealth: cleanAiHealth,
+    backupDrill: cleanBackupDrill,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "default_admin_password" && !item.ok));
@@ -175,6 +189,7 @@ test("silent Auto-Apply on blocks opsReady", () => {
       billing: cleanBetaSafety.billing,
     },
     aiHealth: cleanAiHealth,
+    backupDrill: cleanBackupDrill,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "silent_auto_apply" && !item.ok));
@@ -193,6 +208,7 @@ test("BILLING_LIVE unlocks block opsReady", () => {
       billing: { ok: false, detail: "BILLING_LIVE=1 unlocks live card gateways." },
     },
     aiHealth: cleanAiHealth,
+    backupDrill: cleanBackupDrill,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "billing_live" && !item.ok));
@@ -213,6 +229,7 @@ test("missing live AI API keys block opsReady", () => {
       rulesOnly: [],
       missingKeys: ["career_extraction (OpenAI)"],
     },
+    backupDrill: cleanBackupDrill,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "ai_provider_keys" && !item.ok));
@@ -233,9 +250,34 @@ test("rules-only career extraction is recommended, not ops blocking", () => {
       rulesOnly: ["career_extraction"],
       missingKeys: [],
     },
+    backupDrill: cleanBackupDrill,
   });
   assert.equal(report.opsReady, true);
   assert.ok(report.checks.some((item) => item.id === "ai_career_extraction" && !item.ok && item.severity === "recommended"));
+});
+
+test("missing backup restore drill is recommended, not ops blocking", () => {
+  const report = computeLaunchReadiness({
+    env: { NODE_ENV: "production", COOKIE_SECURE: "1" },
+    mail: { configured: true, deliveryProven: true, host: "smtp.example.com", fromEmail: "hello@example.com", lastTestAt: 1_700_000_000_000 },
+    ice: { productionReady: true, warning: "" },
+    adminMfaEnrolled: true,
+    legal: cleanLegal,
+    defaultAdmin: cleanDefaultAdmin,
+    betaSafety: cleanBetaSafety,
+    aiHealth: cleanAiHealth,
+    backupDrill: {
+      ok: false,
+      lastBackupAt: null,
+      lastRestoreAt: null,
+      detail: "No backup or restore drill recorded.",
+    },
+  });
+  assert.equal(report.opsReady, true);
+  const drill = report.checks.find((item) => item.id === "backup_drill");
+  assert.equal(drill.ok, false);
+  assert.equal(drill.severity, "recommended");
+  assert.match(drill.detail, /restore drill/i);
 });
 
 test("aiPipelineHealth flags blank live keys and rules-only extraction", async () => {

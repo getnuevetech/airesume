@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,15 +56,20 @@ test("backup and restore keep schema tables and uploads", () => {
     });
     assert.equal(backedUp.status, 0, `${backedUp.stdout}\n${backedUp.stderr}`);
     assert.match(backedUp.stdout, /Backup written to/);
+    assert.match(backedUp.stdout, /Recorded backup marker/);
     assert.equal(backedUp.stdout.includes(secret), false);
     assert.equal(backedUp.stderr.includes(secret), false);
+    assert.ok(existsSync(join(source, "ops-last-backup.json")));
 
     const restoredRun = spawnSync(join(root, "deploy", "restore.sh"), [archive, restored, "--yes"], {
       cwd: root,
+      env: { ...process.env, JOBPILOT_DATA_DIR: source },
       encoding: "utf8",
     });
     assert.equal(restoredRun.status, 0, `${restoredRun.stdout}\n${restoredRun.stderr}`);
+    assert.match(restoredRun.stdout, /Recorded restore drill/);
     assert.equal(restoredRun.stdout.includes(secret), false);
+    assert.ok(existsSync(join(source, "ops-last-restore-drill.json")));
 
     const checked = spawnSync(
       process.execPath,

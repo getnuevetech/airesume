@@ -28,7 +28,13 @@ fi
 cd "$ROOT"
 JOBPILOT_BACKUP_SOURCE="$DATA" JOBPILOT_BACKUP_DEST="$DEST" node --input-type=module <<'EOF'
 import { backupDataDir } from "./server/data-backup.mjs";
+import { recordBackup } from "./server/backup-ops.mjs";
 backupDataDir(process.env.JOBPILOT_BACKUP_SOURCE, process.env.JOBPILOT_BACKUP_DEST);
+recordBackup({
+  dataDir: process.env.JOBPILOT_BACKUP_SOURCE,
+  destination: process.env.JOBPILOT_BACKUP_DEST,
+});
 EOF
 
 echo "Backup written to $DEST"
+echo "Recorded backup marker for Admin → Launch."

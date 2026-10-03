@@ -21,6 +21,8 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARCHIVE="$(cd "${ARGS[0]}" && pwd -P)"
+mkdir -p "${JOBPILOT_DATA_DIR:-$ROOT/server/data}"
+LIVE_DATA="$(cd "${JOBPILOT_DATA_DIR:-$ROOT/server/data}" && pwd -P)"
 TARGET="${ARGS[1]:-${JOBPILOT_DATA_DIR:-$ROOT/server/data}}"
 mkdir -p "$TARGET"
 TARGET="$(cd "$TARGET" && pwd -P)"
@@ -37,9 +39,20 @@ if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet jobpilot 
 fi
 
 cd "$ROOT"
-JOBPILOT_RESTORE_ARCHIVE="$ARCHIVE" JOBPILOT_RESTORE_TARGET="$TARGET" node --input-type=module <<'EOF'
+JOBPILOT_RESTORE_ARCHIVE="$ARCHIVE" JOBPILOT_RESTORE_TARGET="$TARGET" JOBPILOT_LIVE_DATA="$LIVE_DATA" node --input-type=module <<'EOF'
 import { restoreDataDir } from "./server/data-backup.mjs";
+import { recordRestoreDrill } from "./server/backup-ops.mjs";
 restoreDataDir(process.env.JOBPILOT_RESTORE_ARCHIVE, process.env.JOBPILOT_RESTORE_TARGET);
+const live = process.env.JOBPILOT_LIVE_DATA;
+const target = process.env.JOBPILOT_RESTORE_TARGET;
+if (live && target && live !== target) {
+  recordRestoreDrill({
+    dataDir: live,
+    archive: process.env.JOBPILOT_RESTORE_ARCHIVE,
+    target,
+  });
+  console.log("Recorded restore drill for Admin → Launch.");
+}
 EOF
 
 if [[ "$stopped" -eq 1 ]]; then
