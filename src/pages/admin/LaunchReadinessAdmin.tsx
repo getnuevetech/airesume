@@ -32,6 +32,16 @@ type LegalEntity = {
   supportEmail: string;
 };
 
+type AttestationState = {
+  attested: boolean;
+  at: number | null;
+};
+
+type LaunchAttestations = {
+  audience: { ok: boolean; detail: string; attestation: AttestationState; scan: { ok: boolean; detail: string } };
+  adsCookies: { ok: boolean; detail: string; attestation: AttestationState; scan: { ok: boolean; detail: string } };
+};
+
 const emptyEntity: LegalEntity = {
   legalName: "",
   mailingAddress: "",
@@ -42,6 +52,7 @@ const emptyEntity: LegalEntity = {
 export function LaunchReadinessAdmin() {
   const [report, setReport] = useState<LaunchReport | null>(null);
   const [entity, setEntity] = useState<LegalEntity>(emptyEntity);
+  const [attestations, setAttestations] = useState<LaunchAttestations | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -50,12 +61,14 @@ export function LaunchReadinessAdmin() {
     setBusy(true);
     setError("");
     try {
-      const [data, legal] = await Promise.all([
+      const [data, legal, attest] = await Promise.all([
         api<LaunchReport>("/api/admin/launch-readiness"),
         api<{ entity: LegalEntity }>("/api/admin/legal-entity"),
+        api<LaunchAttestations>("/api/admin/launch-attestations"),
       ]);
       setReport(data);
       setEntity(legal.entity || emptyEntity);
+      setAttestations(attest);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load launch readiness.");
     } finally {
@@ -82,6 +95,36 @@ export function LaunchReadinessAdmin() {
       setMessage("Legal entity saved. Terms and Privacy use these fields on the public pages.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save legal entity.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveAttestation(patch: { audienceAttested?: boolean; adsCookiesAttested?: boolean }) {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await api<{
+        attestations: LaunchAttestations;
+        launch: LaunchReport;
+      }>("/api/admin/launch-attestations", {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      });
+      setAttestations(result.attestations);
+      setReport(result.launch);
+      setMessage(
+        patch.audienceAttested !== undefined
+          ? patch.audienceAttested
+            ? "U.S.-first / 18+ positioning attested."
+            : "U.S.-first / 18+ attestation cleared."
+          : patch.adsCookiesAttested
+            ? "No advertising cookies attested."
+            : "Advertising cookies attestation cleared.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save launch attestation.");
     } finally {
       setBusy(false);
     }
@@ -145,6 +188,49 @@ export function LaunchReadinessAdmin() {
             Save legal entity
           </button>
         </form>
+      </section>
+      <section className="admin-card">
+        <h2>Audience and cookies</h2>
+        <p className="role">
+          Required for opsReady. Privacy must still state U.S.-first / 18+ positioning and that advertising cookies are off.
+          Attest only after you re-read the live copy.
+        </p>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={Boolean(attestations?.audience.attestation.attested)}
+            disabled={busy || !attestations?.audience.scan.ok}
+            onChange={(event) => {
+              void saveAttestation({ audienceAttested: event.target.checked });
+            }}
+          />
+          U.S.-first / 18+ positioning in Privacy is still accurate
+        </label>
+        <p className="role">
+          {attestations?.audience.attestation.attested && attestations.audience.attestation.at
+            ? `Attested ${new Date(attestations.audience.attestation.at).toLocaleString()}.`
+            : attestations?.audience.scan.ok
+              ? "Scan found the audience markers. Confirm accuracy, then check the box."
+              : attestations?.audience.scan.detail || "Loading audience scan…"}
+        </p>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={Boolean(attestations?.adsCookies.attestation.attested)}
+            disabled={busy || !attestations?.adsCookies.scan.ok}
+            onChange={(event) => {
+              void saveAttestation({ adsCookiesAttested: event.target.checked });
+            }}
+          />
+          No advertising / cross-site tracking cookies without a Privacy update
+        </label>
+        <p className="role">
+          {attestations?.adsCookies.attestation.attested && attestations.adsCookies.attestation.at
+            ? `Attested ${new Date(attestations.adsCookies.attestation.at).toLocaleString()}.`
+            : attestations?.adsCookies.scan.ok
+              ? "Scan found the no-ads cookies language and no ad scripts in the app shell."
+              : attestations?.adsCookies.scan.detail || "Loading ads cookie scan…"}
+        </p>
       </section>
       {report ? (
         <>

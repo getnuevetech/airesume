@@ -51,6 +51,11 @@ import {
   saveMfaPolicy,
 } from "./mfa-policy.mjs";
 import { computeLaunchReadiness } from "./launch-readiness.mjs";
+import {
+  launchAttestationsPayload,
+  saveAdsCookieAttestation,
+  saveAudienceAttestation,
+} from "./launch-copy-attestations.mjs";
 import { writeAdminBootstrapFile } from "./bootstrap-note.mjs";
 import { getLegalEntity, saveLegalEntity } from "./legal-entity.mjs";
 import {
@@ -333,6 +338,30 @@ app.put("/api/admin/legal-entity", (req, res) => {
     return;
   }
   res.json({ entity: result.entity, launch: computeLaunchReadiness() });
+});
+
+app.get("/api/admin/launch-attestations", (req, res) => {
+  if (!requireAdmin(req, res, "admin.launch.read")) return;
+  res.json(launchAttestationsPayload());
+});
+
+app.put("/api/admin/launch-attestations", (req, res) => {
+  if (!requireAdmin(req, res, "admin.launch.write")) return;
+  const body = req.body || {};
+  let audience = null;
+  let adsCookies = null;
+  if (body.audienceAttested !== undefined) {
+    audience = saveAudienceAttestation({ attested: Boolean(body.audienceAttested) });
+  }
+  if (body.adsCookiesAttested !== undefined) {
+    adsCookies = saveAdsCookieAttestation({ attested: Boolean(body.adsCookiesAttested) });
+  }
+  res.json({
+    attestations: launchAttestationsPayload(),
+    audience,
+    adsCookies,
+    launch: computeLaunchReadiness(),
+  });
 });
 
 app.get("/api/content/homepage", (_req, res) => {

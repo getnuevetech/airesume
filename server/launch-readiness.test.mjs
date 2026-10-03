@@ -64,6 +64,20 @@ const cleanAiTraining = {
   detail: "Operator attested training-on-customer-data is disabled.",
 };
 
+const cleanAudience = {
+  ok: true,
+  scan: { ok: true, missing: [], detail: "ok" },
+  attestation: { attested: true, at: 1_700_000_400_000 },
+  detail: "Operator attested U.S.-first / 18+ copy is accurate.",
+};
+
+const cleanAdsCookies = {
+  ok: true,
+  scan: { ok: true, missing: [], scriptHits: [], detail: "ok" },
+  attestation: { attested: true, at: 1_700_000_500_000 },
+  detail: "Operator attested no advertising/cross-site cookies.",
+};
+
 test("launch readiness fails closed without SMTP and production env; MFA stays informational", () => {
   const report = computeLaunchReadiness({
     env: { NODE_ENV: "development", COOKIE_SECURE: "0", REQUIRE_ADMIN_MFA: "0" },
@@ -77,6 +91,8 @@ test("launch readiness fails closed without SMTP and production env; MFA stays i
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
     aiTraining: cleanAiTraining,
+    audience: cleanAudience,
+    adsCookies: cleanAdsCookies,
   });
   assert.equal(report.opsReady, false);
   assert.equal(report.launchReady, false);
@@ -102,6 +118,8 @@ test("SMTP host alone without a successful test blocks opsReady", () => {
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
     aiTraining: cleanAiTraining,
+    audience: cleanAudience,
+    adsCookies: cleanAdsCookies,
   });
   assert.equal(report.opsReady, false);
   const smtp = report.checks.find((item) => item.id === "smtp");
@@ -123,6 +141,8 @@ test("launch readiness opsReady when production signals are green (counsel still
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
     aiTraining: cleanAiTraining,
+    audience: cleanAudience,
+    adsCookies: cleanAdsCookies,
   });
   assert.equal(report.opsReady, true);
   assert.equal(report.launchReady, false);
@@ -130,6 +150,8 @@ test("launch readiness opsReady when production signals are green (counsel still
   assert.ok(report.checks.some((item) => item.id === "backup_drill" && item.ok));
   assert.ok(report.checks.some((item) => item.id === "deletion_drill" && item.ok));
   assert.ok(report.checks.some((item) => item.id === "ai_training" && item.ok));
+  assert.ok(report.checks.some((item) => item.id === "audience_positioning" && item.ok));
+  assert.ok(report.checks.some((item) => item.id === "ads_cookies" && item.ok));
   assert.ok(report.checks.some((item) => item.id === "counsel" && !item.ok));
   assert.ok(report.checks.some((item) => item.id === "legal_placeholders" && item.ok));
   assert.ok(report.checks.some((item) => item.id === "default_admin_password" && item.ok));
@@ -149,6 +171,8 @@ test("production without COOKIE_SECURE=1 blocks opsReady", () => {
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
     aiTraining: cleanAiTraining,
+    audience: cleanAudience,
+    adsCookies: cleanAdsCookies,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "cookie_secure" && !item.ok));
@@ -176,6 +200,8 @@ test("unfinished legal placeholders block opsReady even when SMTP and production
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
     aiTraining: cleanAiTraining,
+    audience: cleanAudience,
+    adsCookies: cleanAdsCookies,
   });
   assert.equal(report.opsReady, false);
   assert.equal(report.launchReady, false);
@@ -198,6 +224,8 @@ test("published default admin password blocks opsReady", () => {
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
     aiTraining: cleanAiTraining,
+    audience: cleanAudience,
+    adsCookies: cleanAdsCookies,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "default_admin_password" && !item.ok));
@@ -219,6 +247,8 @@ test("silent Auto-Apply on blocks opsReady", () => {
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
     aiTraining: cleanAiTraining,
+    audience: cleanAudience,
+    adsCookies: cleanAdsCookies,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "silent_auto_apply" && !item.ok));
@@ -240,6 +270,8 @@ test("BILLING_LIVE unlocks block opsReady", () => {
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
     aiTraining: cleanAiTraining,
+    audience: cleanAudience,
+    adsCookies: cleanAdsCookies,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "billing_live" && !item.ok));
@@ -263,6 +295,8 @@ test("missing live AI API keys block opsReady", () => {
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
     aiTraining: cleanAiTraining,
+    audience: cleanAudience,
+    adsCookies: cleanAdsCookies,
   });
   assert.equal(report.opsReady, false);
   assert.ok(report.checks.some((item) => item.id === "ai_provider_keys" && !item.ok));
@@ -286,6 +320,8 @@ test("rules-only career extraction is recommended, not ops blocking", () => {
     backupDrill: cleanBackupDrill,
     deletionDrill: cleanDeletionDrill,
     aiTraining: cleanAiTraining,
+    audience: cleanAudience,
+    adsCookies: cleanAdsCookies,
   });
   assert.equal(report.opsReady, true);
   assert.ok(report.checks.some((item) => item.id === "ai_career_extraction" && !item.ok && item.severity === "recommended"));
@@ -309,6 +345,8 @@ test("missing backup restore drill is recommended, not ops blocking", () => {
     },
     deletionDrill: cleanDeletionDrill,
     aiTraining: cleanAiTraining,
+    audience: cleanAudience,
+    adsCookies: cleanAdsCookies,
   });
   assert.equal(report.opsReady, true);
   const drill = report.checks.find((item) => item.id === "backup_drill");
@@ -334,6 +372,8 @@ test("missing deletion fan-out drill is recommended, not ops blocking", () => {
       detail: "No deletion drill recorded.",
     },
     aiTraining: cleanAiTraining,
+    audience: cleanAudience,
+    adsCookies: cleanAdsCookies,
   });
   assert.equal(report.opsReady, true);
   const drill = report.checks.find((item) => item.id === "deletion_drill");
@@ -360,12 +400,70 @@ test("missing AI training attestation is recommended, not ops blocking", () => {
       at: null,
       detail: "Confirm in each live AI vendor console.",
     },
+    audience: cleanAudience,
+    adsCookies: cleanAdsCookies,
   });
   assert.equal(report.opsReady, true);
   const check = report.checks.find((item) => item.id === "ai_training");
   assert.equal(check.ok, false);
   assert.equal(check.severity, "recommended");
   assert.match(check.label, /training/i);
+});
+
+test("missing audience attestation blocks opsReady", () => {
+  const report = computeLaunchReadiness({
+    env: { NODE_ENV: "production", COOKIE_SECURE: "1" },
+    mail: { configured: true, deliveryProven: true, host: "smtp.example.com", fromEmail: "hello@example.com", lastTestAt: 1_700_000_000_000 },
+    ice: { productionReady: true, warning: "" },
+    adminMfaEnrolled: true,
+    legal: cleanLegal,
+    defaultAdmin: cleanDefaultAdmin,
+    betaSafety: cleanBetaSafety,
+    aiHealth: cleanAiHealth,
+    backupDrill: cleanBackupDrill,
+    deletionDrill: cleanDeletionDrill,
+    aiTraining: cleanAiTraining,
+    audience: {
+      ok: false,
+      scan: { ok: true, missing: [], detail: "ok" },
+      attestation: { attested: false, at: null },
+      detail: "Confirm U.S.-first / 18+ positioning is still accurate, then attest under Admin → Launch.",
+    },
+    adsCookies: cleanAdsCookies,
+  });
+  assert.equal(report.opsReady, false);
+  const check = report.checks.find((item) => item.id === "audience_positioning");
+  assert.equal(check.ok, false);
+  assert.equal(check.severity, "required");
+  assert.match(check.label, /18\+/);
+});
+
+test("missing ads cookie attestation blocks opsReady", () => {
+  const report = computeLaunchReadiness({
+    env: { NODE_ENV: "production", COOKIE_SECURE: "1" },
+    mail: { configured: true, deliveryProven: true, host: "smtp.example.com", fromEmail: "hello@example.com", lastTestAt: 1_700_000_000_000 },
+    ice: { productionReady: true, warning: "" },
+    adminMfaEnrolled: true,
+    legal: cleanLegal,
+    defaultAdmin: cleanDefaultAdmin,
+    betaSafety: cleanBetaSafety,
+    aiHealth: cleanAiHealth,
+    backupDrill: cleanBackupDrill,
+    deletionDrill: cleanDeletionDrill,
+    aiTraining: cleanAiTraining,
+    audience: cleanAudience,
+    adsCookies: {
+      ok: false,
+      scan: { ok: true, missing: [], scriptHits: [], detail: "ok" },
+      attestation: { attested: false, at: null },
+      detail: "Confirm no advertising/cross-site cookies without a Privacy update, then attest under Admin → Launch.",
+    },
+  });
+  assert.equal(report.opsReady, false);
+  const check = report.checks.find((item) => item.id === "ads_cookies");
+  assert.equal(check.ok, false);
+  assert.equal(check.severity, "required");
+  assert.match(check.label, /advertising/i);
 });
 
 test("aiPipelineHealth flags blank live keys and rules-only extraction", async () => {

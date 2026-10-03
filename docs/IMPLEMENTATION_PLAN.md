@@ -1,6 +1,6 @@
 # Implementation plan (post review, 2026-09-30)
 
-Status: slices Q–AZ are implemented (AO is schema 33). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice Y opens the rest of this week in the tracker. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AB reads required skills from the role text when a saved list is only a pasted title or company line. Slice AC lets a candidate confirm one of those missing skills into the Fact Ledger. Slice AD writes that skill into the resume already prepared for the same job. Slice AE writes it into every resume already prepared for that candidate. Slice AF lists those skills on the profile without Fact Ledger ids. Slice AG lets a candidate confirm a high-demand insight gap into that same ledger. Slice AH draws account stats as charts and colors category scores so the account is easier to scan. Slice AI shows each tracked role on a colored stage rail. Slice AJ saves a one-tap check-in on each application. Slice AK saves that check-in on the role itself, with one sentence the candidate heard. Slice AL saves a status-menu change on that same card and closes the reminder that no longer matches. Slice AM saves the moment a prepared role is submitted. Slice AN counts only this week's roles in the tracker charts. Slice AO keeps an account activity log the candidate and an admin can both read, and an operations log an admin uses to record a checkout whose payment return never finished. Slice AP puts every on-disk Node test into `npm test` so CI cannot skip them. Slice AQ fails Admin → Launch when Terms or Privacy still contain unfinished company or counsel placeholders. Slice AR fails Admin → Launch when the published default admin password is still active or the bootstrap file still stores a plaintext password. Slice AS fails Admin → Launch when Silent Auto-Apply is on or live card billing is unlocked. Slice AT requires `COOKIE_SECURE=1` in production for `opsReady` and adds `deploy/smoke.sh` for post-deploy health. Slice AU lets an operator save company legal entity fields under Admin → Launch so Terms/Privacy brackets clear without editing source; draft/arbitration markers stay on the counsel gate. Slice AV fails Admin → Launch when live AI providers lack API keys, and recommends assigning a live model for career extraction. Slice AW fails Admin → Launch until Admin → Email has delivered a successful SMTP test against the current host and from address. Slice AX records backup and restore-drill markers from `deploy/backup.sh` / `deploy/restore.sh` and shows them as a recommended Admin → Launch check. Slice AY records an account-deletion fan-out drill from `deploy/deletion-drill.sh` as a recommended Admin → Launch check. Slice AZ records an Admin → AI attestation that training on customer data is disabled where vendors allow, as a recommended Admin → Launch check. Admin MFA stays disabled for now and is not a beta blocker.
+Status: slices Q–BA are implemented (AO is schema 33). Job listings are readable, imported links stay at the top of that candidate’s list, and pages that are not jobs wait in admin for add or discard. Slice Y opens the rest of this week in the tracker. Slice AA shows a match as skills that fit the resume and skills that are missing, without Fact Ledger ids. Slice AB reads required skills from the role text when a saved list is only a pasted title or company line. Slice AC lets a candidate confirm one of those missing skills into the Fact Ledger. Slice AD writes that skill into the resume already prepared for the same job. Slice AE writes it into every resume already prepared for that candidate. Slice AF lists those skills on the profile without Fact Ledger ids. Slice AG lets a candidate confirm a high-demand insight gap into that same ledger. Slice AH draws account stats as charts and colors category scores so the account is easier to scan. Slice AI shows each tracked role on a colored stage rail. Slice AJ saves a one-tap check-in on each application. Slice AK saves that check-in on the role itself, with one sentence the candidate heard. Slice AL saves a status-menu change on that same card and closes the reminder that no longer matches. Slice AM saves the moment a prepared role is submitted. Slice AN counts only this week's roles in the tracker charts. Slice AO keeps an account activity log the candidate and an admin can both read, and an operations log an admin uses to record a checkout whose payment return never finished. Slice AP puts every on-disk Node test into `npm test` so CI cannot skip them. Slice AQ fails Admin → Launch when Terms or Privacy still contain unfinished company or counsel placeholders. Slice AR fails Admin → Launch when the published default admin password is still active or the bootstrap file still stores a plaintext password. Slice AS fails Admin → Launch when Silent Auto-Apply is on or live card billing is unlocked. Slice AT requires `COOKIE_SECURE=1` in production for `opsReady` and adds `deploy/smoke.sh` for post-deploy health. Slice AU lets an operator save company legal entity fields under Admin → Launch so Terms/Privacy brackets clear without editing source; draft/arbitration markers stay on the counsel gate. Slice AV fails Admin → Launch when live AI providers lack API keys, and recommends assigning a live model for career extraction. Slice AW fails Admin → Launch until Admin → Email has delivered a successful SMTP test against the current host and from address. Slice AX records backup and restore-drill markers from `deploy/backup.sh` / `deploy/restore.sh` and shows them as a recommended Admin → Launch check. Slice AY records an account-deletion fan-out drill from `deploy/deletion-drill.sh` as a recommended Admin → Launch check. Slice AZ records an Admin → AI attestation that training on customer data is disabled where vendors allow, as a recommended Admin → Launch check. Slice BA fails Admin → Launch until the operator attests U.S.-first / 18+ Privacy positioning and that advertising/cross-site cookies remain off (copy scan + attestation). Admin MFA stays disabled for now and is not a beta blocker.
 
 Source of truth for the next build. Slices A–P and the post-plan add-ons (prompt registry, silent Auto-Apply kill switch, resume OCR, signup resume persistence, public board API fallbacks) are on `main`. Do not reopen them unless a regression shows up.
 
@@ -744,6 +744,25 @@ Bootstrap and the README tell operators to open `http://<ip>/` and “use http, 
 
 ---
 
+### Slice BA — Require U.S.-first / 18+ and no-ad-cookies attestations on Launch
+
+**Goal:** The launch checklist treats U.S.-first / 18+ positioning and “no advertising cookies” as blockers, but Admin → Launch had no scan or attestation for them.
+
+**Change**
+
+- Scan Privacy (and related shell files) for audience markers and the no-advertising-cookies line; fail if common ad scripts appear in the app shell.
+- Admin → Launch checkboxes store operator attestations in settings.
+- Required Admin → Launch checks `audience_positioning` and `ads_cookies` Pass only when the scan is clean and attested.
+- Document on `docs/LAUNCH_CHECKLIST.md` and `docs/CONSENT_IMPLEMENTATION_CHECKLIST.md`.
+
+**Acceptance**
+
+- Missing scan markers or missing attestation → required check Open; `opsReady` is false.
+- Attest under Admin → Launch after a clean scan → checks Pass.
+- Clearing an attestation or introducing an ad script reopens the matching check.
+
+---
+
 ## Ops the repo cannot finish
 
 These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them executable.
@@ -759,11 +778,11 @@ These stay on `docs/LAUNCH_CHECKLIST.md`. Code in slices R and S only makes them
 | Add live AI API keys / assign career extraction off Built-in rules | Operator, Admin → AI (Slice AV) |
 | Backup copy outside the repo, then restore drill onto a non-prod directory | Operator, `deploy/backup.sh` / `deploy/restore.sh` (Slice AX shows the drill on Admin → Launch) |
 | Counsel review of legal and Auto-Apply text | Outside counsel |
-| Confirm U.S.-first / 18+ copy and no ad cookies | Operator plus counsel |
+| Confirm U.S.-first / 18+ copy and no ad cookies | Operator attests under Admin → Launch (Slice BA); counsel still reviews the same copy |
 | TURN only if interview rooms are in the beta | Operator, `deploy/turn.env.example` |
 | AI provider training-on-customer-data setting | Operator attests under Admin → AI (Slice AZ); see `docs/AI_GOVERNANCE_CHECKLIST.md` |
 | Deletion drill | Operator, `deploy/deletion-drill.sh` (Slice AY shows the drill on Admin → Launch) |
 
 ## Done when
 
-Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, Y, Z, AA, AB, AC, AD, AE, AF, AG, AH, AI, AJ, AK, AL, AM, AN, AO, AP, AQ, AR, AS, AT, AU, AV, AW, AX, AY, and AZ are in the product and are not launch gates.
+Private beta is ready when Q, R, S, T, and U are merged, CI is green, and the operator rows above that apply to this host are checked. Public launch waits on counsel. Admin MFA stays off. Slices V, W, X, Y, Z, AA, AB, AC, AD, AE, AF, AG, AH, AI, AJ, AK, AL, AM, AN, AO, AP, AQ, AR, AS, AT, AU, AV, AW, AX, AY, AZ, and BA are in the product and are not launch gates.

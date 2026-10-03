@@ -27,5 +27,5 @@ Maps Spec §54 consent events to product surfaces.
 ## Launch gate
 
 - [ ] Outside counsel review of Terms, Privacy, billing, and Auto-Apply text
-- [ ] Confirm U.S.-first, 18+ positioning still accurate
-- [ ] Confirm no advertising/cross-site cookies enabled without updating Privacy + Cookie Settings
+- [ ] Confirm U.S.-first, 18+ positioning still accurate (Admin → Launch attestation; blocks `opsReady`)
+- [ ] Confirm no advertising/cross-site cookies enabled without updating Privacy + Cookie Settings (Admin → Launch attestation; blocks `opsReady`)
