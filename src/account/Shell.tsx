@@ -93,7 +93,7 @@ function AccountNav() {
         {photo ? <img src={photo} alt="" /> : <span>{initials}</span>}
         <div>
           <strong>{user?.name}</strong>
-          <p>{data?.plan.name || "Account"}</p>
+          <p>{data?.plan?.name || "Account"}</p>
         </div>
         <button type="button" onClick={signOut} aria-label="Sign out">
           <NavIcon name="out" />
